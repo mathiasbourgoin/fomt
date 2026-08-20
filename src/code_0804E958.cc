@@ -1,13 +1,17 @@
 #include "prelude.h"
 
-// franglais_vwf_draw_string_recolor (docs/VWF.md in the franglais patch
-// repo). Same accumulate-and-advance loop as franglais_vwf_draw_string_plain
-// (code_0804E8F0.cc), but forwards a pair of recolor (anchor, target)
-// colors to DrawGlyphAt-recolor (func_0804E5AC, still asm) on every call.
+// DrawStringRecolor -- vanilla-engine-facing name (was franglais_vwf_
+// draw_string_recolor; renamed because that name embedded the patch
+// project's own name and jargon, see docs/VWF.md in the franglais patch
+// repo for the original analysis this is still based on). Same
+// accumulate-and-advance loop as DrawString (code_0804E8F0.cc), but
+// forwards a pair of recolor (anchor, target) colors to DrawGlyphAt-recolor
+// (func_0804E5AC, still asm) on every call. Plain C, not a class method --
+// same reasoning as DrawString.
 
 EC u32 func_0804E5AC(u32 dims, void * dest, u32 x, u32 y, u32 code, u32 color_a, u32 color_b);
 
-EC void franglais_vwf_draw_string_recolor(u32 dims, void * dest, u32 x, u32 y, char const * s, u32 color_a, u32 color_b)
+EC void DrawStringRecolor(u32 dims, void * dest, u32 x, u32 y, char const * s, u32 color_a, u32 color_b)
 {
     u32 right_edge_x = (dims << 16) >> 13;
     u32 code = 0;
@@ -46,4 +50,4 @@ EC void franglais_vwf_draw_string_recolor(u32 dims, void * dest, u32 x, u32 y, c
 // code_809E804.s, etc. -- not worth touching individually) -- keep it as
 // an alias onto the real definition above rather than renaming those
 // sites.
-EC void func_0804E958() ALIAS(franglais_vwf_draw_string_recolor);
+EC void func_0804E958() ALIAS(DrawStringRecolor);
