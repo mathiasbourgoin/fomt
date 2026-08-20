@@ -54,6 +54,8 @@ gardée ici.
 | `func_080D79CC`, `func_080D7AD4` | paire de constructeurs du sous-objet dont le teardown est dans `func_08008A68` (round 9/w21), même paire de vtables `vtable_unk_080E5B0C`/`080E5B18` | 10 (w26) | `7201ee1` |
 | `func_0803A804`, `func_0803A80C`, `func_0803A814`, `func_0803A820`, `func_0803A840`, `func_0803A870`, `func_0803A8A0` | 7 fonctions NON cataloguées, ex-`.byte` bruts (160 octets) après `func_0803A798` : accesseurs/prédicat/wrapper sur `UnknownEntityThing::sprite_animator`, helper `SetAnim` dédupliqué (sœur de `AActorEntity::RefreshSprite`), getter trivial `UnknownEntityThingBase::dummy` | 10 (w23) | `0ae8f12` |
 | `func_08011ED8` | 2e overload du constructeur de la classe bâtie par `func_08011DC4` (asm, non porté) -- construit une `Location` locale avec un seul champ initialisé (les 2 autres restent non-initialisés, comme l'original), ex-`.byte` bruts (272 octets) après `func_08011DC4` | 10 (w23) | `51cbacc` |
+| `func_08050DF0` (`TransitionCtlQuery`) | handle -> discriminant à +8, retourne 0 si ==6 sinon champ à +0x158 | w38 | `5570e1e` |
+| `func_08050E50`, `func_08050E5C`, `func_08050E74`, `func_08050E80`, `func_08050E8C` | thunks de forwarding handle (déréférence puis tail-call vers un callé opaque), voisins directs de `TransitionCtlQuery` | w39 | `dfd228e` |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
@@ -492,6 +494,26 @@ jamais utilisée dans ce dépôt).
   ring buffer à `self+0x594`), 8 sites d'appel symboliques déjà dans le
   dépôt (contexte d'appel abondant, contrairement à `.L0809E1B4`) ;
   candidat sérieux pour un futur round dédié, non trivial.
+- `func_08050E98`/`func_08050EBC` (setters de bitfield 6 bits sur le
+  même champ `self+0x550`, voisins de `TransitionCtlQuery`) : near-miss
+  round w39, PAS committé -- extraction du champ bas (double-shift)
+  reproduite du premier coup, mais le masque des 2 bits hauts (`~0x3F`)
+  se fait toujours plier par agbcp en immédiat direct `0xc0` chez nous,
+  alors que la cible construit `0xFFFFFFC0` par négation explicite
+  (`movs #0x40; rsbs`) et garde la valeur lue vivante dans `r4`
+  (`push {r4,lr}`/`pop{r4};pop{r1};bx r1`) -- aucune de nos formulations
+  n'a eu besoin de ce registre. Piste non tentée : sortir le masque dans
+  une variable calculée à part (pas inlinée) pour bloquer le pliage
+  compile-time, cf. `SESSION_NOTES.md` round w39 pour le détail complet
+  des 2 hypothèses déjà fermées.
+- Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
+  (**1084 octets**, entre `func_08050EBC` et `func_08051320`) --
+  découvert round w39, **angle mort du scanner automatique**
+  (`scan_hidden_code_blobs.py` ne couvre que 4-40 octets, ce bloc est
+  27x plus gros). Contenu non analysé (candidat premier mot `push
+  {r4,r5,r6,lr}` plausible -- probablement PLUSIEURS fonctions
+  distinctes). Candidat sérieux pour un futur round dédié : nécessite un
+  désassemblage manuel complet avant tout port, pas encore fait.
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
