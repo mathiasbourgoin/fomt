@@ -458,10 +458,14 @@ SECTIONS
     __iwram_vma_end = ADDR(.iwram) + SIZEOF(.iwram);
     __iwram_lma     = LOADADDR(.iwram);
 
+    /* Remplit jusqu'au payload. La taille est CALCULEE depuis la position
+     * courante: une taille codee en dur (ex-0x08800000 - 0x0875C240) casse
+     * silencieusement des que le moindre objet en amont change de taille.
+     */
     .pad : ALIGN(4)
     {
         LONG(0);
-        . = 0x08800000 - 0x0875C240;
+        . = 0x08800000 - (__iwram_lma + SIZEOF(.iwram));
     } > ROM = 0xFF
 
     .franglais_payload 0x08800000 : ALIGN(4)
