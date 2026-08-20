@@ -5370,3 +5370,153 @@ cataloguées, (2) wrappers/thunks appelant une fonction déjà matchée, (3)
 généré pour valider le lien complet (`make compare`, échec sha1 attendu et
 confirmé, aucune erreur de lien/symbole) -- non commité (`build/` est dans
 `.gitignore`). `origin` non touché, rien poussé, pas de PR.
+
+## 2026-08-20, worktree `w31`/`parallel-31` -- `func_0804E5AC` (`DrawGlyphAt`
+recolor) round 5 : résidu réduit de 24 à 4 octets (meilleur résultat à ce
+jour), cause du reliquat isolée précisément -- 5e échec honnête
+
+Contexte : reprise post-round 4/w29 (résidu 24 octets, collision suspectée
+`anchor`/`end` sur `r2`). Repos dans un état propre confirmé (`git status`
+vide, rien hérité de w29). Relecture INDÉPENDANTE et complète du
+désassemblage original (`asm/code_0804E5AC.s`, lignes 1-272), sans se fier
+aux hypothèses des rounds précédents, en notant l'allocation de registre de
+CHAQUE instruction des 4 blocs TL/BL/TR/BR.
+
+### Découverte structurelle : les 4 blocs ne sont PAS des copies symétriques
+
+Confirmation et précision de ce que soupçonnaient round 3/w27 et round 4/w29,
+avec le détail exact cette fois :
+- **TL** : `row_product` sauvegardé sur pile pour TR ; `start`/`end` du
+  buffer source calculés directement en adresses SP-littérales
+  (`add rX, sp, #imm`, 1 instruction chacun).
+- **BL** : ne sauvegarde pas son row_product (recalculé par personne
+  ensuite) ; `start`/`end` également littéraux SP-directs (1 instruction
+  chacun).
+- **TR** : seul bloc où `end` est calculé comme `start + 8` -- copie
+  (`adds r4,r5,#0`) PUIS addition immédiate (`adds r4,#0x20`), 2
+  instructions, alors qu'une adresse SP-littérale équivalente aurait été
+  tout aussi valide et moins chère. Signal que la vraie source écrit
+  `end = start + 8` pour CE bloc précisément, pas `&glyph_buf[N]`.
+- **BR** : ordre des opérandes de l'addition tile_x + produit INVERSÉ par
+  rapport aux 3 autres blocs (`tile_x + width_tiles*row_below`, tile_x en
+  premier, cf. règle 5bis de `DECOMP_RULES.md`) ; `start`/`end` de nouveau
+  littéraux SP-directs comme TL/BL.
+- **`delta` calculé UNE SEULE FOIS dans TL et persisté** (confirmé octet
+  pour octet -- BL/TR/BR relisent le registre persistant, ne refont jamais
+  la soustraction) ; **`anchor` recalculé intégralement dans CHACUN des 4
+  blocs** (confirme round 3/w27). Le "mask" `0x11111111` est rechargé
+  depuis le pool littéral séparément dans chaque bloc (4 `ldr [pc,#N]`
+  distincts dans l'original), jamais partagé/persisté.
+
+### Reconstruction avec cette lecture précise -- progrès net
+
+Réécriture depuis zéro appliquant les points ci-dessus + littéral `mask`
+direct dans chaque `& 0x11111111` (pas de variable nommée -- testé : une
+variable `u32 mask` unique à l'échelle fonction ajoute un chargement
+persistant dans un registre haut qui casse l'allocation de `end`, cf.
+plus bas ; le littéral nu laisse le compilateur recharger depuis le pool
+à chaque site, comme l'original).
+
+Progression mesurée (harnais compilateur seul) :
+1. Première passe (mask en variable persistée) : `.text` = `0x1ec` (492)
+   -- résidu 8 octets.
+2. Mask remplacé par littéral nu dans les 4 blocs : `.text` = `0x1f0`
+   (496) -- **résidu 4 octets, meilleur résultat toutes tentatives
+   confondues** (round 3 : 44 ; round 4 : 24 ; ce round : 4).
+
+### Cause du résidu de 4 octets isolée précisément (non résolue)
+
+Dans le bloc TL, le calcul de `end` (adresse SP-littérale `&glyph_buf[8]`)
+compile chez moi en 4 instructions au lieu de 2 :
+```
+add r1, sp, #44   @ calcul dans un registre bas (obligatoire, ADD SP-relatif
+                  @ ne peut cibler qu'un registre bas r0-r7)
+mov ip, r1        @ copie vers un registre haut -- absent de l'original
+mov r7, ip        @ copie vers un DEUXIÈME registre -- absent aussi
+cmp r3, ip
+```
+contre l'original :
+```
+add r2, sp, #0x2c
+cmp r4, r2
+```
+Le compilateur alloue `end` sur `ip` (registre haut) dans ma reconstruction,
+ce qui force le calcul en 2 temps (ADD SP-relatif ne peut écrire que dans
+r0-r7) PUIS une copie supplémentaire vers `r7` pour le test de fin de
+boucle après la boucle -- 4 octets de coût net. L'original alloue `end`
+directement dans un registre bas (`r2`), sans jamais passer par un
+registre haut, d'où 1 seule instruction.
+
+**Six tentatives pour déplacer `end` hors de `ip`, toutes neutres ou
+négatives, aucune n'a résolu le problème :**
+1. `end = start + 8` au lieu de `&glyph_buf[8]` (mimant TR) -- aucun effet
+   (toujours `0x1f0`).
+2. Variables `u32 *tl, *start, *end;` déclarées groupées puis assignées vs
+   déclarées-et-initialisées une par une (style inline) -- aucun effet.
+3. Inverser l'ordre de calcul `end` avant `start` -- **régression** à
+   `0x1ec` (résidu 8, pire).
+4. Réduire `anchor` de 4 variables nommées (`n,b8,hw,anchor`) à 1 seule
+   réassignée 4 fois -- aucun effet sur la taille (mais code plus propre,
+   conservé).
+5. Fusionner `shifted` dans l'expression de `tl` (une seule expression
+   composée au lieu de deux statements) -- **régression** à `0x1ec`.
+6. `start`/`end` via `glyph_buf`/`glyph_buf + 8` (nom de tableau) au lieu
+   de `&glyph_buf[0]`/`&glyph_buf[8]` -- aucun effet.
+7. Charger `color_a` une seule fois dans une variable locale `ca` partagée
+   entre le calcul de `delta` et celui de `anchor` (pour supprimer un
+   `ldr [sp,#0x1c4]` redondant repéré en diff normalisé) -- aucun effet
+   sur la taille totale (le rechargement persiste ailleurs, `agbcp` ne
+   garde pas les paramètres passés sur la pile en registre au-delà d'un
+   statement, même via variable locale intermédiaire).
+8. Calculer `start`/`end` AVANT `tl` (au lieu d'après, contredisant l'ordre
+   du désassemblage original) -- **régression** à `0x1ec`, confirmant que
+   l'ordre `tl` puis `start` puis `end` (déjà celui du désassemblage
+   original) est la SEULE position qui atteint `0x1f0`.
+
+**Diagnostic final** : le point bloquant restant est un choix d'allocation
+de registre interne à `agbcp` (rattacher `end` à un registre haut `ip`
+plutôt qu'un registre bas) qui n'a répondu à AUCUNE reformulation testée
+de l'ordre des statements, du typage (pointeur vs entier), du nommage, ou
+du regroupement des déclarations -- tous les leviers listés dans
+`DECOMP_RULES.md` (règles 1-12) ont été essayés sans succès sur ce point
+précis. Diff normalisé instruction-par-instruction (harnais + `objdump
+-bbinary --adjust-vma` sur `baserom.gba`) confirme que **tout le reste de
+la fonction (prologue, les 3 guards de validité, les 2 flags d'alignement,
+le calcul has_right/has_bottom, TOUTE la boucle BL, la moitié de TR/BR) est
+déjà identique à l'original au niveau mnémonique** -- le résidu de 4 octets
+est concentré à 100% sur ce seul point (le calcul de `end` dans le bloc
+TL).
+
+### Verdict et repo state en fin de round (worktree w31)
+
+**Pas de match -- 5e tentative sérieuse sur cette fonction, mais progrès
+net et mesurable : résidu divisé par 6 (24 -> 4 octets) par rapport au
+round précédent**, avec une lecture indépendante du désassemblage qui a
+confirmé/précisé l'asymétrie des 4 blocs (jusqu'ici seulement pressentie)
+et isolé la cause du résidu à UN point unique et bien caractérisé (pas une
+accumulation diffuse comme les rounds précédents). Recommandation pour
+Mathias, dans la continuité de round 4/w29 : le signal est maintenant assez
+fort et localisé pour justifier soit (a) un round dédié qui n'itère QUE sur
+ce point précis (calcul SP-relatif d'une adresse locale qui finit sur un
+registre haut), en essayant des idiomes non encore testés (ex. forcer un
+"anchor point" via une fausse relecture intermédiaire du buffer, ou une
+réorganisation de TOUT l'ordre des 4 blocs plutôt que du seul bloc TL), soit
+(b) une comparaison avec une décompilation Ghidra amont si elle existe pour
+ce binaire (le point 3 de la mission), soit (c) accepter cette variante
+comme fermée pour l'instant -- elle a maintenant consommé 5 rounds sérieux,
+plus que le corps plain (`func_0804E4AC`, résolu en 5) sans encore
+converger, mais avec un résidu résiduel bien plus petit et mieux compris
+qu'à n'importe quel round précédent.
+
+- **Aucun commit de code.** Tout le travail (candidat C, itérations, tests
+  harnais) est resté dans un scratch dir hors du dépôt
+  (`/tmp/w31scratch/`, jamais copié dans `src/` ni référencé dans
+  `fomt.lds`). `git status --short` vide confirmé avant et après le round
+  -- rien à annuler.
+- Vérification effectuée : harnais compilateur seul (taille `.text` +
+  diff de désassemblage borné, normalisé, contre `baserom.gba` réel via
+  `objdump -bbinary -marmv4t -Mforce-thumb --adjust-vma=0x08000000`) --
+  standard officiel de `DECOMP_RULES.md`, pas de `make compare` (toujours
+  hors de portée pour la raison `cb06198` documentée round 10/w27, sans
+  rapport avec cette fonction).
+- `origin` non touché, rien poussé, pas de PR.
