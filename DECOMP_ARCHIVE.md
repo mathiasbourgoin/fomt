@@ -454,21 +454,34 @@ indépendante des callees.
 
 ## Autres cibles ouvertes
 
-- `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`, NdR :
-  ce nom vient de `docs/*.md` du dépôt patch, uniquement comme pointeur
-  de recherche -- donner un nom neutre côté vanilla si/quand cette
-  fonction est portée ici).
-- Table de dispatch script (`0x0803F900`).
-- `func_08010F14` (déjà matchée, round 8/w17) : aucun appelant symbolique
-  trouvé dans `asm/`/`src/` (grep négatif) -- piste non explorée plus
-  loin, peut-être appelé via une table indirecte, ou mort.
-- Candidats de scan de blobs cachés non encore vérifiés (identifiés round
-  9/w18, même signature "fin de fichier après une vraie fonction" que
-  les hits confirmés) : `asm/code_entities_08034CEC.s` (160 octets),
-  `asm/code_08010F54.s` (272 octets -- ATTENTION, chevauche possiblement
-  `franglais_boot_fsm_run`, classe "pression de registres", vérifier
-  taille/complexité avant de s'engager), `asm/code_actor_0809BFE8.s`
-  (288 octets).
+Nettoyée round w37 (vérification entrée par entrée, cf. `SESSION_NOTES.md`
+round w36 pour l'audit initial qui a signalé cette section comme
+largement périmée) -- entrées obsolètes retirées :
+`franglais_transition_ctl_query` (déjà matché, round "3 angles neufs"/w32) ;
+`asm/code_entities_08034CEC.s` (déjà matché, round 10/w23, commit `0ae8f12`,
+groupe `func_0803A804`/7 fonctions) ; `asm/code_actor_0809BFE8.s`/
+`.L0809E1B4` (dead-end confirmé deux fois -- round 10/w23 : ~10 réécritures
+C distinctes, même swap de registres `r4`/`r5` irréductible ; recontrôlé
+round w36 : aucune nouvelle piste, aucun appelant, verdict stable --
+ne pas retenter sans technique inédite, ex. hint de registre via `asm()`,
+jamais utilisée dans ce dépôt).
+
+- Table de dispatch script (`0x0803F900`) : **en recoupement avec le
+  travail en cours de w35** sur la famille dispatch/composite constructor
+  -- ne pas s'engager dessus sans re-vérifier d'abord que w35 ne l'a pas
+  déjà couverte.
+- `func_08010F14` (déjà matché, round 8/w17) : entrée purement
+  documentaire, pas une cible -- aucun appelant symbolique trouvé dans
+  `asm/`/`src/` (grep négatif), peut-être appelé via une table indirecte,
+  ou mort.
+- `asm/code_08010F54.s` (272 octets) : écartée par consigne explicite
+  (round w36) -- chevauche possiblement `franglais_boot_fsm_run`, classe
+  "pression de registres" ; ne s'engager que sur idée neuve.
+- `func_08075334` (`asm/code_08070A08.s`) : nouvelle cible identifiée
+  round w36 -- vrai helper de push de file/tableau dynamique (`malloc`,
+  ring buffer à `self+0x594`), 8 sites d'appel symboliques déjà dans le
+  dépôt (contexte d'appel abondant, contrairement à `.L0809E1B4`) ;
+  candidat sérieux pour un futur round dédié, non trivial.
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
