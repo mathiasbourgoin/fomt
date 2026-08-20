@@ -75,6 +75,7 @@ SECTIONS
         asm/new_game.o(.text);
         src/code_08004BDC.o(.text);
         asm/code_08004C0C.o(.text);
+        src/code_08004C48.o(.text);
         src/code_08004C54.o(.text);
         asm/code_08004C68.o(.text);
         src/code_0800598C.o(.text);
