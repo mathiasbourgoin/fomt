@@ -4484,49 +4484,53 @@ func_08050D80: @ 0x08050D80
 
 	thumb_func_start func_08050D8C
 func_08050D8C: @ 0x08050D8C
-	push {lr}
-	ldr r0, [r0]
-	movs r2, #0x80
-	lsls r2, r2, #1
-	movs r3, #0
-	bl func_08050424
-	pop {r0}
-	bx r0
+	ldr r3, .Lfranglais_scene_text_plain
+	bx r3
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 	.align 2, 0
+.Lfranglais_scene_text_plain: .4byte 0x08801B45
 
 	thumb_func_start func_08050DA0
 func_08050DA0: @ 0x08050DA0
-	push {lr}
-	adds r3, r2, #0
-	ldr r0, [r0]
-	movs r2, #0x80
-	lsls r2, r2, #1
-	bl func_08050424
-	pop {r0}
-	bx r0
+	ldr r3, .Lfranglais_scene_text
+	bx r3
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 	.align 2, 0
+.Lfranglais_scene_text: .4byte 0x08801B7D
 
 	thumb_func_start func_08050DB4
 func_08050DB4: @ 0x08050DB4
-	push {lr}
-	lsls r2, r2, #0x10
-	lsrs r2, r2, #0x10
-	ldr r0, [r0]
-	movs r3, #0
-	bl func_08050424
-	pop {r0}
-	bx r0
+	ldr r3, .Lfranglais_scene_text_mode
+	bx r3
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 	.align 2, 0
+.Lfranglais_scene_text_mode: .4byte 0x08801BB5
 
 	thumb_func_start func_08050DC8
 func_08050DC8: @ 0x08050DC8
-	push {lr}
-	lsls r2, r2, #0x10
-	lsrs r2, r2, #0x10
-	ldr r0, [r0]
-	bl func_08050424
-	pop {r0}
-	bx r0
+	mov r12, r3
+	ldr r3, .Lfranglais_scene_text_mode_arg
+	bx r3
+	nop
+	nop
+	nop
+	.align 2, 0
+.Lfranglais_scene_text_mode_arg: .4byte 0x08801BED
 
 	thumb_func_start func_08050DD8
 func_08050DD8: @ 0x08050DD8
@@ -4621,11 +4625,12 @@ func_08050E5C: @ 0x08050E5C
 
 	thumb_func_start func_08050E68
 func_08050E68: @ 0x08050E68
-	push {lr}
-	ldr r0, [r0]
-	bl func_08050B50
-	pop {r0}
-	bx r0
+	ldr r3, .Lfranglais_scene_speaker
+	bx r3
+	nop
+	nop
+	.align 2, 0
+.Lfranglais_scene_speaker: .4byte 0x08801C25
 
 	thumb_func_start func_08050E74
 func_08050E74: @ 0x08050E74
@@ -6557,4 +6562,3 @@ func_0805218C: @ 0x0805218C
 	bx r1
 	.align 2, 0
 .L080521B8: .4byte vtable_unk_080E7934
-

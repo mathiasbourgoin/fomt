@@ -1,5 +1,7 @@
 #include "farmer.hh"
 
+#include "franglais_poc.hh"
+
 Farmer::Farmer(char const * arg_1, GameDate const & arg_2)
     : unk_00(arg_1),
       unk_20(arg_2),
@@ -37,7 +39,8 @@ EC GameDate func_0800E4E8(Farmer const & self)
 
 EC unsigned int func_0800E4F0(Farmer const & self)
 {
-    return self.stamina;
+    typedef unsigned int (*Fn)(Farmer const *);
+    return ((Fn)(FRANGLAIS_franglais_farmer_stamina | 1u))(&self);
 }
 
 EC unsigned int func_0800E4FC(Farmer const & self)

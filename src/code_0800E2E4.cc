@@ -1,5 +1,6 @@
 #include "prelude.h"
 
+#include "franglais_poc.hh"
 #include "unknown_types.hh" // for GameDate and Time
 
 #if 0
@@ -87,15 +88,6 @@ struct Unk_0800E324
 
 EC u32 func_0800E324(Unk_0800E324 const & arg_0)
 {
-    GameDate const & date = arg_0.date;
-    GameTime const & time = arg_0.time;
-
-    if (date.GetDay() == 0 && time.GetHour() < 6)
-    {
-        /* get previous season
-         * TODO: inline GetPreviousSeason(season)? */
-        return (date.GetSeason() % NUM_SEASONS - 1u) % NUM_SEASONS;
-    }
-
-    return date.GetSeason();
+    typedef u32 (*Fn)(Unk_0800E324 const *);
+    return ((Fn)(FRANGLAIS_franglais_season_of | 1u))(&arg_0);
 }
