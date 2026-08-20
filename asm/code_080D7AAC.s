@@ -15,25 +15,3 @@
 	.byte 0xA1, 0xFF, 0x69, 0x46, 0x08, 0x88, 0x00, 0x28, 0x01, 0xD0, 0x28, 0xF7, 0x2B, 0xFD, 0x01, 0xB0
 	.byte 0x08, 0xBC, 0x98, 0x46, 0x70, 0xBC, 0x01, 0xBC, 0x00, 0x47, 0x00, 0x00
 
-	thumb_func_start func_080D7AAC
-func_080D7AAC: @ 0x080D7AAC
-	push {lr}
-	adds r3, r0, #0
-	ldr r0, .L080D7ACC @ =vtable_unk_080E5B54
-	str r0, [r3, #4]
-	ldr r2, .L080D7AD0 @ =gUnk_03000410
-	ldr r0, [r3]
-	str r0, [r2]
-	movs r0, #1
-	ands r0, r1
-	cmp r0, #0
-	beq .L080D7AC8
-	adds r0, r3, #0
-	bl __builtin_delete
-.L080D7AC8:
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L080D7ACC: .4byte vtable_unk_080E5B54
-.L080D7AD0: .4byte gUnk_03000410
-
