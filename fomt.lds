@@ -69,9 +69,17 @@ SECTIONS
         src/scene.o(.text);
         asm/scene.o(.text);
         asm/intro_scene.o(.text);
+        src/code_0800371C.o(.text);
+        asm/code_0800374C.o(.text);
         asm/new_game.o(.text);
+        src/code_08004BDC.o(.text);
+        asm/code_08004C0C.o(.text);
         src/code_08004C54.o(.text);
         asm/code_08004C68.o(.text);
+        src/code_080059D0.o(.text);
+        asm/code_08005A00.o(.text);
+        src/code_080070A4.o(.text);
+        asm/code_080070D4.o(.text);
         src/hardware.o(.text);
         asm/hardware.o(.text);
         src/farm.o(.text);
