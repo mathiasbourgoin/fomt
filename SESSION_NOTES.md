@@ -364,3 +364,303 @@ iteration budget than a single short round provides.
   top of `9636a71`.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
+
+## 2026-08-20, round 3 -- both DrawString loops matched; DrawGlyphAt and a
+tiny scene constructor both hit new, narrower failure modes
+
+Scope: round 2 explicitly recommended trying `docs/VWF.md`'s
+`DrawGlyphAt`/`DrawString` family first (straight-line reads + one
+alignment branch, no free-list pop or unrolled-section walk). This round
+did exactly that, **with real success this time**: both `DrawString`
+loops matched bit-exact. A parallel session then added two more targets
+mid-round (`franglais_new_game_naming_screen_ctor` /
+`franglais_new_game_naming_sequence`, `docs/ENGINE.md` round 27 in the
+patch repo) -- the small one of that pair was attempted and came
+extremely close (byte-identical function, ONE 16-bit instruction's
+register operand differs) but did not converge; documented in detail
+below for whoever picks it up, since it's the closest near-miss so far.
+
+### On function naming: still `func_ADDR`, deliberately, not renamed
+
+Asked mid-round: does this repo rename ported functions to their semantic
+`franglais_*` names? **No, by design, following the precedent set in
+round 1** (`func_0805E6CC`, never renamed despite a well-known semantic
+role). Reasons: (1) `fomt.map`/`fomt.lds`/other still-`asm/`-only files
+reference these symbols by `func_ADDR` name via `bl` instructions --
+renaming would require adding `ALIAS()` plumbing or updating every
+still-unported caller's asm, for zero bit-exactness benefit; (2) the
+upstream `StanHash/fomt` project convention (visible throughout `asm/*.s`
+and already-ported `src/*.cc`) is to keep `func_ADDR` as the canonical
+name and reserve semantic names for comments/docs, consistent with how
+this repo already carries dozens of `func_ADDR`-named ported functions.
+What THIS round does do, and will keep doing: every ported `.cc` file
+opens with a comment block giving the semantic name from
+`docs/VWF.md`/`docs/ENGINE.md`, its role, and a pointer back to the
+franglais-patch doc section -- see `src/code_0804E8F0.cc` and
+`src/code_0804E958.cc` for the pattern. If a future round wants real
+`ALIAS()`-based semantic names, that's a legitimate but separate refactor
+(low risk, no behavior change, could be done as its own pass across
+already-matched functions) -- flagging it as an open question, not doing
+it unilaterally mid-round.
+
+### Matched: `func_0804E8F0` (`franglais_vwf_draw_string_plain`, `0x0804E8F0`)
+
+Split out of the tail of `asm/code_0803EE94.s` (the same giant blob
+`func_0805E6CC` came out of in round 1; still huge, still not fully
+carved up). Body: walks a NUL-terminated string, accumulates 1- or 2-byte
+glyph codes (`code = (code << 8) | next_byte`, reset whenever
+`DrawGlyphAt` resolves a glyph), calls `DrawGlyphAt` (`func_0804E4AC`,
+left as asm, not ported) per code, advances `x` by 8 or `0x10` px per
+resolved glyph kind, stops at the window's right edge
+`(dims & 0xFFFF) * 8`.
+
+Two fixes needed over the first literal translation (which matched size
+exactly, 0x68 bytes, but diverged in content from byte 4 onward):
+
+1. **The right-edge width must be written as the literal double-shift
+   `(dims << 16) >> 13`, not `(dims & 0xFFFF) << 3`.** Both are
+   mathematically identical, but agbcp compiles `& 0xFFFF` as a
+   PC-relative literal-pool load of the mask constant + `ands` + `lsls`
+   (10 bytes), while the shift-pair form compiles to exactly the two
+   `lsls`/`lsrs` instructions the original has (4 bytes) -- this is the
+   SAME lesson round 2 already hit for `func_0800736C`'s free-list logic,
+   now confirmed to generalize: whenever the original does a masking
+   double-shift, write the double-shift literally, never `& mask`.
+2. **The per-glyph-kind dispatch (`kind == 1` / `kind == 0` / `kind == 2`)
+   must be a `switch` with an explicit `default: return;`, not
+   `if (kind == 1) {...} else if (kind == 2) {...}`.** The original
+   keeps a provably-dead extra `cmp`+redundant default branch that jumps
+   straight to the function epilogue (skipping the `s++`/reload that
+   every other path does) -- an if/else-if collapses that dead path away
+   entirely. This is the SAME shape lesson as round 2's `AllocEntry`
+   redundant-branch finding, now with a concrete fix that worked: write
+   the defensive `default:` case explicitly even though `kind` is never
+   actually anything but 0/1/2 at runtime.
+
+Commit: `ecef66e`.
+
+### Matched: `func_0804E958` (`franglais_vwf_draw_string_recolor`, `0x0804E958`)
+
+Same loop, forwards a pair of (anchor, target) recolor colors to
+`DrawGlyphAt`-recolor (`func_0804E5AC`, still asm) each call. **Matched
+bit-exact on the FIRST attempt**, by directly reusing the exact shape
+worked out for `func_0804E8F0` above (double-shift width, switch/default
+dispatch) -- strong confirmation that the shape generalizes rather than
+being a lucky one-off, and that the "two fixes" above are the real,
+reusable lesson from this function family, not incidental.
+
+Commit: `3b2a40d`.
+
+**Notable side finding, not otherwise acted on**: while splitting this
+function out, `func_0804E9C8`/`func_0804E9CC` -- the "unaligned blitter"
+that `docs/VWF.md` flags as the PARTIALLY-understood mystery function
+(the one a previous session's `y=185` non-tile-aligned case delegates
+to) -- turned out to be trivial **two-instruction stubs
+(`movs r0, #0; bx lr`)** in the untouched vanilla ROM. They are no-ops in
+the base game; whatever franglais-patch behavior involving them is a
+PATCH-introduced code path (the dedicated trampoline fix mentioned in
+`docs/VWF.md`'s 2026-08-19 section), not something the vanilla engine
+ever exercises itself. Worth updating `docs/VWF.md` in the patch repo to
+record this (not done here -- out of scope, this repo doesn't touch the
+patch repo).
+
+### Repo hygiene fix: `682e105`
+
+Discovered while reverting a later attempt: the `func_0804E958` commit
+(`3b2a40d`) used `git add -A -- src/code_0804E958.cc asm/code_0804E9C8.s
+fomt.lds` to stage its changes, but that pathspec-restricted `-A` did NOT
+pick up the deletion of `asm/code_0804E958.s` (replaced earlier in the
+same edit by `src/code_0804E958.cc` + `asm/code_0804E9C8.s`), so HEAD
+kept tracking 30907 lines of stale, on-disk-deleted content for a file
+`fomt.lds` no longer references. Harmless for the build (confirmed
+`make compare` bit-exact both before and after the fix), just a stray
+tracked file. Fixed with a dedicated small commit. **Lesson for future
+rounds**: `git add -A -- <explicit paths>` does not reliably stage
+deletions the way plain `git add -A` does when a file is deleted outside
+the given pathspec's exact list -- prefer `git status --short` review
+(not just the files you meant to touch) before every commit in this
+workflow, not just the "did my new files show up" check.
+
+### Attempted and reverted: `func_08004C54` (`franglais_new_game_naming_screen_ctor`, `0x08004C54`)
+
+New target from a parallel session (`claude/decomp-screen-activation`,
+patch repo, `docs/ENGINE.md` round 27): a 20-byte scene-table record #12
+constructor, same idiom as 9 other already-Ghidra-confirmed constructors
+in that document -- stamp a vtable pointer, then call the shared base
+constructor (`func_080007EC`, already ported in `src/scene.cc`, declared
+there with an EMPTY-parens `extern "C"` signature relying on the object
+pointer surviving in `r0` across the call since `func_080007EC` never
+actually needs a passed argument at the C level -- this convention was
+already established, not invented this round).
+
+Split cleanly out of `asm/new_game.s` (no `.lds` surgery complexity,
+just two functions at the split point, same as round 1's easy cases).
+**Extremely close**: the compiled function is BYTE-IDENTICAL to the
+original except for a SINGLE instruction's register operand --
+
+```
+original:  ldr r2, [pc, #12]  /  str r2, [r0, #0]
+mine:      ldr r1, [pc, #12]  /  str r1, [r0, #0]
+```
+
+-- everything else (the `push {lr}`, the `bl func_080007EC`, the
+`pop {r0}; bx r0` epilogue) matches exactly, same total size (0x14 = 20
+bytes both). This is the closest near-miss of any round so far: a real
+semantic/structural match, just one scratch-register number off.
+
+**Every variant tried, all producing the identical r1-not-r2 result**
+(fast-iteration harness used: `arm-none-eabi-cpp | agbcp -O2 ... | as`
+on just this one file, ~1s/iteration, skipping the full link -- worth
+keeping `/tmp/quicktest.sh`-style harnesses like this for future
+single-function register puzzles instead of always paying the full
+`make compare` cost per guess):
+
+1. `void *` self with `*(void**)self = &vtable;`, empty-parens call.
+2. Same, with a named `struct { void *vtable; }` self type instead of a
+   raw cast.
+3. Splitting the assignment into `void **vt = &self->vtable; *vt = ...;`
+   (testing whether the original computes the field address in a
+   register even at offset 0).
+4. Passing `self` explicitly to `func_080007EC(self)` with a matching
+   1-arg prototype (vs. relying on register survival through an
+   empty-parens declared callee).
+5. Adding an unused second formal parameter to `func_08004C54` itself,
+   to test whether an extra (unused) parameter reserves `r1` in the
+   register-numbering scheme.
+6. `vtable_unk_080E5A88` declared as `u32[]` (array decay) instead of
+   `void *` (address-of) -- tests whether array-decay vs. explicit `&`
+   compiles through a different intermediate.
+7. Returning `self` (`Unk_08004C54 *`) instead of `void`, mimicking the
+   `func_0805E6CC` return-self convention -- **this ONE was NOT a close
+   miss**, it changed the whole prologue/epilogue shape (extra `push
+   {r4}`/`adds r4,r0,#0` to keep `self` live across the call for the
+   return), confirming the original genuinely returns `void`/discards
+   the base-ctor's return value, consistent with the `pop{r0};bx r0`
+   idiom already matching.
+8. Capturing `func_080007EC()`'s return value into an ignored local (in
+   case the original's C assigned but discarded a return value, changing
+   liveness).
+9. A 2-argument `func_080007EC(self, 0)` call (testing whether the real
+   base-ctor signature takes a 2nd parameter, which would reserve `r0`
+   AND `r1` as "argument slots" ahead of the call in a naive
+   scratch-register scheme) -- rejected: adds a visible extra `movs
+   r1, #0` instruction not present in the original, and still uses `r1`
+   for the store since the assignment is evaluated before the 2nd
+   argument.
+10. An unrelated dummy function declared earlier in the same
+    translation unit, consuming `r1` internally -- tests whether agbcp's
+    scratch-register counter is (bug-for-bug) per-file rather than
+    per-function. Rejected: no effect, confirming allocation is properly
+    per-function.
+
+**Honest assessment for whoever retries this**: none of the structural
+variants above changed the outcome, which argues the cause isn't in how
+*this* function's C is shaped, but in something about the CALLED
+function's real original signature/attributes that isn't recoverable
+from this call site alone (the two most plausible remaining hypotheses,
+neither tested further this round for lack of a way to falsify them
+cheaply: (a) `func_080007EC`'s TRUE original prototype takes some
+argument this call site passes as a non-`self`, non-obviously-visible
+value that only shows up as "which register is now taken", e.g. an
+implicit `__in_chrg`-style flag some CFront-era compilers do pass to
+base sub-object constructors even without virtual bases -- `func_080007EC`
+being ALIASed to a `_._6AScene`-mangled symbol, i.e. it's literally
+`AScene::~AScene()`'s mangled name, being reused/COMDAT-folded as this
+constructor's base-init step, makes this hypothesis genuinely plausible,
+not just a shot in the dark; (b) something about how OTHER call sites of
+`func_080007EC` across the whole ROM (there may be several, this repo
+only has the one in `src/scene.cc`'s own definition) shape agbcp's
+per-callee register-class preference in a way not visible from a
+single-call-site experiment. Testing (a) properly would mean trying to
+port `func_080007EC` itself as a REAL C++ destructor body (not just an
+`ALIAS()` stub) and checking whether IT then reveals a hidden parameter
+via its own disassembly -- not attempted this round, plausible next step
+if someone wants to keep pulling this thread.
+
+Reverted cleanly (`git checkout -- fomt.lds asm/new_game.s; rm
+asm/code_08004C68.s src/code_08004C54.cc`), confirmed `make compare`
+passes bit-exact before stopping.
+
+### Not attempted this round: `func_0804E4AC`/`func_0804E5AC` (`DrawGlyphAt`, both variants)
+
+Attempted `func_0804E4AC` (the plain `DrawGlyphAt`) after the two
+`DrawString` wins, expecting it to be similarly tractable -- **it is
+NOT**, and this is a real, important correction to round 2's priority
+list, which had lumped the whole `DrawGlyphAt`/`DrawString` family
+together as "structurally simpler". `DrawString` (the loop) is simple.
+`DrawGlyphAt` (the per-glyph blit) is not: it has a 140-byte stack frame,
+holds `dims`/`dest`/`x`/`y` plus derived `tile_x`/`tile_y`/
+`width_tiles`/`height_tiles` plus two boolean flags simultaneously live,
+and blits up to 4 conditional 32-byte tiles (TL always, BL/TR/BR
+conditionally) via `CpuFastSet`, using ALL of `r4`-`r7` plus `r8`/`sb`/
+`sl`/`ip` at points. First literal-translation attempt: compiled 20
+bytes short, and every register assignment diverged starting from the
+very FIRST parameter-binding instruction (`dest` went to `sl` in mine
+vs. `sb` in the original) -- this is the exact register-pressure
+archaeology class that has now failed 3 times total across all 3 rounds
+(`func_0805E790` round 1, `func_0800736C` round 2, `func_0804E4AC` this
+round), each time with the SAME root cause (the original keeps fewer
+values live at some point than any C statement ordering I tried
+achieves). Given round 2's explicit lesson ("don't re-attempt this class
+without a larger iteration budget than a single round provides"), this
+was reverted after one attempt + one refinement (fixing the same
+`& 0xFFFF` mask anti-pattern from `func_0804E8F0`, which helped but did
+not fix the deeper register-allocation divergence) rather than sunk
+further. `func_0804E5AC` (the recolor variant, same shape) was not
+attempted at all as a result -- expect it to have the identical failure
+mode if tried before `func_0804E4AC` is solved, since both variants
+share the same buffer/flag layout per `docs/VWF.md`.
+
+**Important scoping correction for future rounds' priority lists**:
+within a documented "family" of functions, do not assume uniform
+difficulty. `DrawString` (loop, few live values) and `DrawGlyphAt`
+(multi-tile conditional blit, many live values) sit in the same
+`docs/VWF.md` section but are NOT the same difficulty class -- the
+loop's simplicity came from calling `DrawGlyphAt` as an opaque `bl`,
+which is exactly the boundary that made it tractable. `ResolveGlyph`
+(`func_080D0D28`, `0x080D0D28`) -- the actual glyph-bitmap-to-4bpp-tile
+IWRAM converter `DrawGlyphAt` calls -- is almost certainly harder still
+(it fills up to 4 32-byte buffer slots per `docs/VWF.md`'s "the IWRAM
+converter" discussion, i.e. it's the thing that makes the buffer layout
+`DrawGlyphAt` reads from opaque even to this round), not recommended as
+a next target without first fully characterizing it in the patch repo's
+docs (dynamic trace, not just static disassembly).
+
+### What to do differently next round
+
+1. **`func_08004C54`'s 1-register near-miss is the single best lead in
+   this file right now** -- it is closer to matching than anything else
+   attempted across 3 rounds. Whoever picks it up next should try
+   porting `func_080007EC` itself (currently just an `ALIAS()` stub in
+   `src/scene.cc`) as a real function body to see if its true signature
+   reveals the missing register-reservation cause, per the "honest
+   assessment" above.
+2. Do NOT re-attempt `func_0804E4AC`/`func_0804E5AC` (`DrawGlyphAt`)
+   without a multi-round budget -- 3/3 attempts at this general
+   register-pressure class have failed across the whole project so far.
+3. `func_08004C68` (`franglais_new_game_naming_sequence`) was split out
+   mechanically alongside `func_08004C54` this round but never actually
+   attempted (reverted along with everything else) -- it's a real
+   `do`/`while` loop with several external calls and a 0x38-byte record
+   allocation, likely non-trivial; not evaluated for difficulty this
+   round.
+4. The rest of round 1/2's untouched priority list is still open and
+   unchanged: `franglais_transition_ctl_query` (`0x08050DF0`), `Unpack`
+   (`0x080D102C`, Python reference exists), the script dispatch table
+   (`0x0803F900`), the scene/screen table (`0x080E59D4`-`0x080E8618`),
+   `docs/ENGINE.md`/`docs/DIALOGUE.md` in full, `docs/BACKGROUNDS_INVENTORY.md`,
+   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
+
+### Repo state at end of round 3
+
+- Working tree clean, `make compare` passes bit-exact (verified via full
+  clean rebuild, `rm -rf build fomt.gba fomt.elf fomt.map && make
+  compare`, immediately before writing this section).
+- Three new commits this round, all bit-exact-verified before commit:
+  `ecef66e` (func_0804E8F0), `3b2a40d` (func_0804E958), `682e105` (stray
+  tracked file cleanup, unrelated to this round's decomp work but found
+  while reverting the `func_08004C54` attempt).
+  `func_08004C54`/`func_08004C68` attempt fully reverted, nothing
+  committed for it.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
