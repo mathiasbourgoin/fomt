@@ -7204,3 +7204,163 @@ pre-allocated" entity-factory sibling`), local à `parallel-46`.
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - Aucun recoupement avec w45 ni avec les cibles en pause (inchangé
   depuis l'entrée précédente).
+
+## Round (worktree w45, branche `parallel-45`) -- les 2 cibles fraîches de w43
+
+Mission : porter `func_0803A798` et `func_0803BF78` (2 cibles caractérisées
+mais non portées par w43), puis vérifier si `func_08037A5C`/`func_08037AD0`
+partagent bien la classe de near-miss "ordre d'évaluation des arguments"
+déjà confirmée sur `func_08037B48`/`func_08037B80`.
+
+### Match 1 : `func_0803A798` -- constructeur d'une classe dérivée de
+`AEntity` non identifiée, avec `Location` zéro
+
+Alloue 0x20 octets, construit le sous-objet `AEntity` via
+`Location(0, 0, 0)`, puis restampe le vtable de la classe dérivée
+(`vtable_unk_080E7568`) à +0x14 (même offset où `AEntity` place son propre
+vtable -- simple restamp d'héritage simple, pas une 2e base MI), stocke un
+paramètre à +0x18 et un flag fixe (1) à +0x1c.
+
+`AEntity` est abstraite dans ce dépôt (`vfunc_30` pur virtuel, cf.
+`include/entity.hh`) car la vraie sous-classe concrète (et son override de
+`vfunc_30`) n'est pas portée. Plutôt que d'inventer une hiérarchie de
+classe dérivée non vérifiée (ce qui ferait aussi générer par le compilateur
+SON PROPRE vtable au lieu de référencer le blob `vtable_unk_080E7568`
+existant), le constructeur de base est appelé directement via son symbole
+mangle déjà compilé (`__7AEntityP10GameObjectRC8Location`, confirmé via
+`arm-none-eabi-nm build/src/entity.o` -- correspond exactement à la cible
+du `bl` dans le désassemblage d'origine) -- même idée que le précédent
+"appel qualifié de destructeur" de `DECOMP_RULES.md` (anti-pattern #8),
+appliqué à un constructeur. `AEntity::AEntity` est déjà pleinement
+implémentée dans `src/entity.cc` ; ce match la réutilise plutôt que de la
+dupliquer.
+
+Le bitfield packé `Location` (map:10, x:16, y:16, PACKED) qui restait à
+élucider depuis w43 ("3 paires ldrh/ldrb qui SE CHEVAUCHENT") s'est révélé
+être une construction `Location(0, 0, 0)` triviale (3-arg ctor) -- pas une
+assignation champ par champ manuelle. Le compilateur matérialise lui-même
+les 5 opérations load/mask/store qui semblaient mystérieuses.
+
+Vérifié bit-exact : `build/src/code_0803A798.o` `.text` = 0x6c octets
+(= `func_0803A804` - `func_0803A798`) ; une réassemblage autonome du bloc
+asm d'origine matche octet à octet le candidat compilé (`cmp` identique,
+108 octets). Commit local (voir `git log`).
+
+### Match 2 : `func_0803BF78` -- wrapper simple autour de `func_0803BDFC`
+
+Confirme le diagnostic w43 : ce wrapper ne vit PAS lui-même dans la classe
+"pression de registres" (aucun `r8`/`sb`/`sl` dans son propre corps),
+malgré son appel à `func_0803BDFC` (qui lui est dans cette classe, laissé
+intact/boîte noire). Transmet 4 arguments registre + 5 arguments pile
+(literal `0x18` + 4 arguments transférés) à `func_0803BDFC`, dont le
+prologue confirme la forme à 9 arguments (self + 3 registre + 5 pile).
+Restampe ensuite `vtable_unk_080E77A4` à self+4, alloue 0x41c octets via
+un helper opaque (`func_080E0A94`), et pose 4 champs octet.
+
+**Near-miss résolu (nouvelle variante de la règle #5/statement order)** :
+le désassemblage calcule le littéral 0 de self+0xd AVANT de stocker
+self+0xc (pourtant stocké en premier), alors que self+0xc vient d'un
+registre déjà vivant (pas de calcul nécessaire). Réordonner les DEUX
+statements d'assignation seul ne suffit pas (ça inverse aussi l'ordre des
+STORES, alors que target garde le store de self+0xc en premier). Donner
+au littéral 0 sa PROPRE variable locale nommée, déclarée avant les deux
+stores, reproduit l'ordre exact instruction par instruction. Signal
+pratique pour un futur near-miss similaire : quand un store utilisant une
+valeur DÉJÀ vivante doit rester avant un store utilisant un littéral qui
+se retrouve calculé plus tôt dans le désassemblage, essayer un temporaire
+nommé pour le littéral plutôt que de réordonner les statements.
+
+Vérifié bit-exact : `build/src/code_0803BF78.o` `.text` = 0x50 octets
+(= `func_0803BFC8` - `func_0803BF78`) ; réassemblage autonome identique
+octet à octet (80 octets). Fichier `asm/code_0803A8A4.s` découpé à la
+frontière de fonction (méthode standard, queue déplacée dans le nouveau
+`asm/code_0803BFC8.s`) ; link complet propre (exit 0), les deux symboles
+présents une seule fois chacun. Commit local (voir `git log`).
+
+### Découverte : dérive d'adresse préexistante dans ce worktree, sans
+rapport avec ce round -- la vérification par adresse ROM absolue contre
+`baserom.gba` n'est PAS fiable ici en ce moment
+
+En tentant de vérifier `func_0803A798` par diff borné de `fomt.gba` lié
+contre `baserom.gba` à l'adresse absolue (méthode recommandée en tête de
+liste par `DECOMP_RULES.md`), le désassemblage à 0x0803A798 dans le ROM
+linké ne correspondait PAS du tout au contenu attendu -- une fonction sans
+rapport y apparaissait. Investigation : `func_08039A30` (fonction déjà
+matchée, commitée depuis un round antérieur, PAS touchée par ce round)
+atterrit déjà à 0x0803993C dans le lien actuel de ce worktree, soit
+**0xF4 octets (244) en avance** sur son adresse vanille attendue --
+confirmant que la dérive est PRÉEXISTANTE à ce round, pas causée par mon
+changement. Cause probable : ce worktree n'est pas synchronisé avec l'état
+`main` le plus récent (commits d'autres rounds parallèles pas encore
+mergés ici), ou un effet de bord du hook franglais déjà lié. **Pour toute
+vérification future dans CE worktree précis, ne pas faire confiance à un
+diff par adresse absolue contre `baserom.gba` sans avoir d'abord confirmé
+qu'une fonction déjà matchée et non touchée atterrit à la bonne adresse.**
+La méthode de repli utilisée ici (fiable, indépendante de l'adresse) :
+réassembler le bloc asm ORIGINAL de façon autonome (`arm-none-eabi-as` sur
+un fichier `.s` scratch contenant juste le bloc `thumb_func_start`
+original + son en-tête standard), extraire les octets `.text` bruts via
+`objcopy -O binary --only-section=.text`, et comparer directement (`cmp`)
+contre les octets `.text` du `.o` fraîchement compilé du candidat --
+prouve le contenu octet à octet sans dépendre du lien final ni de
+l'adresse ROM. À signaler aux autres agents parallèles (w44/w46 etc.) si
+la même dérive apparaît chez eux -- possible symptôme d'un merge en retard
+sur `main`, à vérifier via `git log --oneline -5` / `git merge-base`.
+
+### Découverte : `func_08037A5C`/`func_08037AD0` partagent bien les DEUX
+classes de near-miss déjà documentées, PLUS une 3e variante -- non porté,
+comme demandé
+
+Désassemblage manuel confirmé : les deux fonctions appellent
+`func_08037008(obj, a1, a2, LITERAL_r3, LITERAL_pile)` avec exactement le
+même motif que `func_08037B48`/`func_08037B80` -- le désassemblage calcule
+l'argument 5 (pile, un littéral entier stocké via `movs r0,#N; str
+r0,[sp]`) AVANT de charger l'argument 4 (registre r3), juste avant le
+`bl`. Un test rapide (harnais scratch, une seule tentative "C naturel",
+PAS committé) confirme que toute formulation directe produit l'ordre
+INVERSE (r3 chargé en premier), exactement le symptôme déjà documenté --
+**confirmé, 2e instance de cette classe, comme prévu, pas de tentative de
+forcer un match.**
+
+Ces 2 fonctions partagent AUSSI le near-miss "masque-par-négation" déjà
+repéré par w43 sur le champ bitfield à `self+0x44` : `movs r0,#4; rsbs
+r0,r0,#0` (donnant `-4 = ~3`) plutôt qu'un littéral direct -- mon essai
+naturel (`*field = (*field & ~3) | (a3 & 3);` en `u8*`) a produit
+`movs r0,#0xfc` (littéral 8 bits direct), PAS la négation. Signal
+pratique à creuser un jour : la négation suggère un calcul en LARGEUR u32
+(`~3` sur 32 bits = `0xFFFFFFFC`, qui ne tient pas dans un littéral 8 bits
+`movs`, forçant `rsbs`) plutôt qu'un masque déjà réduit à 8 bits -- pas
+testé plus loin (budget dédié à la confirmation de classe, pas à la
+résolution).
+
+**3e near-miss inédit repéré au passage** (pas dans les notes w43,
+propre à `func_08037A5C`/`func_08037AD0` uniquement, absent de
+`func_08037B48`/`func_08037B80`) : les 4 champs `u16` de configuration
+passés à `func_08037244` (bloc de 8 octets sur la pile) sont écrits par
+l'original via 4 `strh` SÉPARÉS avec des valeurs scalaires calculées une
+à une (`movs r1,#0xb0; lsls r1,r1,#1; movs r3,#0xd8; strh r1,[r0]; strh
+r3,[r2,#2]; adds r1,#0x38; strh r1,[r2,#4]; movs r0,#0xe8; strh
+r0,[r2,#6]`) -- une tentative naïve via une struct locale à 4 champs
+`u16` (`SomeArgs4{a,b,c,d}`) compile en un motif COMPLÈTEMENT différent
+(paires de `ands`/`orrs` 32 bits pour empaqueter 2 halfwords à la fois,
+beaucoup plus gros). **Ne pas utiliser de struct locale ici -- écrire 4
+variables scalaires `u16` séparées** (ou les 4 littéraux inline
+directement dans les appels `strh` si le call site le permet) est
+probablement la bonne piste pour un futur round qui s'attaquerait à ces 2
+fonctions en profondeur.
+
+Pas commité (aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` -- tout
+le tâtonnement est resté dans `/tmp/w45scratch/`, jamais appliqué au
+dépôt).
+
+### État du worktree en fin de round
+
+- **2 commits locaux** : `func_0803A798` et `func_0803BF78`, tous deux
+  vérifiés bit-exact (taille `.o` + réassemblage autonome, cf. ci-dessus).
+- `func_08037A5C`/`func_08037AD0` : classe de near-miss confirmée (2e
+  instance), PAS portées, PAS commitées -- conforme à la consigne "ne pas
+  forcer un match".
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map`/`build/franglais_stub.bin`
+  nettoyés après chaque vérification.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `git status --short` vide (hors les 2 commits déjà réalisés).
