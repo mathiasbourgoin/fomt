@@ -42,7 +42,15 @@ vieilles notes.
   1. taille du `.text` du `.o` fraîchement compilé comparée à
      `next_addr - this_addr` (`arm-none-eabi-objdump -h build/src/code_ADDR.o`) ;
   2. diff de désassemblage borné à cette taille exacte contre l'original
-     (`--adjust-vma=0x08000000`, piège déjà documenté plus bas) ;
+     (`--adjust-vma=0x08000000`, piège déjà documenté plus bas) --
+     **vérifier le vrai CONTENU octet à octet, pas seulement que le
+     symbole atterrit à la bonne adresse dans `fomt.map`/le lien.** Bug
+     réel vécu (round 12/w35) : un premier commit passait le check
+     "adresse correcte après lien" alors que le nombre d'instructions
+     était identique mais leur ORDRE/registres différaient -- seul un
+     diff direct de l'ELF lié contre `baserom.gba` à l'adresse cible l'a
+     révélé. L'adresse qui atterrit juste ne prouve que la TAILLE est
+     bonne, pas le contenu ;
   3. optionnellement, un lien complet (avec le `franglais_stub.bin`
      factice ci-dessus) pour vérifier l'absence d'erreur structurelle
      (référence non définie, définition multiple) -- ça prouve l'absence
