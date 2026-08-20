@@ -4895,3 +4895,123 @@ sur `git status`) ; les worktrees `w1`-`w21`/`w23`-`w26` (créés avant
   correction du stub, ou changement de discipline de vérification) avant
   que les prochains rounds parallèles ne perdent du temps à buter dessus
   sans le savoir.
+
+## 2026-08-20, worktree w28/`parallel-28` -- angle 2 repris (voisins de
+`gUnk_03000410`), **RIEN COMMITÉ** : régression d'infra bloquante
+découverte (`make compare` cassé depuis `cb06198`)
+
+Mission : reprendre l'angle 2 laissé ouvert par w26 (`func_080D7AAC`/
+`func_080D7B04`, `vtable_unk_080E5B54`/`gUnk_03000410`, famille
+destructeurs "riches" sœur de `func_08008A68`/`func_080D7944`).
+
+**3 candidats identifiés et vérifiés au niveau harnais (compilateur+
+assembleur, sans lien complet)** :
+
+- `func_080D7AAC` (`asm/code_080D7AAC.s`) et `func_080D7B04`
+  (`asm/code_080D7B04.s`) : deux destructeurs **octet-pour-octet
+  identiques** (40 octets chacun) -- stamp `vtable_unk_080E5B54` à `+4`,
+  `gUnk_03000410 = *(void**)self` (unlink tête de liste), delete
+  conditionnel sur `arg & 1`. Portage C compilé via le harnais rapide et
+  comparé au désassemblage brut du binaire `.byte` original : **match
+  bit-exact confirmé** (mêmes 20 instructions, mêmes octets).
+- `func_080D7944` (dans `asm/code_080D6DB8.s`, déjà référencée en avant
+  par 3 fichiers `src/*.cc` matchés -- `code_08008A68.cc`,
+  `code_080D79CC.cc`, `code_080D7AD4.cc` -- comme callée opaque jamais
+  portée) : version "riche" de la même famille (stamp 2 vtables, unlink
+  liste, restore IME via `func_080004F4` si sauvegardé, delete
+  conditionnel). **Near-miss d'1 instruction, PAS convergé** : le
+  désassemblage cible fait `movs r0,#1; ands r5,r0` (résultat de
+  `arg & 1` écrit DANS le registre de `arg`, r5), alors que toute
+  formulation C testée (`if (arg & 1)`, `arg &= 1; if (arg)`,
+  `arg = 1 & arg`, avec/sans variable intermédiaire nommée) compile
+  systématiquement en `movs r0,#1; ands r0,r5` (résultat dans le
+  registre scratch r0, arg intact) -- confirmé identique au idiome déjà
+  matché de `func_08008A68` (`ands r0,r7`) qui utilise pourtant la MÊME
+  expression source `flags & 1`. Taille totale identique (0x4c octets),
+  donc écart d'exactement 1 encodage d'instruction (2 octets), pas une
+  divergence structurelle. Hypothèse non testée : la différence vient du
+  nombre de registres bas simultanément vivants (`func_08008A68` utilise
+  r4-r7, `func_080D7944` seulement r4-r5) influençant le choix de
+  destination de l'allocateur de agbcp -- piste pour la prochaine
+  tentative, pas assez de budget ce round pour explorer plus de
+  variantes.
+
+**RIEN N'A ÉTÉ COMMITÉ.** En tentant d'appliquer `func_080D7AAC`/
+`func_080D7B04` au dépôt (split `asm/*.s` standard + entrées `fomt.lds`)
+et de vérifier via `rm -rf build fomt.gba fomt.elf fomt.map && make
+compare`, `sha1sum -c fomt.sha1` a échoué -- **mais l'investigation a
+montré que l'échec est totalement indépendant de mes changements** :
+
+### Découverte : `make compare`/`sha1sum -c fomt.sha1` est cassé depuis
+`cb06198` ("franglais: port hooks to source build", mergé dans `main`
+avant le merge de `parallel-26`, donc présent dans TOUTE branche
+descendante -- `w1` à `w28` inclus)
+
+Preuve reproduite sur un `git stash -u` complet (aucun changement de moi,
+état identique à `HEAD`) : `make compare` échoue quand même
+(`sha1sum -c fomt.sha1` -> "Échec"). Cause racine identifiée :
+
+1. `cb06198` a lié un vrai payload franglais (`src/franglais_payload.s`,
+   `.INCBIN "build/franglais_stub.bin"`) à l'adresse **`0x08800000`**,
+   soit exactement la fin de la ROM vanilla (`baserom.gba` fait
+   8388608 octets = `0x800000`). Tout contenu non-vide à cet endroit
+   **agrandit `fomt.gba` au-delà de `baserom.gba`**, donc un `sha1sum`
+   plein-fichier ne peut structurellement plus jamais réussir, quel que
+   soit le contenu du stub.
+2. Pire : même en comparant seulement les 8 premiers Mo (préfixe exact de
+   `baserom.gba`), le hash NE correspond PAS au hash vanilla (vérifié :
+   `head -c 8388608 baserom.gba | sha1sum` == hash enregistré dans
+   `fomt.sha1`, mais `head -c 8388608 fomt.gba | sha1sum` diffère) --
+   les "hooks" du commit modifient légitimement des octets À L'INTÉRIEUR
+   des 8 Mo d'origine (c'est le but des hooks : brancher vers le nouveau
+   payload), donc même une comparaison "préfixe 8 Mo" ne peut plus
+   servir de gate bit-exact automatique.
+3. `fomt.sha1` (`b8471ae`, bien avant `cb06198`) n'a jamais été mis à
+   jour pour refléter ce changement -- la règle non négociable du dépôt
+   ("`sha1sum -c fomt.sha1` doit afficher Réussi avant tout commit")
+   est donc actuellement **impossible à satisfaire pour QUICONQUE**,
+   indépendamment de la qualité d'un match.
+4. `build/franglais_stub.bin` lui-même n'existe dans aucun worktree frais
+   (absent du suivi git, `build/` gitignored) -- chaque worktree doit le
+   recréer à la main ; un stub vide (0 octet) fait échouer le LIEN lui
+   -même (symboles dupliqués visibles seulement si les fichiers source
+   du round précédent restent non-stashés -- piège vécu et corrigé
+   pendant l'investigation, cf. ci-dessous) tandis qu'un stub de la
+   bonne taille (copié depuis `~/dev/jeux-langues-assets/fomt-decomp/
+   build/franglais_stub.bin`, 4096 octets) permet au moins de LIER et
+   PRODUIRE un `fomt.gba`, révélant alors le vrai problème (2) ci-dessus.
+
+**Conclusion pratique de ce round** : impossible de committer un match
+bit-exact vérifié par le gate officiel du dépôt tant que ce problème
+n'est pas corrigé en amont (soit régénérer `fomt.sha1` pour la nouvelle
+réalité post-`cb06198` avec une méthode de comparaison qui exclut/
+neutralise les octets légitimement modifiés par les hooks franglais,
+soit revenir travailler le pur decomp sur un ancêtre antérieur à
+`cb06198`). **Recommandation forte pour Mathias** : les commits
+`cb06198`/`2011c54` (intégration du patch franglais, auteur co-signé
+"Copilot") semblent être arrivés sur `main` de ce dépôt `fomt-decomp`
+alors que ce dépôt est censé documenter STRICTEMENT le jeu vanilla
+(cf. règle "point de vue vanilla" de `DECOMP_RULES.md`) -- vérifier si
+ce mélange est intentionnel ; si non, il casse le gate de sécurité de
+TOUS les agents de decomp en parallèle depuis ce point.
+
+Les 3 candidats ci-dessus (`func_080D7AAC`, `func_080D7B04` vérifiés
+bit-exacts au niveau harnais ; `func_080D7944` near-miss 1 instruction)
+restent des cibles prêtes à committer dès que le gate est réparé --
+inutile de refaire l'analyse, juste réappliquer le split `asm/*.s` +
+`fomt.lds` documenté ci-dessus.
+
+### Repo state at end of round 10/w28
+
+- **Aucun commit.** `git status --short` vide, arbre de travail identique
+  à `HEAD` (`b7e6296`, merge de `parallel-26`) -- tous les fichiers
+  candidats (`src/code_080D7AAC.cc`, `src/code_080D7B04.cc`, splits
+  `asm/*.s`, edits `fomt.lds`) ont été supprimés/restaurés après l'échec
+  du gate, conformément à la discipline "ne jamais laisser un état cassé
+  entre deux tentatives".
+- `origin` intact, rien poussé, aucune PR.
+- `build/franglais_stub.bin` local à ce worktree contient maintenant une
+  copie du stub 4096 octets de `~/dev/jeux-langues-assets/fomt-decomp`
+  (fichier gitignored, n'affecte pas l'état git) -- prochain agent sur ce
+  worktree : ne pas supposer qu'un `make compare` propre passera tant que
+  le point ci-dessus n'est pas corrigé en amont.
