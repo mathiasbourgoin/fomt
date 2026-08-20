@@ -6,6 +6,119 @@ worked on strictly offline: `origin`'s push URL is deliberately broken
 restored. Never `git push`, never open a PR, never touch `origin`. Commit
 locally only.
 
+## Round (worktree `w47`, branche `parallel-47`) -- ZÉRO match commité,
+mais le near-miss "ordre d'évaluation des arguments" de w43 est enfin
+ROOT-CAUSÉ (mécanisme précis identifié empiriquement), + 1 cible fraîche
+mieux caractérisée pour un prochain round
+
+Mission : attaquer le near-miss `func_08037B48`/`func_08037B80` documenté
+round w43 (appel à 5 arguments : la cible calcule l'argument-pile
+littéral AVANT l'argument-registre `r3` littéral ; les 6 reformulations C
+de w43 produisaient systématiquement l'ordre inverse) avec une idée
+vraiment neuve, sans répéter les 6 déjà testées.
+
+### Méthode : harnais rapide (compilateur+assembleur sans lien),
+5 variantes empiriques ciblées sur `func_08037B48` reconstruit à
+l'identique (`obj = __builtin_new(0x44); func_08037008(obj, a1, a2, kind,
+extra); return obj;`)
+
+1. Reproduction baseline (kind=0x379→r3, extra=0xc→pile, littéraux
+   inchangés) : confirme le défaut connu -- `ldr r3,=0x379` (pool)
+   généré AVANT `movs r0,#0xc; str r0,[sp]` (pile).
+2. **Test décisif** : permutation des deux valeurs SANS changer leur rôle
+   ABI (extra=0xc→r3, kind=0x379→pile) -- le littéral qui nécessite le
+   POOL LITTÉRAL (`0x379`, non shift-décomposable, `889` est impair donc
+   aucune forme `k<<n` avec `k` 8 bits n'existe) est TOUJOURS calculé en
+   PREMIER, peu importe qu'il finisse en `r3` ou sur la pile. Le petit
+   littéral encodable en `movs` (`0xc`) est TOUJOURS calculé en second,
+   peu importe sa destination ABI.
+3. Confirmation avec littéraux tous DEUX encodables en `movs` (`0x37`,
+   `0xc`, aucun pool) : l'ordre naturel redevient pile-PUIS-r3, exactement
+   la forme voulue par la cible -- preuve que la règle "pile avant
+   registres r0-r3" est bien le comportement PAR DÉFAUT d'agbcp pour un
+   appel à 5 arguments, et que seul un littéral-pool la contourne en se
+   faisant hisser en tête.
+4. Confirmation que le hissage touche N'IMPORTE QUEL argument-registre
+   pool (testé sur `r1`, pas seulement `r3`) : le pool-load est TOUJOURS
+   la toute première instruction de la séquence de montage d'arguments,
+   avant même `r0`=this.
+5. Tentative de contournement : écrire le littéral comme expression
+   pliable (`0x300 | 0x79`) pour voir si l'évaluation différée change
+   quelque chose -- non, agbcp plie la constante à la même valeur unique
+   au même endroit (front-end constant folding), même résultat que (1).
+
+### Conclusion : mécanisme caractérisé, PAS de contournement possible
+en C pour CE cas précis
+
+**Règle nouvelle (mécanisme, pas juste symptôme) : dans un appel à agbcp
+comportant un argument littéral nécessitant le pool de constantes
+(`ldr rX,=VAL`, valeur non shift-décomposable), ce chargement est TOUJOURS
+hissé en tête de la séquence de montage des arguments d'appel -- avant le
+montage des arguments-pile ET avant `r0`/`this` -- indépendamment de la
+position déclarée de l'argument dans l'appel C, de son rôle ABI final
+(registre `r0`-`r3` ou pile), et de toute reformulation via variable
+nommée/expression pliable.** Puisque `0x379`/`0x207` (les "kind" de
+`func_08037B48`/`func_08037B80`) ne sont PAS shift-décomposables (impairs,
+> 0xFF), ils DOIVENT passer par le pool -- ce qui les force
+structurellement à être calculés avant l'argument-pile, alors que la
+cible (`baserom.gba`) fait l'inverse. **Ce near-miss est donc fermé pour
+de bon sur ces 2 sites précis, pas seulement "résiste encore" : aucune
+forme C ne peut produire l'ordre cible tant que le 4e argument reste un
+littéral pool.** Seule porte de sortie théorique, non explorée par
+manque de piste concrète : si le VRAI 4e argument n'est PAS un littéral
+`u32` nu dans la source d'origine mais une expression qui n'exigerait pas
+le pool (ex. un champ déjà chargé en registre ailleurs) -- aucun signal
+dans le désassemblage ne suggère ça (le littéral `0x379` apparaît bien
+comme entrée `.4byte` dans le pool de la fonction cible elle-même, donc
+la cible AUSSI matérialise cette valeur via un pool -- la vraie question
+n'est même plus "pool ou pas", elle est déjà tranchée par le binaire
+lui-même). **`func_08037A5C`/`func_08037AD0` (2e instance présumée de la
+même famille) non tentés** -- la caractérisation ci-dessus s'applique
+déjà mécaniquement (même schéma d'appel à `func_08037008`), pas la peine
+de reproduire l'expérience une 7e fois.
+
+À ajouter à `DECOMP_RULES.md` (anti-pattern) au prochain round qui
+touche cette famille : "littéral-pool dans un appel à 5+ arguments ->
+toujours hissé avant l'argument-pile, aucune reformulation C ne change
+ça."
+
+### Découverte secondaire : `func_0803A798` (candidate fraîche déjà
+listée w43) -- layout de bitfield `Location` élucidé, PAS encore porté
+
+En examinant `func_0803A798` (`asm/code_08039A5C.s:1683`, taille
+`0x6C`=108 octets jusqu'à `func_0803A804`) comme cible potentielle de
+repli : le local `Location` de 6 octets (alloué via `sub sp,#8`) subit 5
+opérations `ldrh`/`ldrb`+`ands`+`strh`/`strb` qui SE CHEVAUCHENT --
+exactement le motif prédit par `include/actor.hh` (`Location` :
+`map:10` à l'offset 0, `x:16` à l'offset **1** (pas 2 -- démarre à
+mi-mot), `y:16` à l'offset **3**, `PACKED ALIGN(2)`). **Hypothèse forte,
+pas encore testée en harnais** : ce motif de 5 masques correspond très
+probablement à `Location loc; loc.map = 0; loc.x = 0; loc.y = 0;` (3
+affectations de bitfield à zéro qui, à cause du chevauchement des champs
+sur des limites non-octet, compilent chacune en un read-modify-write sur
+CHAQUE octet/demi-mot touché -- 5 RMW physiques pour 3 affectations
+logiques). Ensuite : `bl __7AEntityP10GameObjectRC8Location` (déjà
+porté, `AEntity::AEntity(GameObject*, Location const&)`,
+`include/entity.hh:12`), stamp d'une SECONDE vtable
+(`vtable_unk_080E7568`, aussi référencée dans `asm/code_linkonce.s` --
+donc une classe avec instanciation gabarit/linkonce quelque part) à
+`self+0x14`, store du 2e paramètre à `self+0x18`, flag octet `1` à
+`self+0x1c`. **Pas testé en harnais ni codé ce round** -- la classe
+dérivée exacte (héritage multiple, 2e base au vtable `080E7568`) n'est
+pas identifiée avec assez de certitude pour nommer un symbole
+vanilla-only sans deviner ; nécessite d'abord de retrouver d'autres sites
+utilisant `vtable_unk_080E7568` (le hit dans `code_linkonce.s`) pour
+corroborer la classe avant d'écrire du C. Bon candidat pour un prochain
+round avec plus de budget dédié à cette recherche de classe.
+
+### État du worktree en fin de round
+
+- **Aucun commit** -- zéro match vérifié bit-exact ce round.
+- Tout le tâtonnement est resté dans `/tmp/w47scratch/` (harnais rapide
+  uniquement, jamais appliqué au dépôt) -- `git status --short` vide,
+  `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
 ## 2026-08-20 -- toolchain bring-up + first matched function
 
 ### Build environment
