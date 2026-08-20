@@ -427,6 +427,9 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_080C7ED0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e902a6c` |
 | `func_080BC8C0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `3f33b7d` |
 | `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
+| `func_08080DC4`, `func_08081A70`, `func_08082144`, `func_08083AEC`, `func_08085528`, `func_080881AC`, `func_0808AB68`, `func_0808C59C`, `func_0808ED08`, `func_08090E84`, `func_080925C4`, `func_080931E0`, `func_08093A88` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), même corps que `func_0809A518` | 7 (w12) | `e1b1931`, `1f085cf`, `7c09c6d`, `0271566`, `91f7ebe`, `5b09238`, `0f8825f`, `3c6bf9f`, `7631bff`, `228b133`, `9b04a4d`, `d1cc3d2`, `ef78680` (1 commit/fonction) |
+| `func_080C0D44` | destructeur "riche", 1 enfant offset+4 (MI) | 7 (w12) | `18e8b5e` |
+| `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -511,16 +514,51 @@ lien) puis `make compare` en rebuild propre (x2).
 `/tmp/.../scratchpad/callsites.txt` de la session round 6, non commité,
 à refaire au besoin) : 37 sur 47 matchent ce patron "riche" (les 10
 autres restent la variante "vide" de `func_08004C54`/`func_080E09B0`,
-ou un autre patron pas encore vu). Triés par adresse croissante :
-0800371C, 08004BDC (**4 premiers, matchés round 6**), 080059D0,
-080070A4, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
+ou un autre patron pas encore vu). Triés par adresse croissante,
+~~biffés~~ = matchés :
+
+~~0800371C~~, ~~08004BDC~~ (4 premiers, matchés round 6), ~~080059D0~~,
+~~080070A4~~, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
 08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
-0807F5B0, 0808048C, 08080DC4, 08081A70, 08082144, 08083AEC, 08085528,
-080881AC, 0808AB68, 0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0,
-08093A88, 0809A518, 080B3C0C, 080BC8C0, 080C0D44, 080C7ED0, 080E41B0.
-**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante** ;
-un worktree parallèle (w7) travaille la seconde moitié -- pas de
-recoupement possible, worktrees git séparés.
+0807F5B0, 0808048C, ~~08080DC4~~, ~~08081A70~~, ~~08082144~~,
+~~08083AEC~~, ~~08085528~~, ~~080881AC~~, ~~0808AB68~~, ~~0808C59C~~,
+~~0808ED08~~, ~~08090E84~~, ~~080925C4~~, ~~080931E0~~, ~~08093A88~~,
+~~0809A518~~, ~~080B3C0C~~, ~~080BC8C0~~, ~~080C0D44~~, ~~080C7ED0~~,
+~~080E41B0~~.
+
+**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante ;
+worktree w7 a pris `0809A518`/`080C7ED0`/`080BC8C0`/`080B3C0C`.
+Round 7 (worktree w12) a pris les 15 derniers de la liste restante**
+(`08080DC4` -> `080E41B0`, en incluant les 13 sites plus tard vus dans
+`asm/code_0805E760.s`, `080C0D44` dans `asm/code_080BC8F0.s`, et
+`080E41B0` dans `asm/code_linkonce.s`) -- **les 15 ont matché du premier
+coup**, tous suivant l'un des 3 corps déjà connus (2-enfants façon
+`func_0809A518` pour 13 d'entre eux, 1-enfant façon `func_080B3C0C` pour
+`func_080C0D44`), sauf `func_080E41B0` qui introduit une 4e variante,
+voir section dédiée juste en dessous.
+
+**Il ne reste plus que `080521BC` à `0808048C` (13 sites) à traiter dans
+cette famille** -- pris par un autre worktree en parallèle (w11) au
+moment du round 7, cf. répartition ci-dessus.
+
+### Variante "sans restamp de vtable propre" (round 7, `func_080E41B0`)
+
+Un seul site vu jusqu'ici sur les 15 traités ce round : `func_080E41B0`
+a exactement le corps "2 enfants" (`self+8` plain puis `self+4` MI, même
+ordre, même `_call_via_r2`/arg `3`) mais **ne stocke aucune valeur à
+`[r4]` (self+0) et ne référence aucun littéral `vtable_unk_ADDR`** --
+confirmé en lisant le désassemblage brut au complet, aucune instruction
+`str r0, [r4]` ni pool littéral pour une vtable dans le corps entier. Ne
+pas deviner pourquoi (candidats non vérifiés : classe intermédiaire dont
+le vtable stamp est fait ailleurs par un caller, ou un cas où le
+compilateur a pu élider un stamp redondant) -- porté strictement tel
+quel : la struct C locale garde un champ `unk_00` (offset 0) jamais
+écrit, seuls `unk_04`/`unk_08` sont lus. Confirmé bit-exact via
+`make compare` en rebuild propre. **Si un futur site montre ce même
+manque de stamp, vérifier d'abord s'il partage un point commun
+structurel avec `func_080E41B0`** (ex. serait-il appelé UNIQUEMENT
+depuis un autre destructeur "riche" déjà-stampé plutôt que directement
+depuis une vtable ?) avant de généraliser une explication.
 
 ## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
 ||||||| 43c9148
