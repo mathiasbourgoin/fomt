@@ -5741,3 +5741,137 @@ dead-end confirmé ci-dessus).
   `self+0x594`, 8 sites d'appel symboliques dans
   `asm/code_08070A08.s` -- candidat sérieux pour un futur round dédié,
   contexte d'appel abondant contrairement à `func_0809E1B4`).
+
+## 2026-08-20, worktree `w34`/`parallel-34` -- `func_0804E5AC` (`DrawGlyphAt`
+recolor) round 6 : reconstruction indépendante repartie de zéro (le
+candidat round 5 n'a pas survécu, scratch hors dépôt jamais persisté),
+2 gains concrets identifiés, mais NOUVELLE instabilité découverte
+ailleurs dans la fonction -- 6e échec honnête, recommandation de
+Mathias (changer de méthode) suivie
+
+Contexte reçu : round 5/w31 avait réduit le résidu à 4 octets et isolé la
+cause à UN point unique (le pointeur de fin de boucle du bloc TL alloué
+sur `ip` au lieu d'un registre bas), avec 8 idiomes déjà testés sans
+effet sur ce point précis. Mission : (a) vérifier si ce pointeur a un
+point commun avec les pointeurs `end`/`anchor` des 3 autres blocs (déjà
+résolus), et appliquer la même technique si oui ; sinon (b) forcer une
+variable de portée bloc, nommée distinctement ; documenter honnêtement en
+cas d'échec.
+
+**Complication de départ, non anticipée par la consigne** : le candidat
+C du round 5 vivait entièrement dans `/tmp/w31scratch/`, jamais copié
+dans le dépôt ni dans aucun fichier persistant -- **inaccessible depuis
+ce worktree** (autre session/hôte). Reconstruction intégrale depuis zéro
+nécessaire à partir de la seule lecture du désassemblage original
+(`asm/code_0804E5AC.s`) et des notes textuelles des rounds 4/5, pas
+un point de départ identique au round 5.
+
+### Lecture indépendante confirmée du désassemblage réel (`baserom.gba`,
+pas seulement `asm/*.s`)
+
+Désassemblage direct de la ROM vanilla à l'adresse cible
+(`arm-none-eabi-objdump -D -bbinary -marmv4t -Mforce-thumb
+--adjust-vma=0x08000000 --start-address=0x0804E5AC
+--stop-address=0x0804E7A0 baserom.gba`) pour disposer d'une référence
+brute fiable, diffée ensuite instruction-par-instruction (mnémonique +
+opérandes, `diff -y`) contre chaque candidat compilé via le harnais
+rapide (`arm-none-eabi-cpp | agbcp -O2 -fhex-asm | arm-none-eabi-as`,
+recette de `DECOMP_RULES.md`). Cette lecture fine a clarifié un point
+resté ambigu dans les notes du round 5 : les 4 blocs ne sont PAS
+TL/BL/TR/BR dans l'ordre naïf de stockage -- l'ordre de BLIT réel est
+TL (toujours), puis BL (si `has_bottom`, indices glyph_buf[16..24]),
+puis TR (si `has_right && kind>1`, indices[8..16], adresse = **`tl+0x20`
+recalculé depuis le `row_product` SAUVEGARDÉ sur pile, pas depuis le
+registre `tl` lui-même**), puis BR imbriqué dans TR (indices[24..32],
+adresse recalculée fraîchement avec `tile_x + width_tiles*row_below`,
+opérandes dans cet ordre précis -- règle 5bis de `DECOMP_RULES.md`).
+
+### 2 gains concrets, chacun mesuré isolément (harnais rapide, taille
+`.text` réelle vs attendue `0x1f4`)
+
+1. **Idiome `grid_rows = height_tiles`** (copie redondante nommée,
+   même famille que `br_tile_x`/`grid_rows` du corps plain
+   `func_0804E4AC`) : l'original matérialise `height_tiles` PUIS une
+   copie explicite en 2 instructions séparées (`lsrs r0,r4,#0x10; adds
+   r7,r0,#0`) avant le test `row_below < grid_rows` -- sans la copie
+   nommée, mon candidat collapsait ça en 1 seule instruction (2 octets
+   de moins que la cible). Ajout de `u32 grid_rows = height_tiles;`
+   utilisé dans le test : passe de résidu 24 à 16 octets.
+2. **`right_addr` (bloc TR) doit être recalculé depuis `row_product`
+   sauvegardé, PAS depuis `tl + 0x20` en réutilisant la variable `tl`
+   directement** -- contrairement au corps plain (`func_0804E4AC`) où
+   cet idiome marche tel quel (pas de boucle inline dans ce bloc-là,
+   donc le registre de `tl` survit intact). Ici, la boucle de recolor
+   inline du bloc TL consomme le registre de `tl` par auto-incrément
+   (`stm r7!, {...}`) avant que TR n'en ait besoin -- l'original
+   recompose donc `right_addr` depuis `((row_product + tile_x) << 5) +
+   dest + 0x20` (le `row_product` déjà sauvegardé sur pile pour cette
+   raison précise), jamais depuis `tl` lui-même. Correction dans le C
+   (`u32 tr_addr = ((row_product + tile_x) << 5) + (u32)dest + 0x20;`
+   au lieu de `tl + 0x20`) : passe de résidu 16 à 12 octets -- meilleur
+   résultat mesuré ce round, mais PAS le niveau atteint par le round 5
+   (4 octets).
+
+### Nouvelle instabilité découverte : corriger le bloc TR casse
+l'allocation de `dest` (`sl` -> `r9`), un mismatch bien plus grave que
+le résidu de taille ne le laisse deviner
+
+Diff instruction-par-instruction du candidat à 12 octets de résidu :
+`dest` (argument 2), qui doit être casé dans `sl` sur TOUTE la fonction
+(`mov sl, r1` au prologue, jamais réalloué -- vérifié comme INVARIANT
+dans l'original ET dans les 2 candidats précédents de ce round), se
+retrouve maintenant casé dans `r9` (`mov r9, r1`) dans ce 3e candidat --
+alors que `r9` porte `delta` dans l'original. Autrement dit, corriger le
+point du bloc TR (qui a fait baisser la taille) a fait BASCULER
+l'allocation de `dest` ET `delta` sur des registres différents à travers
+TOUTE la fonction -- un mismatch structurel plus profond qu'un near-miss
+local, qui ne serait PAS visible en ne regardant que le compteur
+d'octets (12 < 16, "mieux" en apparence). Reconfirme, avec une preuve
+concrète et nouvelle, le diagnostic de round 5 : cette fonction a un
+équilibre de pression de registres global si instable qu'une correction
+locale peut faire regagner des octets ici tout en cassant un invariant
+ailleurs -- pas un problème de forme isolable point par point.
+
+### N'a pas pu tester la piste assignée faute d'avoir atteint l'état de
+départ du round 5
+
+La mission demandait de tester 2 idées précises sur LE point isolé du
+round 5 (pointeur de fin de boucle TL sur `ip`). N'ayant pas pu
+reconstruire un candidat reproduisant l'état exact du round 5 (résidu 4
+octets, tout le reste identique) -- mon meilleur candidat (résidu 12
+octets) n'a PAS ce symptôme précis sur le pointeur de fin de boucle TL
+(vérifié : `start`/`end` du bloc TL sont bien casés sur des registres bas
+`r3`/`r4` dans mon candidat, pas sur `ip`) -- les 2 idées n'ont pas pu
+être testées sur le point EXACT que le round 5 avait isolé, seulement sur
+un point voisin de la même famille (spill de `tl`/`dst` selon les
+variantes). Signal supplémentaire que cette fonction n'a pas UN point de
+blocage stable et reproductible d'un candidat à l'autre, mais une
+FAMILLE de symptômes de pression de registres qui se déplace selon la
+formulation exacte du C -- cohérent avec "chaque tentative bloque à un
+endroit différent" déjà noté rounds 3/4/5.
+
+### Verdict et repo state en fin de round (worktree w34)
+
+**Pas de match -- 6e tentative sérieuse, meilleur résidu mesuré ce round
+(12 octets) mais sur un candidat structurellement CASSÉ ailleurs (registre
+`dest` déplacé), donc pas un vrai progrès net par rapport au round 5 (4
+octets, tout le reste vérifié identique)**. Recommandation suivie
+(consigne de la mission) : ne pas insister davantage sur cette variante
+avec la méthode "itération d'idiomes C" -- le signal est maintenant
+répété sur 6 rounds indépendants (dont 2 avec des résidus mesurés très
+bas, 4 et 12 octets, mais AUCUN reproductible d'un candidat à l'autre) :
+la voie la plus prometteuse restante est celle déjà recommandée en fin de
+round 5, à savoir (b) une comparaison avec une décompilation Ghidra amont
+si elle existe pour ce binaire, plutôt qu'une 7e itération d'idiomes.
+
+- **Aucun commit de code.** Tout le travail (3 itérations de candidat C,
+  harnais, diffs) est resté dans `/tmp/w34scratch/`, jamais copié dans
+  `src/` ni référencé dans `fomt.lds`. `git status --short` vide confirmé
+  avant et après le round.
+- Vérification effectuée : harnais compilateur seul (taille `.text` +
+  diff de désassemblage instruction-par-instruction, normalisé, contre
+  `baserom.gba` réel via `objdump -bbinary -marmv4t -Mforce-thumb
+  --adjust-vma=0x08000000`) -- standard officiel de `DECOMP_RULES.md`,
+  pas de `make compare` (toujours hors de portée pour la raison `cb06198`
+  documentée round 10/w27, sans rapport avec cette fonction).
+- `origin` non touché, rien poussé, pas de PR.
