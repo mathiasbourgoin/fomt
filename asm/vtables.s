@@ -2684,428 +2684,1079 @@ vtable_unk_080E7A28:
 
 	.global vtable_unk_080E7A38
 vtable_unk_080E7A38:
-	.incbin "baserom.gba", 0xE7A38, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1D8C
+	.4byte func_08063E58
 
 	.global vtable_unk_080E7A48
 vtable_unk_080E7A48:
-	.incbin "baserom.gba", 0xE7A48, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1D98
+	.4byte func_08063E58
 
 	.global vtable_unk_080E7A58
 vtable_unk_080E7A58:
-	.incbin "baserom.gba", 0xE7A58, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1DA4
+	.4byte func_08063E58
 
 	.global vtable_unk_080E7A68
 vtable_unk_080E7A68:
-	.incbin "baserom.gba", 0xE7A68, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1DB0
+	.4byte func_08063E58
 
 	.global vtable_unk_080E7A78
 vtable_unk_080E7A78:
-	.incbin "baserom.gba", 0xE7A78, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1DC8
+	.4byte func_080E1DBC
 
 	.global vtable_unk_080E7A88
 vtable_unk_080E7A88:
-	.incbin "baserom.gba", 0xE7A88, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1DD4
+	.4byte func_08069D84
 
 	.global vtable_unk_080E7A98
 vtable_unk_080E7A98:
-	.incbin "baserom.gba", 0xE7A98, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08069E58
+	.4byte func_08069E98
 
 	.global vtable_unk_080E7AA8
 vtable_unk_080E7AA8:
-	.incbin "baserom.gba", 0xE7AA8, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1E28
 
 	.global vtable_unk_080E7AB4
 vtable_unk_080E7AB4:
-	.incbin "baserom.gba", 0xE7AB4, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0806D918
+	.4byte func_0806D948
 
 	.global vtable_unk_080E7AC4
 vtable_unk_080E7AC4:
-	.incbin "baserom.gba", 0xE7AC4, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E1FAC
 
 	.global vtable_unk_080E7AD0
 vtable_unk_080E7AD0:
-	.incbin "baserom.gba", 0xE7AD0, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0806EA00
+	.4byte func_0806EA30
 
 	.global vtable_unk_080E7AE0
 vtable_unk_080E7AE0:
-	.incbin "baserom.gba", 0xE7AE0, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E2018
 
 	.global vtable_unk_080E7AEC
 vtable_unk_080E7AEC:
-	.incbin "baserom.gba", 0xE7AEC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080709D8
+	.4byte func_08070A08
 
 	.global vtable_unk_080E7AFC
 vtable_unk_080E7AFC:
-	.incbin "baserom.gba", 0xE7AFC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E20F8
+	.4byte func_08075328
 
 	.global vtable_unk_080E7B0C
 vtable_unk_080E7B0C:
-	.incbin "baserom.gba", 0xE7B0C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E2104
+	.4byte func_080722D0
 
 	.global vtable_unk_080E7B1C
 vtable_unk_080E7B1C:
-	.incbin "baserom.gba", 0xE7B1C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E2110
+	.4byte func_080713AC
 
 	.global vtable_unk_080E7B2C
 vtable_unk_080E7B2C:
-	.incbin "baserom.gba", 0xE7B2C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08070C88
+	.4byte func_08070CA4
 
 	.global vtable_unk_080E7B3C
 vtable_unk_080E7B3C:
-	.incbin "baserom.gba", 0xE7B3C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E211C
+	.4byte func_0807555C
 
 	.global vtable_unk_080E7B4C
 vtable_unk_080E7B4C:
-	.incbin "baserom.gba", 0xE7B4C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807561C
+	.4byte func_0807565C
 
 	.global vtable_unk_080E7B5C
 vtable_unk_080E7B5C:
-	.incbin "baserom.gba", 0xE7B5C, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080756D0
 
 	.global vtable_unk_080E7B68
 vtable_unk_080E7B68:
-	.incbin "baserom.gba", 0xE7B68, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x08075E01 @ no label yet
+	.4byte func_08075DEC
 
 	.global vtable_unk_080E7B78
 vtable_unk_080E7B78:
-	.incbin "baserom.gba", 0xE7B78, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x080E2E35 @ no label yet
+	.4byte 0x08000639 @ no label yet
 
 	.global vtable_unk_080E7B88
 vtable_unk_080E7B88:
-	.incbin "baserom.gba", 0xE7B88, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08076E0C
+	.4byte func_08076EA8
 
 	.global vtable_unk_080E7B98
 vtable_unk_080E7B98:
-	.incbin "baserom.gba", 0xE7B98, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x080E2E6D @ no label yet
 
 	.global vtable_unk_080E7BA4
 vtable_unk_080E7BA4:
-	.incbin "baserom.gba", 0xE7BA4, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x08077C6D @ no label yet
+	.4byte 0x08077CAD @ no label yet
 
 	.global vtable_unk_080E7BB4
 vtable_unk_080E7BB4:
-	.incbin "baserom.gba", 0xE7BB4, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x080E32E9 @ no label yet
 
 	.global vtable_unk_080E7BC0
 vtable_unk_080E7BC0:
-	.incbin "baserom.gba", 0xE7BC0, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x08078AE9 @ no label yet
+	.4byte 0x08078B19 @ no label yet
 
 	.global vtable_unk_080E7BD0
 vtable_unk_080E7BD0:
-	.incbin "baserom.gba", 0xE7BD0, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x080E33D1 @ no label yet
 
 	.global vtable_unk_080E7BDC
 vtable_unk_080E7BDC:
-	.incbin "baserom.gba", 0xE7BDC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x0807B07D @ no label yet
+	.4byte 0x0807B0BD @ no label yet
 
 	.global vtable_unk_080E7BEC
 vtable_unk_080E7BEC:
-	.incbin "baserom.gba", 0xE7BEC, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x0807B175 @ no label yet
 
 	.global vtable_unk_080E7BF8
 vtable_unk_080E7BF8:
-	.incbin "baserom.gba", 0xE7BF8, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x0807D0B5 @ no label yet
+	.4byte 0x0807D0F5 @ no label yet
 
 	.global vtable_unk_080E7C08
 vtable_unk_080E7C08:
-	.incbin "baserom.gba", 0xE7C08, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x0807DDF9 @ no label yet
 
 	.global vtable_unk_080E7C14
 vtable_unk_080E7C14:
-	.incbin "baserom.gba", 0xE7C14, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x0807D1C9 @ no label yet
 
 	.global vtable_unk_080E7C20
 vtable_unk_080E7C20:
-	.incbin "baserom.gba", 0xE7C20, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x0807E479 @ no label yet
+	.4byte func_0807E4B8
 
 	.global vtable_unk_080E7C30
 vtable_unk_080E7C30:
-	.incbin "baserom.gba", 0xE7C30, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807DD68
+	.4byte func_0807DDA8
 
 	.global vtable_unk_080E7C40
 vtable_unk_080E7C40:
-	.incbin "baserom.gba", 0xE7C40, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807E508
 
 	.global vtable_unk_080E7C4C
 vtable_unk_080E7C4C:
-	.incbin "baserom.gba", 0xE7C4C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807EE44
+	.4byte func_0807EE84
 
 	.global vtable_unk_080E7C5C
 vtable_unk_080E7C5C:
-	.incbin "baserom.gba", 0xE7C5C, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807EED4
 
 	.global vtable_unk_080E7C68
 vtable_unk_080E7C68:
-	.incbin "baserom.gba", 0xE7C68, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807F5B0
+	.4byte func_0807F5F0
 
 	.global vtable_unk_080E7C78
 vtable_unk_080E7C78:
-	.incbin "baserom.gba", 0xE7C78, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0807F670
 
 	.global vtable_unk_080E7C84
 vtable_unk_080E7C84:
-	.incbin "baserom.gba", 0xE7C84, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808048C
+	.4byte func_080804CC
 
 	.global vtable_unk_080E7C94
 vtable_unk_080E7C94:
-	.incbin "baserom.gba", 0xE7C94, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808052C
 
 	.global vtable_unk_080E7CA0
 vtable_unk_080E7CA0:
-	.incbin "baserom.gba", 0xE7CA0, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08080DC4
+	.4byte func_08080E04
 
 	.global vtable_unk_080E7CB0
 vtable_unk_080E7CB0:
-	.incbin "baserom.gba", 0xE7CB0, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08080E54
 
 	.global vtable_unk_080E7CBC
 vtable_unk_080E7CBC:
-	.incbin "baserom.gba", 0xE7CBC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08081A70
+	.4byte func_08081AB0
 
 	.global vtable_unk_080E7CCC
 vtable_unk_080E7CCC:
-	.incbin "baserom.gba", 0xE7CCC, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08081B00
 
 	.global vtable_unk_080E7CD8
 vtable_unk_080E7CD8:
-	.incbin "baserom.gba", 0xE7CD8, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08082144
+	.4byte func_08082184
 
 	.global vtable_unk_080E7CE8
 vtable_unk_080E7CE8:
-	.incbin "baserom.gba", 0xE7CE8, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08082250
 
 	.global vtable_unk_080E7CF4
 vtable_unk_080E7CF4:
-	.incbin "baserom.gba", 0xE7CF4, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E34DC
+	.4byte func_080E3494
 
 	.global vtable_unk_080E7D04
 vtable_unk_080E7D04:
-	.incbin "baserom.gba", 0xE7D04, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08083AEC
+	.4byte func_08083B2C
 
 	.global vtable_unk_080E7D14
 vtable_unk_080E7D14:
-	.incbin "baserom.gba", 0xE7D14, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08083C50
 
 	.global vtable_unk_080E7D20
 vtable_unk_080E7D20:
-	.incbin "baserom.gba", 0xE7D20, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08085528
+	.4byte func_08085568
 
 	.global vtable_unk_080E7D30
 vtable_unk_080E7D30:
-	.incbin "baserom.gba", 0xE7D30, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808562C
 
 	.global vtable_unk_080E7D3C
 vtable_unk_080E7D3C:
-	.incbin "baserom.gba", 0xE7D3C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080881AC
+	.4byte func_080881EC
 
 	.global vtable_unk_080E7D4C
 vtable_unk_080E7D4C:
-	.incbin "baserom.gba", 0xE7D4C, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08088304
 
 	.global vtable_unk_080E7D58
 vtable_unk_080E7D58:
-	.incbin "baserom.gba", 0xE7D58, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808AB68
+	.4byte func_0808ABA8
 
 	.global vtable_unk_080E7D68
 vtable_unk_080E7D68:
-	.incbin "baserom.gba", 0xE7D68, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808AC14
 
 	.global vtable_unk_080E7D74
 vtable_unk_080E7D74:
-	.incbin "baserom.gba", 0xE7D74, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808C59C
+	.4byte func_0808C5DC
 
 	.global vtable_unk_080E7D84
 vtable_unk_080E7D84:
-	.incbin "baserom.gba", 0xE7D84, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808C650
 
 	.global vtable_unk_080E7D90
 vtable_unk_080E7D90:
-	.incbin "baserom.gba", 0xE7D90, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808ED08
+	.4byte func_0808ED48
 
 	.global vtable_unk_080E7DA0
 vtable_unk_080E7DA0:
-	.incbin "baserom.gba", 0xE7DA0, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0808EDB8
 
 	.global vtable_unk_080E7DAC
 vtable_unk_080E7DAC:
-	.incbin "baserom.gba", 0xE7DAC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08090E84
+	.4byte func_08090EC4
 
 	.global vtable_unk_080E7DBC
 vtable_unk_080E7DBC:
-	.incbin "baserom.gba", 0xE7DBC, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08090F58
 
 	.global vtable_unk_080E7DC8
 vtable_unk_080E7DC8:
-	.incbin "baserom.gba", 0xE7DC8, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080925C4
+	.4byte func_08092604
 
 	.global vtable_unk_080E7DD8
 vtable_unk_080E7DD8:
-	.incbin "baserom.gba", 0xE7DD8, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08092690
 
 	.global vtable_unk_080E7DE4
 vtable_unk_080E7DE4:
-	.incbin "baserom.gba", 0xE7DE4, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080931E0
+	.4byte func_08093220
 
 	.global vtable_unk_080E7DF4
 vtable_unk_080E7DF4:
-	.incbin "baserom.gba", 0xE7DF4, 0x10C
+	.4byte 0xFFFFFFF8 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08094288
+	.4byte func_080942BC
+	.4byte func_08094388
+	.4byte func_080943BC
+	.4byte func_080943C0
+	.4byte 0x0809474D @ no label yet
+	.4byte func_080E3A8C
+	.4byte func_080E392C
+	.4byte func_080E3920
+	.4byte func_080E3914
+	.4byte func_080E3A80
+	.4byte func_080E3A6C
+	.4byte func_080E3A5C
+	.4byte func_080E3A44
+	.4byte func_080E39EC
+	.4byte func_080E3994
+	.4byte func_080E3938
+	.4byte func_080E3A50
+	.4byte func_080E3910
+	.4byte func_080E38E0
+	.4byte func_080E38B0
+	.4byte func_080E3874
+	.4byte func_080E35DC
+	.4byte func_080943C4
+	.4byte func_080943E4
+	.4byte func_080E35E8
+	.4byte func_080E3610
+	.4byte 0x08094741 @ no label yet
+	.4byte func_0809444C
+	.4byte func_0809446C
+	.4byte func_080E3628
+	.4byte 0x08094739 @ no label yet
+	.4byte 0x08094735 @ no label yet
+	.4byte func_080944A8
+	.4byte func_080944E8
+	.4byte func_080E3650
+	.4byte 0x0809472D @ no label yet
+	.4byte 0x08094729 @ no label yet
+	.4byte 0x0809455D @ no label yet
+	.4byte func_08094560
+	.4byte func_080E3678
+	.4byte func_080E36B4
+	.4byte func_080E3730
+	.4byte func_08094584
+	.4byte func_080945B0
+	.4byte func_080E3734
+	.4byte func_080E375C
+	.4byte 0x08094711 @ no label yet
+	.4byte func_08094648
+	.4byte func_08094668
+	.4byte func_080E3774
+	.4byte 0x08094709 @ no label yet
+	.4byte 0x080E3799 @ no label yet
+	.4byte func_080946A8
+	.4byte func_080946BC
+	.4byte 0x08094701 @ no label yet
+	.4byte 0x080946FD @ no label yet
+	.4byte 0x080946F9 @ no label yet
+	.4byte func_080946C0
+	.4byte func_080946C4
+	.4byte func_080E379C
+	.4byte func_080E37DC
+	.4byte func_080E3858
+	.4byte func_080E385C
+	.4byte func_080E3868
 
 	.global vtable_unk_080E7F00
 vtable_unk_080E7F00:
-	.incbin "baserom.gba", 0xE7F00, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08093308
 
 	.global vtable_unk_080E7F0C
 vtable_unk_080E7F0C:
-	.incbin "baserom.gba", 0xE7F0C, 0x10C
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08094288
+	.4byte func_080942BC
+	.4byte func_08094388
+	.4byte func_080943BC
+	.4byte func_080943C0
+	.4byte 0x0809474D @ no label yet
+	.4byte func_080E3A8C
+	.4byte func_080E392C
+	.4byte func_080E3920
+	.4byte func_080E3914
+	.4byte func_080E3A80
+	.4byte func_080E3A6C
+	.4byte func_080E3A5C
+	.4byte func_080E3A44
+	.4byte func_080E39EC
+	.4byte func_080E3994
+	.4byte func_080E3938
+	.4byte func_080E3A50
+	.4byte func_080E3910
+	.4byte func_080E38E0
+	.4byte func_080E38B0
+	.4byte func_080E3874
+	.4byte func_080E3B60
+	.4byte func_080943C4
+	.4byte func_080943E4
+	.4byte 0x08094749 @ no label yet
+	.4byte 0x08094745 @ no label yet
+	.4byte 0x08094741 @ no label yet
+	.4byte func_0809444C
+	.4byte func_0809446C
+	.4byte 0x0809473D @ no label yet
+	.4byte 0x08094739 @ no label yet
+	.4byte 0x08094735 @ no label yet
+	.4byte func_080944A8
+	.4byte func_080944E8
+	.4byte 0x08094731 @ no label yet
+	.4byte 0x0809472D @ no label yet
+	.4byte 0x08094729 @ no label yet
+	.4byte 0x0809455D @ no label yet
+	.4byte func_08094560
+	.4byte 0x08094725 @ no label yet
+	.4byte 0x08094721 @ no label yet
+	.4byte 0x0809471D @ no label yet
+	.4byte func_08094584
+	.4byte func_080945B0
+	.4byte 0x08094719 @ no label yet
+	.4byte 0x08094715 @ no label yet
+	.4byte 0x08094711 @ no label yet
+	.4byte func_08094648
+	.4byte func_08094668
+	.4byte 0x0809470D @ no label yet
+	.4byte 0x08094709 @ no label yet
+	.4byte 0x08094705 @ no label yet
+	.4byte func_080946A8
+	.4byte func_080946BC
+	.4byte 0x08094701 @ no label yet
+	.4byte 0x080946FD @ no label yet
+	.4byte 0x080946F9 @ no label yet
+	.4byte func_080946C0
+	.4byte func_080946C4
+	.4byte 0x080946F5 @ no label yet
+	.4byte 0x080946F1 @ no label yet
+	.4byte 0x080946ED @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
 
 	.global vtable_unk_080E8018
 vtable_unk_080E8018:
-	.incbin "baserom.gba", 0xE8018, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08093A88
+	.4byte func_08093AD4
 
 	.global vtable_unk_080E8028
 vtable_unk_080E8028:
-	.incbin "baserom.gba", 0xE8028, 0x104
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08094288
+	.4byte func_080942BC
+	.4byte func_08094388
+	.4byte func_080943BC
+	.4byte func_080943C0
+	.4byte 0x0809474D @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte func_08094268
+	.4byte func_080943C4
+	.4byte func_080943E4
+	.4byte 0x08094749 @ no label yet
+	.4byte 0x08094745 @ no label yet
+	.4byte 0x08094741 @ no label yet
+	.4byte func_0809444C
+	.4byte func_0809446C
+	.4byte 0x0809473D @ no label yet
+	.4byte 0x08094739 @ no label yet
+	.4byte 0x08094735 @ no label yet
+	.4byte func_080944A8
+	.4byte func_080944E8
+	.4byte 0x08094731 @ no label yet
+	.4byte 0x0809472D @ no label yet
+	.4byte 0x08094729 @ no label yet
+	.4byte 0x0809455D @ no label yet
+	.4byte func_08094560
+	.4byte 0x08094725 @ no label yet
+	.4byte 0x08094721 @ no label yet
+	.4byte 0x0809471D @ no label yet
+	.4byte func_08094584
+	.4byte func_080945B0
+	.4byte 0x08094719 @ no label yet
+	.4byte 0x08094715 @ no label yet
+	.4byte 0x08094711 @ no label yet
+	.4byte func_08094648
+	.4byte func_08094668
+	.4byte 0x0809470D @ no label yet
+	.4byte 0x08094709 @ no label yet
+	.4byte 0x08094705 @ no label yet
+	.4byte func_080946A8
+	.4byte func_080946BC
+	.4byte 0x08094701 @ no label yet
+	.4byte 0x080946FD @ no label yet
+	.4byte 0x080946F9 @ no label yet
+	.4byte func_080946C0
+	.4byte func_080946C4
+	.4byte 0x080946F5 @ no label yet
+	.4byte 0x080946F1 @ no label yet
+	.4byte 0x080946ED @ no label yet
 
 	.global vtable_unk_080E812C
 vtable_unk_080E812C:
-	.incbin "baserom.gba", 0xE812C, 0x104
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_08093DEC
+	.4byte func_08093E20
+	.4byte func_08093EEC
+	.4byte func_08093F20
+	.4byte func_08093F24
+	.4byte 0x080947B5 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte func_08093DCC
+	.4byte func_08093F28
+	.4byte func_08093F48
+	.4byte 0x080947B1 @ no label yet
+	.4byte 0x080947AD @ no label yet
+	.4byte 0x080947A9 @ no label yet
+	.4byte func_08093FB0
+	.4byte func_08093FC4
+	.4byte 0x080947A5 @ no label yet
+	.4byte 0x080947A1 @ no label yet
+	.4byte 0x0809479D @ no label yet
+	.4byte func_08094000
+	.4byte func_08094048
+	.4byte 0x08094799 @ no label yet
+	.4byte 0x08094795 @ no label yet
+	.4byte 0x08094791 @ no label yet
+	.4byte 0x080940BD @ no label yet
+	.4byte func_080940C0
+	.4byte 0x0809478D @ no label yet
+	.4byte 0x08094789 @ no label yet
+	.4byte 0x08094785 @ no label yet
+	.4byte func_080940E4
+	.4byte func_08094110
+	.4byte 0x08094781 @ no label yet
+	.4byte 0x0809477D @ no label yet
+	.4byte 0x08094779 @ no label yet
+	.4byte func_080941A8
+	.4byte func_080941C8
+	.4byte 0x08094775 @ no label yet
+	.4byte 0x08094771 @ no label yet
+	.4byte 0x0809476D @ no label yet
+	.4byte 0x08094209 @ no label yet
+	.4byte 0x0809421D @ no label yet
+	.4byte 0x08094769 @ no label yet
+	.4byte 0x08094765 @ no label yet
+	.4byte 0x08094761 @ no label yet
+	.4byte 0x08094221 @ no label yet
+	.4byte 0x08094225 @ no label yet
+	.4byte 0x0809475D @ no label yet
+	.4byte 0x08094759 @ no label yet
+	.4byte 0x08094755 @ no label yet
 
 	.global vtable_unk_080E8230
 vtable_unk_080E8230:
-	.incbin "baserom.gba", 0xE8230, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E3C3C
 
 	.global vtable_unk_080E823C
 vtable_unk_080E823C:
-	.incbin "baserom.gba", 0xE823C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E3D94
+	.4byte func_080E3B80
 
 	.global vtable_unk_080E824C
 vtable_unk_080E824C:
-	.incbin "baserom.gba", 0xE824C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_0809A518
+	.4byte func_0809A558
 
 	.global vtable_unk_080E825C
 vtable_unk_080E825C:
-	.incbin "baserom.gba", 0xE825C, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E40A0
 
 	.global vtable_unk_080E8268
 vtable_unk_080E8268:
-	.incbin "baserom.gba", 0xE8268, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4190
+	.4byte func_080E3F40
 
 	.global vtable_unk_080E8278
 vtable_unk_080E8278:
-	.incbin "baserom.gba", 0xE8278, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E41B0
+	.4byte func_080A3774
 
 	.global vtable_unk_080E8288
 vtable_unk_080E8288:
-	.incbin "baserom.gba", 0xE8288, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080A3BF4
+	.4byte func_080A3AF8
 
 	.global vtable_unk_080E8298
 vtable_unk_080E8298:
-	.incbin "baserom.gba", 0xE8298, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080A3C40
+	.4byte func_080A39FC
 
 	.global vtable_unk_080E82A8
 vtable_unk_080E82A8:
-	.incbin "baserom.gba", 0xE82A8, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080A3C8C
+	.4byte func_080A3900
 
 	.global vtable_unk_080E82B8
 vtable_unk_080E82B8:
-	.incbin "baserom.gba", 0xE82B8, 0x20
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E41E8
+	.4byte func_080A37A8
+	.4byte 0x00000000 @ no label yet
+	.4byte 0x00000000 @ no label yet
+	.4byte func_080E4210
+	.4byte func_080A3CF4
 
 	.global vtable_unk_080E82D8
 vtable_unk_080E82D8:
-	.incbin "baserom.gba", 0xE82D8, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080A47B4
 
 	.global vtable_unk_080E82E4
 vtable_unk_080E82E4:
-	.incbin "baserom.gba", 0xE82E4, 0x28
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080A4B6C
+	.4byte func_080A4BEC
+	.4byte func_080A4F50
+	.4byte func_080A5760
+	.4byte func_080A6420
+	.4byte func_080A5EA0
+	.4byte func_080A5CC0
+	.4byte func_080A5DB8
 
 	.global vtable_unk_080E830C
 vtable_unk_080E830C:
-	.incbin "baserom.gba", 0xE830C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080A5670
+	.4byte func_080E4238
 
 	.global vtable_unk_080E831C
 vtable_unk_080E831C:
-	.incbin "baserom.gba", 0xE831C, 0x28
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E43B8
+	.4byte func_080A64B8
+	.4byte func_080A6524
+	.4byte func_080A6640
+	.4byte func_080AAF3C
+	.4byte func_080A748C
+	.4byte func_080A6660
+	.4byte func_080A95A4
 
 	.global vtable_unk_080E8344
 vtable_unk_080E8344:
-	.incbin "baserom.gba", 0xE8344, 0xC0
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E44B8
+	.4byte func_080ACAF0
+	.4byte func_080ACC10
+	.4byte 0x080ADB95 @ no label yet
+	.4byte 0x080ADB8D @ no label yet
+	.4byte 0x080ADB85 @ no label yet
+	.4byte func_080ADBA8
+	.4byte func_080ADB9C
+	.4byte func_080ADB78
+	.4byte func_080ADAA8
+	.4byte func_080ADA84
+	.4byte func_080AD69C
+	.4byte func_080AD49C
+	.4byte func_080ADB54
+	.4byte 0x080ADB49 @ no label yet
+	.4byte 0x080ADB3D @ no label yet
+	.4byte func_080AD5D8
+	.4byte 0x080ADB25 @ no label yet
+	.4byte func_080ADAFC
+	.4byte func_080ADACC
+	.4byte 0x080ADA79 @ no label yet
+	.4byte 0x080ADA55 @ no label yet
+	.4byte 0x080ADA49 @ no label yet
+	.4byte 0x080ADA61 @ no label yet
+	.4byte 0x080ADA6D @ no label yet
+	.4byte 0x080ADA3D @ no label yet
+	.4byte 0x080ADA0D @ no label yet
+	.4byte 0x080ADA01 @ no label yet
+	.4byte 0x080AD9F5 @ no label yet
+	.4byte 0x080AD9E9 @ no label yet
+	.4byte func_080AD9D0
+	.4byte func_080AD9C4
+	.4byte func_080AD9B8
+	.4byte func_080AD9AC
+	.4byte func_080AD9A0
+	.4byte func_080AD994
+	.4byte func_080AD988
+	.4byte func_080AD97C
+	.4byte func_080AD970
+	.4byte func_080AD960
+	.4byte func_080AD950
+	.4byte func_080AD944
+	.4byte func_080AD3B0
+	.4byte func_080AD938
+	.4byte func_080AD8C4
+	.4byte func_080AD77C
 
 	.global vtable_unk_080E8404
 vtable_unk_080E8404:
-	.incbin "baserom.gba", 0xE8404, 0x3C
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4510
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte func_08032A30
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080E44E4
+	.4byte func_080324B8
+	.4byte 0x08032B41 @ no label yet
 
 	.global vtable_unk_080E8440
 vtable_unk_080E8440:
-	.incbin "baserom.gba", 0xE8440, 0xC0
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4544
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
 
 	.global vtable_unk_080E8500
 vtable_unk_080E8500:
-	.incbin "baserom.gba", 0xE8500, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4564
 
 	.global vtable_unk_080E850C
 vtable_unk_080E850C:
-	.incbin "baserom.gba", 0xE850C, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080B3C0C
+	.4byte func_080B3C3C
 
 	.global vtable_unk_080E851C
 vtable_unk_080E851C:
-	.incbin "baserom.gba", 0xE851C, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4940
 
 	.global vtable_unk_080E8528
 vtable_unk_080E8528:
-	.incbin "baserom.gba", 0xE8528, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080BC8C0
+	.4byte func_080BC8FC
 
 	.global vtable_unk_080E8538
 vtable_unk_080E8538:
-	.incbin "baserom.gba", 0xE8538, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4D50
 
 	.global vtable_unk_080E8544
 vtable_unk_080E8544:
-	.incbin "baserom.gba", 0xE8544, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080C0D44
+	.4byte func_080C0D90
 
 	.global vtable_unk_080E8554
 vtable_unk_080E8554:
-	.incbin "baserom.gba", 0xE8554, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E4FF0
 
 	.global vtable_unk_080E8560
 vtable_unk_080E8560:
-	.incbin "baserom.gba", 0xE8560, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080C7ED0
+	.4byte func_080C7F1C
 
 	.global vtable_unk_080E8570
 vtable_unk_080E8570:
-	.incbin "baserom.gba", 0xE8570, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080C8360
 
 	.global vtable_unk_080E857C
 vtable_unk_080E857C:
-	.incbin "baserom.gba", 0xE857C, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E5478
 
 	.global vtable_unk_080E8588
 vtable_unk_080E8588:
-	.incbin "baserom.gba", 0xE8588, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E5844
 
 	.global vtable_unk_080E8594
 vtable_unk_080E8594:
-	.incbin "baserom.gba", 0xE8594, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E581C
 
 	.global vtable_unk_080E85A0
 vtable_unk_080E85A0:
-	.incbin "baserom.gba", 0xE85A0, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E596C
 
 	.global vtable_unk_080E85AC
 vtable_unk_080E85AC:
-	.incbin "baserom.gba", 0xE85AC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E5898
+	.4byte func_080CAF6C
 
 	.global vtable_unk_080E85BC
 vtable_unk_080E85BC:
-	.incbin "baserom.gba", 0xE85BC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080CD950
+	.4byte func_080CC150
 
 	.global vtable_unk_080E85CC
 vtable_unk_080E85CC:
-	.incbin "baserom.gba", 0xE85CC, 0x10
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080CADF0
+	.4byte func_080CAF6C
 
 	.global vtable_unk_080E85DC
 vtable_unk_080E85DC:
-	.incbin "baserom.gba", 0xE85DC, 0xC
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E3504
 
 	.global vtable_unk_080E85E8
 vtable_unk_080E85E8:
-	.incbin "baserom.gba", 0xE85E8, 0x28
+	.4byte 0x00000000 @ vtable-thunks prefix: offset-to-top (cf. DECOMP_ARCHIVE.md)
+	.4byte 0x00000000 @ vtable-thunks prefix: RTTI slot (cf. DECOMP_ARCHIVE.md)
+	.4byte func_080E59C0
+	.4byte func_080A4BEC
+	.4byte func_080A4F50
+	.4byte func_080A5760
+	.4byte func_080A6420
+	.4byte func_080CFC7C
+	.4byte func_080CFBAC
+	.4byte func_080CFB5C
