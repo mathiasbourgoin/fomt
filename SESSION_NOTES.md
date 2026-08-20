@@ -664,3 +664,186 @@ docs (dynamic trace, not just static disassembly).
   committed for it.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
+
+## 2026-08-20, round 4 -- `func_08004C54` matched (the 1-register near-miss
+from round 3), root cause found and generalizes to a whole function family
+
+Scope: priority 1 was to shape-hunt the round-3 near-miss
+(`func_08004C54`, byte-identical except `r1` vs `r2` on one instruction)
+using the fast `/tmp/quicktest.sh` harness, systematically, rather than
+guessing structural variants. **Solved on the first new angle tried**,
+not by generating more structural variants of round 3's (correct-in-shape
+but wrong-premise) attempts.
+
+### Root cause: `func_08004C54` is a DESTRUCTOR, not a constructor -- and
+`func_080007EC` takes a hidden second parameter
+
+Round 3 (and the external Ghidra-based `docs/ENGINE.md` round 27 finding
+in the patch repo) both assumed `func_08004C54` is a *constructor*
+because it fits the "stamp vtable, call `func_080007EC`" idiom shared by
+9+ other confirmed constructors. That assumption was never verified
+against what `func_080007EC` *actually* compiles to -- it's only ever
+been treated as an opaque `ALIAS()`'d callee. This round did the one
+thing round 3 flagged as the next step ("port `func_080007EC` itself...
+to see if its true signature reveals the missing register-reservation
+cause") and it paid off immediately: `func_080007EC` is
+`AScene::~AScene()` (`src/scene.cc:3`, `AScene::~AScene() {}`, aliased
+via `EC void func_080007EC() ALIAS(_._6AScene);`). Disassembling the
+**already-compiled, already-matching** `build/src/scene.o` output for
+`_._6AScene` (not asm/the ROM -- this function was ALREADY ported and
+verified, just never actually inspected) shows:
+
+```
+push {lr}
+adds r2, r0, #0      @ r2 = self  (moved OUT of r0!)
+ldr  r0, [pc, #20]   @ r0 = &own vtable
+str  r0, [r2, #0]     @ self->vtable = &vt
+movs r0, #1
+ands r0, r1           @ r0 = in_chrg & 1
+cmp  r0, #0
+beq  skip
+adds r0, r2, #0
+bl   __builtin_delete  @ conditionally delete(self)
+skip:
+pop {r0}
+bx r0
+```
+
+**`func_080007EC` takes `(void *self, int in_chrg)` in `r0`/`r1`** -- the
+classic ARM/CFront C++ ABI "in-charge" flag that folds the deleting and
+non-deleting destructor variants into one function (`ands r0, r1` gates
+the conditional `bl __builtin_delete`). This single fact explains the
+round-3 near-miss completely: `func_08004C54` is the DERIVED, empty-body
+destructor of the scene-table record #12 class -- it resets its own
+vtable pointer, then tail-calls the base destructor **forwarding
+`self`/`in_chrg` through `r0`/`r1` completely unchanged** (never touching
+either register before the `bl`), which is exactly why the vtable-pointer
+temporary needed a register OTHER than `r1` -- `r1` is reserved for the
+pass-through `in_chrg` argument, so it lands in `r2`, matching the
+original exactly.
+
+C written (`src/code_08004C54.cc`):
+
+```c
+extern u32 vtable_unk_080E5A88[];
+EC void func_080007EC(void *self, int in_chrg);
+
+EC void func_08004C54(void *self, int in_chrg)
+{
+    *(void **)self = vtable_unk_080E5A88;
+    func_080007EC(self, in_chrg);
+}
+```
+
+Matched bit-exact on the **first quicktest iteration** with this shape
+(verified byte-for-byte against the round-3 near-miss disassembly before
+doing the full split/`.lds` wiring). Full split done the same way as
+round 1 (`asm/new_game.s` trimmed, tail moved to new
+`asm/code_08004C68.s`, both entries added to `fomt.lds` around the old
+single `asm/new_game.o(.text)` line), `make compare` bit-exact after a
+full clean rebuild. Commit: `8ecf106`.
+
+**Important correction to the external patch-repo doc's semantic naming**
+(`docs/ENGINE.md` round 27, `franglais_new_game_naming_screen_ctor`): this
+is a destructor, not a constructor, despite occupying the scene-table
+record's first pointer slot -- the doc's Ghidra-based pseudocode already
+showed the call as `franglais_scene_object_base_ctor(param_1, param_2)`
+with a second parameter, which is the same clue, just not cross-checked
+against what that "base ctor" itself compiles to. Not fixed in the patch
+repo this round (out of scope, this repo doesn't touch the patch repo,
+same policy as prior rounds' side findings) -- worth flagging back.
+
+### New generalization found, NOT attempted: a whole family of ~24
+similarly-shaped destructors, one confirmed easy, ~23 need struct-layout
+work first
+
+`docs/ENGINE.md` round 26 in the patch repo independently found "23
+static callers" of this same base-destructor idiom across the whole ROM.
+Grepped this repo's `asm/*.s` for all 47 `bl func_080007EC` call sites and
+classified them:
+
+- **One trivial extra match, confirmed working via quicktest but NOT
+  split/committed this round** (ran out of round budget after landing
+  the two commits above): `func_080E09B0` in `asm/code_linkonce.s`
+  (`0x080E09B0`), a *pure* forwarding destructor with **no vtable field
+  even to stamp** (`push {lr}; bl func_080007EC; pop {r0}; bx r0`,
+  literally `void func_080E09B0(void *self, int in_chrg) {
+  func_080007EC(self, in_chrg); }`) -- quicktest confirms exact
+  instruction-for-instruction match, size 0xC bytes. **Not split this
+  round** because it lives inside `asm/code_linkonce.s`'s
+  section-per-address (`.text.code_ADDR`) linkonce-COMDAT scheme, which
+  is structurally different from the simple single-blob files split so
+  far (round 1's method doesn't directly apply -- would need a new
+  `.section .text.code_080E09BC`-style split plus a new `fomt.lds` entry
+  inserted between the existing `asm/code_linkonce.o(.text.code_080D7CFC)`
+  and `asm/code_linkonce.o(.text.code_080E0EF0)` lines) -- mechanically
+  doable, just needs someone to work out the `.section` mechanics
+  carefully before touching this file, not attempted uncarefully with
+  remaining budget.
+- **~23 more, harder, NOT attempted**: the majority of the 47 call sites
+  (`asm/new_game.s:2519`, `asm/game_scene.s:121`, `asm/intro_scene.s:5450`,
+  `asm/game_state.s:3495`, plus many in the giant
+  `code_0804E9C8.s`/`code_0805E760.s`/`code_809E804.s` blobs) share a
+  richer variant: `push {r4,r5,lr}; adds r4,r0; adds r5,r1;` (self/in_chrg
+  moved into `r4`/`r5` up front, freeing `r0`/`r1`), stamp own vtable,
+  THEN a conditional child-teardown block (`ldr r1,[r4,#4]; cmp r1,#0;
+  beq skip; ldr r0,[r1,#4]; ldr r2,[r0,#8]; adds r0,r1,#0; movs r1,#3; bl
+  _call_via_r2` -- a virtual call, method slot 2, arg `3`, on a child
+  object read from `self+4`), THEN `adds r0,r4,#0; adds r1,r5,#0; bl
+  func_080007EC`. **The struct layout here is NOT yet understood well
+  enough to port confidently**: `ldr r0, [r1, #4]` reads the presumed
+  child object's vtable pointer from offset **+4**, not +0, which doesn't
+  match a plain `AScene*` (vtable normally at +0) or `SmartPtr<T>`
+  (`include/smart_ptr.hh` is a bare 1-word wrapper, no ref-count, offset+0
+  IS the raw pointer) -- something about this field's real layout (an
+  extra leading word before the child pointer? a different smart-pointer
+  variant with a refcount word? a one-off `this`-adjustment?) is unclear,
+  and getting it wrong risks either a silent behavior mismatch that
+  happens to compile to the same bytes by luck, or -- more likely, given
+  how exacting agbcp's near-miss failures have been all project -- a
+  clean, honest non-match. **Do not guess-port this family without first
+  characterizing the child-object field's real type/offset** (a quick
+  Ghidra look at 2-3 of the sampled callers' full struct layout in the
+  patch repo would likely resolve this fast, cheaper than blind C
+  iteration).
+
+### Concurrent-session note
+
+While doing the final clean-rebuild verification this round, `git status`
+showed **uncommitted modifications to `src/code_0804E8F0.cc` and
+`src/code_0804E958.cc`** (renaming `func_0804E8F0`/`func_0804E958` to
+their semantic `franglais_vwf_draw_string_plain`/`_recolor` names, with a
+new `ALIAS()` back onto the `func_ADDR` symbol for the asm callers) that
+this round did **not** make. This is a parallel session actively working
+on the same working tree concurrently -- confirmed `make compare` still
+passes bit-exact with those changes present (the rename is
+behavior-preserving via `ALIAS()`), left entirely untouched/uncommitted
+by this round (not this round's work to manage, and the working tree
+being shared live means those files' state at any given moment isn't
+under this round's control). This round's own commit (`8ecf106`) only
+staged the 4 files it actually intended
+(`asm/new_game.s asm/code_08004C68.s fomt.lds src/code_08004C54.cc`),
+verified via `git status --short` before committing, per round 3's
+"pathspec `-A` doesn't reliably stage deletions" lesson.
+
+### Repo state at end of round 4
+
+- Working tree: clean except the two parallel-session files noted above
+  (not this round's changes, left alone).
+- One new commit this round: `8ecf106` (func_08004C54). Verified
+  `make compare` bit-exact via a full clean rebuild
+  (`rm -rf build fomt.gba fomt.elf fomt.map && make compare`) both right
+  after committing and again at the very end of the round.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
+- Priority list for whoever picks this up next: (1) split
+  `func_080E09B0` out of `asm/code_linkonce.s` (quicktest-confirmed
+  match already in hand, just needs the `.text.code_ADDR` section
+  surgery); (2) characterize the child-object field layout for the ~23
+  "richer" destructors in the same family before attempting them; (3)
+  everything still open from rounds 1-3's priority lists
+  (`franglais_transition_ctl_query` `0x08050DF0`, `Unpack` `0x080D102C`,
+  the script dispatch table `0x0803F900`, `DrawGlyphAt`/`DrawGlyphAt`-recolor
+  -- still not recommended without a bigger register-pressure budget,
+  `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
+  `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`).
