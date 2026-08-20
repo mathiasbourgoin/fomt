@@ -748,11 +748,26 @@ suit cette convention plutôt que `r0` direct).
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. `func_0804E4AC` (`DrawGlyphAt`, plain) -- round 6 : near-miss à UNE
    instruction de 2 octets près (250/252 octets), tout le reste du
-   contrôle de flux et des rôles de registres matché. Piste la plus
-   prometteuse non testée : profondeur d'imbrication des `if` autour du
-   bloc TR/BR (cf. `SESSION_NOTES.md` round 6, section "what to try
-   next"). Porter `func_0804E5AC` (variante recoloration, même forme)
-   juste après si celle-ci matche.
+   contrôle de flux et des rôles de registres matché. **Round 7 a testé
+   la piste "profondeur d'imbrication" (prometteuse selon round 6) --
+   fermée, sans effet** : aplatir le bloc BR en early-return, extraire le
+   bloc BR dans une fonction `static inline` (entièrement inlinée par
+   agbcp même à -O2, donc pas un levier ici), ou imbriquer artificiellement
+   le bloc TL à la même profondeur que BR ne reproduit PAS le spill+reload
+   de `tile_x` -- au contraire, imbriquer TL déplace un spill ailleurs
+   (sur `y`) parce que chaque `if` factice consomme de vrais registres pour
+   évaluer sa condition, ce qui confond toute tentative de tester "la
+   profondeur" isolément de "la pression de registres". Une reconstruction
+   C indépendante (round 7, sans relire le `.cc` du round 6) retombe sur
+   EXACTEMENT le même écart d'1 instruction -- signal que c'est un mur
+   d'allocateur de registres réel, pas un artefact de formulation. Piste
+   ouverte restante (non testée) : ce qui se passe spécifiquement ENTRE
+   les appels `CpuFastSet` de BL et TR (le reload semble lié au nombre
+   d'appels `bl` traversés, pas à la profondeur syntaxique -- voir
+   `SESSION_NOTES.md` round 7 pour le détail). Sinon, classer définitivement
+   dans la classe "pression de registres" (section dédiée plus haut) et
+   ne pas retenter sans budget dédié. Porter `func_0804E5AC` (variante
+   recoloration, même forme) juste après si `func_0804E4AC` matche un jour.
 4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme

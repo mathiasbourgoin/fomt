@@ -2845,3 +2845,137 @@ pas.
 - Piste laissée pour un futur round (voir section ci-dessus) : le getter
   non catalogué à `0x08010F14` (7 bits, offset+2, halfword), actuellement
   toujours en `.byte` brut dans `asm/code_08010F0C.s`.
+||||||| 18c2c07
+
+## 2026-08-20, round 7 (worktree `w13`, branch `parallel-13`) -- `func_0804E4AC`
+nesting-depth hypothesis tested, still not matched, same 1-instruction gap
+confirmed via an independent reconstruction
+
+### Scope
+
+Dedicated retry per round 6's own recommended next step: test whether the
+"BR block nested two `if` levels deeper than TL" theory explains the single
+remaining redundant `str`+`ldr` spill/reload of `tile_x` around the BR tile
+blit. Reconstructed the whole function from scratch from round 6's notes
+(not from any surviving `.cc` -- round 6 reverted its file cleanly) to get
+an independent read on the near-miss, then spent the round's budget on
+targeted variants. **Result: NOT matched. Same exact gap as round 6 (one
+`str` instruction, 2 bytes, tile_x spilled before it's needed for the BR
+tile address calc even though the same physical register would still be
+valid) reproduced from an independently-written C source** -- this
+independent confirmation is itself useful signal: two structurally
+different-but-equivalent C reconstructions both land on the identical
+250/252-byte near-miss, which argues this is a genuine, narrow
+register-allocator wall rather than an artifact of one particular
+phrasing. No commit to `src/`/`asm/`/`fomt.lds` -- nothing bit-exact,
+per discipline. `make compare` confirmed still bit-exact on the untouched
+working tree throughout (this round never touched `src/`, all iteration
+happened in a session scratch directory via the quicktest harness).
+
+### Baseline reconstruction
+
+Independently re-derived the same C shape round 6 converged on (guard
+clauses for `tile_x >= width_tiles` / `tile_y >= height_tiles`, wrapped
+`if (x_ok) { if (y_ok) { ... } }` alignment dispatch with the unaligned
+call physically last, separately-flagged `has_right`/`has_bottom`, `kind`
+typed `u32`) directly from the vanilla disassembly at `asm/code_0803EE94.s`
+around `func_0804E4AC` (0x0804E4AC), without reading round 6's `.cc` (it
+no longer exists). Confirmed via the quicktest harness
+(`arm-none-eabi-cpp | agbcp -O2 -fhex-asm | as`, no full link) plus an
+automated mnemonic-sequence diff (Python `difflib.SequenceMatcher` over
+normalized objdump output, register aliases `r9`/`r10`/`r12` mapped back
+to `sb`/`sl`/`ip` to match the vanilla `.s`'s own alias convention) against
+`baserom.gba`'s real bytes at that address: **120 instructions vs the
+original's 121, both 252 bytes of code**, and the diff isolates to exactly
+the same single missing `str` (plus one `ldr` reload later replaced by a
+direct register add) that round 6 already characterized -- independent
+confirmation of round 6's diagnosis, not a new finding on its own.
+
+### Nesting-depth hypothesis: tested, inconclusive/negative, not the fix
+
+1. **Splitting `kind > 1` into a separately-built flag variable
+   (`kind_ok = kind > 1; if (kind_ok) {...}`)**, mirroring the
+   `x_ok`/`y_ok` idiom already confirmed elsewhere in this function: no
+   effect on the `tile_x` spill, and made the function 4 instructions
+   *larger* (260 vs 252 bytes) by adding real flag-construction code for
+   no compensating benefit. Reverted.
+2. **Flattening the BR nesting to early-return / goto-style guards**
+   (`if (!has_right) return kind; if (kind <= 1) return kind; ...TR...;
+   if (!has_bottom) return kind; ...BR...; return kind;` instead of the
+   nested `if`s): same 252 bytes, same exact gap (the `str` is still
+   missing). Depth of the *textual* nesting changed; the compiled
+   control-flow graph and the spill decision did not. Reverted.
+3. **Extracting the BR blit into its own `static inline` helper function**
+   (`DrawBRTile(dest, glyph_buf, width_tiles, tile_x, tile_y)`), to test
+   whether crossing a real function-call ABI boundary (as opposed to just
+   a deeper `if`) forces `tile_x` through memory: agbcp (confirmed weak,
+   non-optimizing in most respects) still fully inlines a single-call-site
+   `static inline` function at `-O2` -- output byte-identical to the
+   non-extracted form, same gap. Not useful as a lever here. Reverted.
+4. **Extracting the BR row offset (`width_tiles * (tile_y + 1)`) into its
+   own named local right at the BR site** (`u32 br_row = ...; ... br_row +
+   tile_x ...`), re-testing round 6's already-tried variant of this exact
+   idea with a fresh independent implementation in case phrasing mattered:
+   no effect, confirms round 6's finding rather than contradicting it.
+   Reverted.
+5. **`volatile u32 tile_x`**: forces a reload at *every* use (4 extra
+   `ldr`s, 264 bytes total), not just the one BR-site reload the original
+   has -- confirms `tile_x`'s spill in the original is NOT a blanket
+   "always reload from memory" policy, it's a single, surgical,
+   context-specific register-allocator decision at exactly one call site.
+   Not a usable lever (produces the wrong number of reloads). Reverted.
+6. **Artificially deepening TL's nesting to match BR's relative depth**
+   (wrapping the TL `CpuFastSet` call in three additional truthful-but-
+   dummy `if` levels: `width_tiles != 0` / `height_tiles != 0` /
+   `kind != 0`): this is the closest thing to a clean depth-only test the
+   round produced, and it DID change spill behavior -- but not in the way
+   the hypothesis predicts. It did **not** make `tile_x` spill at the TL
+   site; instead it spilled a completely different value (`y`, the
+   4th parameter) to a *different* stack slot earlier in the function,
+   and grew the function by 16 instructions/bytes overall. This is
+   consistent with a much more mundane explanation than "depth itself
+   triggers conservative spilling": **each dummy `if` condition needs its
+   own operand in a register to be compared, so adding real nesting adds
+   real register pressure as a side effect** -- there is no way to test
+   "depth in isolation" without also consuming registers to evaluate the
+   extra conditions, which confounds the experiment. **This round did not
+   find a way to cleanly isolate nesting depth from register-pressure
+   as separate causal factors, and the one depth-increasing experiment
+   that didn't also change unrelated spills (attempts 1-2 above) showed
+   no effect on `tile_x` at all.** Best read: the "doubly-nested block"
+   framing from round 6 is probably not the right causal story; the real
+   cause is more likely tied to `tile_x`'s specific live-range shape
+   (distance/call-count between its last use before BR and BR itself, or
+   something in the interaction between BL's and TR's `CpuFastSet` calls
+   specifically) rather than syntactic `if`-nesting depth. Reverted --
+   working tree confirmed unchanged (`git status --short` empty) before
+   finishing.
+
+### Updated recommendation for a future round
+
+The nesting-depth hypothesis flagged as "most promising" at the end of
+round 6 has now been tested as directly as it can be without also
+changing register pressure, and **did not reproduce the gap** -- it
+should be considered closed, not "not yet tried" in any future attempt.
+If this function is picked up again, the productive leads still open are
+narrower and more mechanical than "shape hunting": (a) try altering
+what's *between* the BL blit and the BR blit specifically (e.g. does
+moving the TR blit's `CpuFastSet` call before or after the `has_bottom`
+check for BR change which values survive), since the reload sits right
+after the second and third `CpuFastSet` calls the function makes, or (b)
+accept this as a second confirmed instance of the "register pressure"
+class documented in `DECOMP_RULES.md` and deprioritize further rounds
+on this specific function absent a large dedicated budget, applying the
+budget instead to functions still in the "straight-line reads + one
+opaque `bl`" tractable class.
+
+### Repo state at end of round 7
+
+- Working tree clean except this documentation update; `make compare`
+  not re-run this round since no `src/`/`asm/`/`fomt.lds` files were
+  touched at any point (all iteration happened via the quicktest harness
+  against a scratch-directory `.cc`, never against the tracked tree).
+- No new commits touching `src/`/`asm/`/`fomt.lds` -- nothing matched
+  bit-exact, nothing committed there, per discipline.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
