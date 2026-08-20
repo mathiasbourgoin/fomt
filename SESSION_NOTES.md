@@ -2037,3 +2037,186 @@ sanity check of the ABI/signature analysis above:
      `DrawGlyphAt`/recolor, `docs/DIALOGUE.md`,
      `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
      `docs/MFOMT_ADDITIONS.md`).
+||||||| 43c9148
+
+## Round 6
+
+### Goal
+
+High-value cross-repo target flagged by the patch repo
+(`docs/CHARACTER_SELECT.md`, round 11 on the `character-select`
+worktree): `func_080AC674` (`asm/code_809E804.s:28357`), the function
+containing the "category 3" conditional insertion block the patch repo
+had statically located but could not resolve dynamically (`*param_2`
+nullness never observed either way in 220M-500M single-stepped
+instructions). Mission: decompile the whole function, port it, verify
+bit-exact, and above all pin down what `param_2` actually is -- flagged
+by the patch repo as possibly THE key to the Claire invisibility bug.
+
+### `param_2` resolved with certainty -- by static proof, not dynamic tracing
+
+**The two callers, found exhaustively** (`grep -rn "bl func_080AC674"
+asm/ src/` -- only 2 hits in the whole tree, confirming no vtable/jump-
+table indirection reaches this function either, since it's never
+referenced as a `.4byte func_080AC674` literal anywhere):
+`func_080AC9EC` (`asm/code_809E804.s:28782`, ctor with vtables
+`vtable_unk_080E8440`/`vtable_unk_080E8344`) and `func_080175B4`
+(`asm/game_state.s:14694`, ctor with vtables `vtable_unk_080E6038`/
+`vtable_unk_080E5EC4`) -- almost certainly the male-farmer and
+female-farmer (Claire) actor constructors respectively, given they
+install different vtable pairs but otherwise call `func_080AC674`
+through byte-identical call sequences.
+
+**Both callers pass `param_2` the exact same way**, and it is this
+shared shape that resolves the question:
+
+```
+ldr r2, [<some pointer the caller owns>]   @ r2 = <a moved-from field>
+ldr r1, [r2]        @ r1 = the value stored in that field (an actor/owner pointer, or null)
+movs r3, #0
+str r3, [r2]        @ the caller's own field is zeroed (ownership handed off)
+str r1, [sp, #4]     @ r1 saved into a FRESH stack-local scratch slot
+add r1, sp, #4        @ param_2 = &that local slot
+bl func_080AC674
+```
+
+i.e. `param_2` is never a persistent pointer -- it is always the
+address of a throw-away local variable on the CALLER's stack frame,
+freshly written immediately before the call by moving a pointer out of
+one of the caller's own fields (read it, zero the source -- classic
+single-owner handoff idiom).
+
+Inside `func_080AC674` itself (`this` = `r5` = param_1, `param_2` = `r1`
+saved in `sl`/r10 for the whole function body -- confirmed unclobbered,
+`sl` is only ever touched at entry and at the final check):
+
+```
+0x080AC674-67E (prologue, first 6 real instructions):
+    r0 = *param_2          @ read the moved-in value
+    *param_2 = 0             @ !!! zero it right back, inside the callee's OWN prologue !!!
+    this[0] = r0              @ store the moved-in value into this->field_0 (this = caller's object + 4, see below)
+...
+0x080AC7E8-EE (the block the patch repo found):
+    r1 = *param_2             @ re-read the SAME memory cell
+    if (r1 == 0) goto epilogue  @ always true, see below
+    ... (*(r1->field_0x90))->vtable[2](r1, 3)   @ dead in practice
+```
+
+Between those two points, nothing ever writes back to the address held
+in `sl`. It is a private stack slot in the CALLER's frame; it is never
+passed to any of the ~15 subroutine calls made in between
+(`func_08007128`/`func_0800736C`/`func_080074C0` -- pool-of-13 hardware
+handles at `this+0xD10`; `func_0805E6CC` x13 -- pool of `DefinedSprite`
+sub-objects at `this+0xDB0..0xFF0`, stride `0x30`; a bulk zero-fill loop
+over `[this+4, this+0x194)`) -- none of them receive `&local` as an
+argument, so none of them can alias it. Therefore `*param_2` is PROVABLY
+zero at the check point, for both known call paths, always -- not
+"usually zero", not "zero for Claire but not the farmer" -- structurally,
+unconditionally zero, by construction of the calling convention itself.
+
+**Consequence for the patch repo's open question**
+(`docs/CHARACTER_SELECT.md` round 11, "Verifier dynamiquement si
+`*param_2` differe reellement selon le genre -- ce round n'a pas eu le
+budget de trancher") -- answered, no dynamic trace needed: it does not
+differ by gender, because it can never be non-zero for EITHER gender,
+given the only two call sites that exist in the whole ROM. The
+"category 3" vtable-call block guarded by this check
+(`0x080AC7F0-0x080AC7FC`, `bl FUN_080d3914`/`_call_via_r2`) is dead code
+as written, unconditionally, in vanilla FoMT, for both the male and the
+female actor constructors alike. This also explains, as a side finding,
+why round 11's dynamic checkpoint at `0x080AC7EC`/`0x080AC7FC` never hit
+across hundreds of millions of traced instructions in EITHER build --
+not a single-step/`run_frame()` tooling bug (the open concern flagged at
+the end of round 11), but the correct, expected result of genuinely
+unreachable-as-true code. Round 10/11's separate conclusion -- that this
+insertion path is unrelated to the male=3/female=0 category-3 tally
+difference the composer reads -- is independently REINFORCED, not just
+"not contradicted": the branch that would matter never executes for
+either gender, so whatever sets the tally must happen through a
+completely different code path, most likely (per round 11's own
+remaining lead) somewhere in `sortir_de_la_ferme` after frame 16500,
+still untraced.
+
+**Structural bonus finding**: in both callers, the vtable-install
+sequence installs TWO vtable pointers at the object's offset 0
+(`str r0,[rX]` then `adds r0,rX,#0; stm r0!,{r1}` -- the second store
+lands at the SAME address as the first, silently discarding it, then
+post-increments `r0` by 4) -- and `r0` (now `object+4`) is never reset
+before the `bl func_080AC674` that follows a few instructions later.
+`this` inside `func_080AC674` is therefore `object_base + 4`, not
+`object_base` -- i.e. this function initializes a sub-region starting
+one word after the real vtable slot, consistent with the double-store
+being agbcp's (non-CSE) naive codegen for a 2-vtable multiple-
+inheritance layout where only the most-derived vtable pointer survives
+at offset 0 of the real object. Any future struct layout for the
+farmer/Claire actor class must account for this +4 shift when mapping
+`func_080AC674`'s field offsets (`this+0`, `this+0x194`,
+`this+0x198..this+0x1031`) back onto the real object.
+
+### Field map recovered (this = object_base + 4)
+
+```
++0x000            : moved-in owner/spawner pointer (from *param_2), consumed once, param_2 slot re-zeroed by caller convention
++0x004..+0x193    : bulk zero-filled (0x190 bytes / 100 words) -- fields not otherwise touched by this function
++0x194            : zeroed (u32) -- likely a counter/flag, name unclear
++0x198..+0x237    : untouched by this function (gap between the +0x194 field and the +0x238 pool -- not written here)
++0x238..+0x28F    : pool of 22 slots, stride 0x84 (132) bytes -- byte0 |= 0xFF, byte1=0, byte2=0, byte3=1 (likely a generic actor/entity slot pool: status=0xFF="free", 2 zeroed flags, 1 default byte)
++0xD10..+0xD9B    : pool of 13 slots, stride 0xC (12) bytes -- [+0]=func_08007128(&entry) (Unk_hardware_H ctor, src/hardware.cc, bumps a global usage counter), [+4]=func_0800736C(&entry) result, [+8]=func_080074C0(&entry) result (byte), [+9]=0xFF, [+0xA]=0 -- likely 13 hardware/sound-channel-style handles
++0xDAC, +0xDAD    : zeroed (u8 each) -- 2 flag bytes right after the +0xD10 pool
++0xDB0..+0xFDF    : 13x DefinedSprite sub-objects (KNOWN struct, src/code_0805E6CC.cc), stride 0x30, constructed from 13 distinct global archives: gUnk_0858BA28, gUnk_086678A0, gUnk_0871EF00, gUnk_086FAA80, gUnk_0871D51C, gUnk_0871EDD4, gUnk_0871ECAC, gUnk_08667060, gUnk_08727A74, gUnk_08726CCC, gUnk_08727368, gUnk_08725DA0, gUnk_086F2FAC (very likely per-costume/per-pose sprite archives for the player character)
++0x1020, +0x1024  : zeroed (u32 each)
++0x1028           : zeroed (u32) -- struct starts here, saved as [sp,#8] base for a following sub-init
++0x102C, +0x102E  : zeroed (u16 each)
++0x1031           : zeroed (u8) -- this+0x1028+9
++0x090 (of *param_2's TARGET object, not `this`) : pointer field read for the dead vtable-call block ((*(owner+0x90))->vtable[2])
+```
+
+### Full C++ port -- NOT attempted this round, flagged for a dedicated round
+
+`func_080AC674` matches, and arguably exceeds, the "register pressure"
+difficulty class documented above (`func_0805E790`/`func_0800736C`/
+`func_0804E4AC`, 3/3 historical failures without a multi-round budget):
+`r8`, `sb` (r9) AND `sl` (r10) are all live simultaneously through the
+ENTIRE body (not just prologue/epilogue) -- `sl` holds `param_2` across
+~180 instructions, `r8`/`sb` are reused for different purposes across
+different loops within the same function, on top of two structurally
+distinct object-pool-initialization loops and 13 near-identical-but-
+not-quite `func_0805E6CC` call sites whose address arithmetic reuses
+partial sums across registers in a way that will be easy to get subtly
+wrong (three of the 13 offsets are computed as increments of a PREVIOUS
+iteration's register value, not as fresh literals -- exactly the kind
+of literal-instruction-order dependency rule #4 in `DECOMP_RULES.md`
+warns about).
+
+Per this repo's own non-negotiable discipline (never commit a near-match,
+verify bit-exact via clean rebuild before any commit), and given the
+mission's real prize (`param_2`) was fully resolved by STATIC analysis
+alone with no ambiguity, this round chose not to gamble the remaining
+budget on a rushed literal port that this repo's own track record says
+is unlikely to converge on a first attempt. No files were modified this
+round -- `git status --short` clean throughout, baseline `make compare`
+reconfirmed bit-exact (`sha1sum -c fomt.sha1` -> `fomt.gba: Reussi`)
+both before and after the investigation.
+
+### Note for the patch repo (`character-select` worktree), left here per mission instructions
+
+`docs/CHARACTER_SELECT.md` round 11's open item "Verifier dynamiquement
+si `*param_2` differe reellement selon le genre" can be closed with a
+definitive NO, it never differs -- it is unconditionally zero for both
+genders, by construction of the only two call sites that exist in the
+whole ROM. The "category 3" vtable-call block inside `func_080AC674`
+(`0x080AC7E8-0x080AC800`) is dead code in vanilla FoMT for the male AND
+the female actor. This is a genuinely separate, unrelated dead branch
+from the invisibility bug's real cause -- round 10/11's suspicion that
+this insertion site is a red herring is now confirmed, not just
+unrefuted. The real Claire-invisibility root cause must lie elsewhere;
+per round 11's own remaining open item, the next lead is the composer's
+category-3 tally write site, most likely inside `sortir_de_la_ferme`
+(post frame-16500), never traced instruction-by-instruction so far.
+Separately, this round's structural finding that `func_080AC674`'s
+`this` = `object_base + 4` (not `object_base`) may be useful if a future
+round wants to map the full farmer/Claire actor layout: offsets `+0xDB0`
+through `+0xFDF` of `object_base+4` hold 13 `DefinedSprite`-typed
+sub-objects (per-costume/pose sprite archives), which is the kind of
+field a sprite-swap patch (Claire's alternate archives) would plausibly
+need to enumerate.
