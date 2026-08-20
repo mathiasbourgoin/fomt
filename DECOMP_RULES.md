@@ -196,6 +196,33 @@ arm-none-eabi-objdump -d -Mforce-thumb /tmp/qt.o
 `make compare` bit-exact avant tout commit -- sert uniquement à
 converger plus vite pendant la phase de tâtonnement.
 
+**Piège vécu (round 6) : `/tmp/qt.s`/`/tmp/qt.o` ne sont PAS isolés par
+session.** Une première itération a silencieusement lu un `/tmp/qt.s`
+laissé par un autre processus sans rapport (désassemblage de 5 fonctions
+totalement étrangères au `.cc` d'entrée, aucune erreur signalée).
+**Toujours rediriger vers un chemin unique à la session** (répertoire de
+scratch dédié) plutôt que les chemins nus `/tmp/qt.s`/`/tmp/qt.o` de la
+recette ci-dessus -- `/tmp` est partagé avec tout ce qui tourne par
+ailleurs sur la machine.
+
+## Appel explicite de destructeur sur un membre polymorphe : toujours qualifier
+
+Une classe qui POSSÈDE (pas juste pointe) un membre d'un type ayant un
+destructeur `virtual`, et dont le désassemblage montre un `bl` DIRECT
+vers le symbole mangle du destructeur du membre (pas un dispatch virtuel
+via SA PROPRE vtable) : le code C++ source doit utiliser la forme
+**qualifiée** de l'appel explicite de destructeur (`membre.Base::~Base()`
+via un pointeur `((Base*)ptr)->Base::~Base()`), **jamais** la forme nue
+(`membre.~Base()` / `ptr->~Base()`). Vécu round 6 (`func_08010158`) :
+`((AScriptEngine*)(self+8))->~AScriptEngine()` (forme nue, C++ valide)
+compile en un VRAI appel virtuel (`ldr` la vtable du membre embarqué à
+son offset propre, `ldr` le slot 2, `bl _call_via_r2`) parce que
+`AScriptEngine` a un destructeur `virtual` -- alors que l'original
+appelle `_._13AScriptEngine` directement, sans aucune indirection, la
+destruction statique d'un membre de type connu n'ayant jamais besoin de
+dispatch virtuel. Corrigé en qualifiant :
+`((AScriptEngine*)(self+8))->AScriptEngine::~AScriptEngine();`.
+
 ## Conventions de nommage
 
 - **Les fonctions portées gardent leur symbole `func_ADDR` comme nom
@@ -276,6 +303,7 @@ converger plus vite pendant la phase de tâtonnement.
 | `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
 | `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
+| `func_08010158` | destructeur dérivé, classe construite par `func_080D3EF4` (0x554 octets, membre `ScriptEngine` à +8) -- variante SIMPLE (appels directs, pas de dispatch virtuel) de la famille "riche" | 6 | `a85f4b1` |
 
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
@@ -311,10 +339,17 @@ sur un build propre AVANT de toucher au fichier.
 ## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
 
 1. ~~`func_080E09B0`~~ -- matché round 5.
-2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
-   d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
-   enfant à l'offset +4 avant de le caractériser côté dépôt patch**
-   (Ghidra sur 2-3 exemples).
+2. La famille de ~22 destructeurs "plus riches" restants (vtable +
+   teardown d'enfant) -- round 6 a montré que TOUS ne partagent pas
+   forcément le shape "appel virtuel" initialement supposé
+   (`func_08010158` s'est avéré une 3e variante, appels DIRECTS
+   uniquement, matchée du premier coup) : **re-scanner chaque site avant
+   de le classer "virtuel/dur"**, certains matcheront aussi facilement
+   que `func_08010158`. Pour ceux qui montrent vraiment un dispatch
+   virtuel sur le champ enfant (`ldr [r1,#4]; ldr [r0,#8]; bl
+   _call_via_r2`), toujours **ne pas deviner le layout du champ enfant à
+   l'offset +4 avant de le caractériser côté dépôt patch** (Ghidra sur
+   2-3 exemples).
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
@@ -326,3 +361,10 @@ sur un build propre AVANT de toucher au fichier.
    "pression de registres", cf. section dédiée ci-dessus -- pas sans
    gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
    `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
+4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
+   la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté
+   dépôt patch). Dimensionnée round 6 : 0x6F4 octets (~800 lignes de
+   `.s`), prologue `push {r4,r5,r6,r7,lr}; mov r7,sl; mov r6,sb` --
+   signature "pression de registres" identique à `DrawGlyphAt`/
+   `func_0805E790`. **Pas tentée, même classe de difficulté, pas de
+   budget dédié.**
