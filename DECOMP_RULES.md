@@ -524,6 +524,7 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_0806EA6C`, `func_08007110`, `func_08005A3C` | getters `*(self+4)+OFFSET` sur les 3 familles de widgets de `func_08004C68` (saisie texte, confirmation, sélecteur) | 8 (w15) | `95de198`, `bbf7765`, `476d93c` |
 | `func_08007078`, `func_0800598C`, `func_0806E9D8` | constructeurs de placement des mêmes 3 familles de widgets (stamp vtable, `operator new`, init opaque, stocke à `self+4`, `return self`) | 8 (w15) | `476d93c`, `9c50133` |
 | `func_08008DB8` | wrapper `m4aSongNumStartOrChange` (troncature u16) | 8 (w15) | `b7e035a` |
+| `func_08008A68` | teardown de `func_08008980` (registre du root object démarrage, `AgbMain`/`func_0801004C`) | 9 (w21) | `2bab4c4` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -749,37 +750,64 @@ suit cette convention plutôt que `r0` direct).
    vtable, `operator new(SIZE)`, appel d'init opaque, stocke à
    `self+4`, `return self`) -- généralise gratuitement, aucun
    shape-hunting nécessaire une fois la forme identifiée une fois.
-   **Reste bloqué par 5 callees** :
-   - `func_080070D4`/`func_08005A00` (même forme, "assignation de champ
-     SmartPtr") : analysé en profondeur round 8, **classe de difficulté
-     nouvelle et distincte** de la classe "pression de registres" et du
-     piège `SmartPtr<T>` déjà connu (voir section dédiée
-     `SESSION_NOTES.md` round 8) -- ni pression de registres ni ABI
-     infaisable, un vrai problème de FORME C++ non résolu : le
-     destructeur conditionnel (`if(rhs.inner) vt[2](rhs.inner,3)`)
-     survit dans l'original alors que TOUTE reformulation testée
-     (if explicite, `.Move()` implicite, référence liée à un rvalue)
-     soit se fait éliminer par agbcp (peephole dead-store->dead-load
-     étroit mais réel, contredisant partiellement l'a priori "agbcp
-     n'optimise presque rien"), soit ne compile pas (piège
-     `SmartPtr<T>` copie privée, qui s'applique aussi à l'initialisation
-     de variable locale et au binding de référence, pas seulement au
-     `return`). Le détail `sp+4`/`sp+8` (stocke l'ADRESSE du slot ET une
-     COPIE de sa valeur juste après l'appel) reste inexpliqué par toute
-     hypothèse testée -- piste à creuser en priorité la prochaine fois.
-   - `func_0806EA30` : appelle `func_0806DB38` (classe "pression de
-     registres" confirmée, `r8`/`sb`/`sl`, ~180 lignes) -- mais
-     `func_0806EA30` elle-même pourrait rester portable en appelant
-     `func_0806DB38` comme boîte noire (comme fait pour tous les
-     constructeurs ce round) ; **pas encore essayé**, bon candidat
-     rapide.
-   - `func_08008980` (signal "pression de registres" présent dans son
-     propre prologue, `sb`/`r8`) et `func_08008A68` (pas encore
-     disassemblée en détail, semble courte) : **pas encore attaqués**,
-     budget round 8 épuisé.
-   **Avant de retenter `func_08004C68` elle-même** : soit fermer ces 5
+   **Reste bloqué par 4 callees** (round 9/w21 a matché `func_08008A68`
+   et re-classé `func_0806EA30` -- voir ci-dessous) :
+   - `func_080070D4`/`func_08005A00`/`func_0806EA30` (**3 sites, pas 2**
+     -- round 9/w21 a confirmé que `func_0806EA30` est une 3e instance
+     BYTE POUR BYTE IDENTIQUE de la même forme, pas un cas "pression de
+     registres" séparé comme classé par erreur round 8 ; seul le callé
+     opaque diffère, `func_0806DB38` au lieu de `func_08005B68`/
+     `func_080050F8`) : "assignation de champ SmartPtr", analysé en
+     profondeur rounds 8 ET 9, **classe de difficulté nouvelle et
+     distincte** de la classe "pression de registres" et du piège
+     `SmartPtr<T>` déjà connu (voir section dédiée `SESSION_NOTES.md`
+     rounds 8 et 9) -- ni pression de registres ni ABI infaisable, un
+     vrai problème de FORME C++ non résolu. **7 hypothèses testées au
+     total (4 round 8 + 3 round 9), toutes négatives** : syntaxe `=` vs
+     `()` pour l'init (identique, même échec de compilation), convention
+     out-param explicite (compile mais produit une forme vérifiablement
+     différente -- confirme que `field` n'est PAS un `SmartPtr<T>*`
+     passant par `operator=(T*)`, sinon l'ancienne valeur de `field`
+     serait lue/comparée, ce qui n'apparaît jamais dans la cible), alias
+     manuel reproduisant l'exact désassemblage (agbcp le promeut
+     entièrement en registres et l'élimine, encore plus agressivement
+     que la tentative round 8 #1). **Règle généralisable découverte round
+     9** : le peephole d'élimination dead-store/dead-load d'agbcp n'est
+     PAS étroit ("une seule variable, même expression" comme
+     qualifié prudemment round 8) -- empiriquement, il s'applique à
+     **toute variable locale dont l'adresse est prise, tant que son
+     cycle de vie complet (écriture, lecture, aliasing) reste visible
+     dans UNE fonction sans que l'adresse ne s'échappe vers un appel
+     externe opaque** ; le seul cas sur les 7 testés qui n'a PAS été
+     replié est celui où `&tmp` s'échappe précisément vers l'appel
+     opaque `func_08005B68` (convention out-param) -- mais cette forme
+     ne matche pas la cible pour une autre raison (le compare sur
+     l'ancienne valeur de `field`). **Piste concrète non encore testée**
+     (round 9, à essayer en priorité round 10) : combiner LES DEUX
+     ingrédients qui marchent séparément -- construire `tmp` via la
+     convention hidden-return-value (`SmartPtr<Widget> tmp =
+     func_08005B68(arg);`, seule forme de construction qui compile ET ne
+     pré-zéro pas, cohérent avec le désassemblage) **ET** typer `field`
+     comme `T**`/`void**` BRUT (jamais `SmartPtr<T>*`), pour qu'aucune
+     surcharge `operator=` ne puisse jamais être sélectionnée quelle que
+     soit la forme de l'assignation. Cette combinaison précise n'a été
+     essayée par aucun des deux rounds.
+   - `func_08008980` : **caractérisée en détail round 9/w21** (voir
+     `SESSION_NOTES.md` round 9) -- confirmée classe "pression de
+     registres" par inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants
+     simultanément sur tout le corps), PLUS un double-stamp de vtable
+     inexpliqué sur un sous-objet (même question ouverte que le piège
+     `SmartPtr<T>` sous-classe pour `func_08004C68`). **Pas attaquée**,
+     cohérent avec la règle "ne pas retenter cette classe sans budget
+     dédié" -- c'est ici la première vraie inspection (pas une retentative
+     à l'aveugle), donc la classification est maintenant fiable plutôt
+     que suspectée.
+   - ~~`func_08008A68`~~ -- **matchée round 9/w21** (`2bab4c4`) : utilise
+     seulement `r4-r7`, pas `r8`/`sb`/`ip` -- shape simple malgré le
+     voisinage avec `func_08008980`, matchée du premier coup.
+   **Avant de retenter `func_08004C68` elle-même** : soit fermer ces 4
    callees, soit au minimum établir un prototype `extern "C"` correct
-   pour chacune (ce qui NE nécessite PAS de les porter bit-exact --
+   pour chacun (ce qui NE nécessite PAS de les porter bit-exact --
    suffit pour les appeler depuis `func_08004C68` en tant que boîte
    noire, cf. le principe déjà utilisé pour les 12 callees listées dès
    le round 6). Le double-stamp de vtable (piège `SmartPtr<T>`, sous-
