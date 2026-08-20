@@ -5300,3 +5300,73 @@ plus longtemps que le corps plain (elle n'est pas seule dans ce cas :
   confirmer l'absence d'erreur de lien -- aucune référence non définie ni
   symbole dupliqué.
 - `origin` non touché, rien poussé, pas de PR.
+
+## Round w32 (worktree `parallel-32`) -- chasse "3 angles neufs", aucun match sûr trouvé
+
+Consigne : continuer la méthode "sœur" (w20/w24/w26/w28/w30) sur 3 angles
+pas encore essayés : (1) méthodes virtuelles non portées des vtables déjà
+cataloguées, (2) wrappers/thunks appelant une fonction déjà matchée, (3)
+élargir `scan_hidden_code_blobs.py` au-delà de sa limite dure de 40 octets.
+
+**Bilan des 3 angles -- tous négatifs, mais informatifs** :
+
+1. **Vtables connues, méthodes non portées** : `grep -rl vtable_unk_
+   src/*.cc` donne 50 vtables distinctes déjà référencées ; un script
+   croisant chaque `vtable_unk_ADDR` contre TOUS les blocs `thumb_func_start`
+   non matchés d'`asm/*.s` donne **0 hit**. Confirme que les rounds
+   précédents (w24/w26 constructeurs de placement, w28/w30 sœurs
+   destructeurs) ont déjà épuisé cette veine -- plus aucune fonction
+   asm restante ne référence un `vtable_unk_ADDR` connu.
+2. **Wrappers appelant une fonction déjà portée** : script recensant tous
+   les `func_ADDR` réellement matchés dans le `.elf` (`arm-none-eabi-nm
+   fomt.elf | grep ' T func_'`, 2696 symboles) puis cherchant, parmi les
+   blocs `thumb_func_start` NON matchés de <=12 lignes d'instructions, un
+   `bl func_ADDR` vers l'un de ces symboles : **1 seul hit**,
+   `sub_080868A8` (`asm/code_08085568.s`) qui appelle `func_080CABEC`
+   (déjà matché). Écarté après inspection : `sub_080868A8` lit `sl`/`r8`
+   comme état déjà positionné par son appelant (`func_08085F08`, une
+   fonction à très forte pression de registres qui pousse `sl`/`sb`/`r8`
+   en pile au prologue) -- signature de la classe "ABI partagée entre
+   `bl`" déjà documentée comme structurellement infaisable en C
+   (`DECOMP_RULES.md`), pas un simple thunk portable.
+3. **`scan_hidden_code_blobs.py` au-delà de 40 octets** : le script gère
+   déjà ce cas (`medium_blocks`, non auto-vérifiés, listés pour revue
+   manuelle) -- **0 nouveau court blob** (4-40 octets, tous déjà matchés
+   par les rounds précédents), **1 seul blob "medium" restant** :
+   `.L0809E1B4` dans `asm/code_actor_0809BFE8.s`, 288 octets (déjà
+   identifié comme piste ouverte dans `DECOMP_ARCHIVE.md`, jamais
+   attaqué). Inspection manuelle complète (désassemblage brut +
+   `--adjust-vma`) : c'est une VRAIE fonction unique (`push
+   {r4,r5,r6,r7,lr}; sub sp,#0x10`, épilogue propre `add sp,#0x10; pop
+   {r4-r7}; pop {r0}; bx r0`, ~270 octets utiles + pool littéral
+   terminal), pas de fusion de plusieurs petites fonctions. Appelle
+   `func_0800E924` (déjà porté, `ActorLocation` d'un `Farmer const&`,
+   `src/farmer.cc:188`) et 4 fonctions encore en asm
+   (`func_0809D79C`/`func_0809D7D8`/`func_0809D418`/`func_0809D470`) --
+   3 boucles de copie octet-à-octet depuis des tables globales
+   (`gUnk_08103B10`/`38`/`gUnk_08103C3C`/`74`/`gUnk_08103F84`/`98`/
+   `gUnk_0810400C`/`gUnk_08103FE4`, toutes des globaux `unk_` génériques,
+   aucun nom sémantique disponible) avec des tailles de champ 4/9/13.
+   Aucun registre `r8`-`ip` utilisé (PAS classe "pression de registres"),
+   mais **aucun appelant symbolique trouvé** (`grep` négatif dans tout
+   `asm/`/`src/`, comme `func_08010F14` en son temps) -- impossible de
+   déduire les types exacts des 2 premiers paramètres (r0/r1) sans site
+   d'appel de référence, et la sémantique des 3 boucles de copie (rendu
+   de texte formaté ? affichage debug de coordonnées ?) resterait une
+   pure supposition sans un caller. **Pas tenté** -- prématuré de deviner
+   la structure C sans un point d'ancrage sémantique, contraire à la
+   discipline du dépôt ("ne jamais inventer"). Reste la piste la plus
+   concrète pour un futur round avec budget dédié : chercher d'abord
+   un appelant via une table indirecte (dispatch de widgets/callbacks,
+   pattern déjà vu ailleurs dans ce dépôt) avant de tenter le port.
+4. Contrôle croisé de 2 autres pistes listées dans "Autres cibles
+   ouvertes" de `DECOMP_ARCHIVE.md` : `func_08050DF0`
+   (`franglais_transition_ctl_query`) est en fait **déjà matché**
+   (présent dans `fomt.elf` comme symbole `T`) -- l'entrée d'archive est
+   obsolète, à corriger dans un futur ménage de `DECOMP_ARCHIVE.md`.
+
+**Aucun commit de code ce round.** Worktree resté propre (`git status
+--short` vide avant et après), seul un `build/franglais_stub.bin` factice
+généré pour valider le lien complet (`make compare`, échec sha1 attendu et
+confirmé, aucune erreur de lien/symbole) -- non commité (`build/` est dans
+`.gitignore`). `origin` non touché, rien poussé, pas de PR.
