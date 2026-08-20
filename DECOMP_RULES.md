@@ -94,7 +94,24 @@ appel à une fonction déjà `ALIAS()`ée dans ce dépôt, désassembler le
 `.o` compilé de cette fonction callée EN PREMIER**, pas en dernier
 recours après 10 variantes du côté appelant.
 
-### 4. Ordre des instructions = ordre des statements C, littéralement
+### 4bis. `champ_u16 & 0xFFFF` en une seule expression se fait éliminer
+par agbcp -- séparer le load dans une statement à part
+
+Découverte round 6 (`func_0800736C`) : contrairement à l'anti-pattern #1
+(qui parle d'un masque plus GROS que prévu), agbcp a un vrai peephole,
+étroit mais réel, qui élimine un `champ & 0xFFFF` quand `champ` est un
+membre `u16` lu et masqué dans LA MÊME expression (ex. `return
+((ent->champ & 0xFFFF) << 4) | ...;`) -- le `ands` disparaît
+complètement, aucun load de littéral. Si le désassemblage montre un
+`ldrh` immédiatement suivi d'un `ands`, mais qu'écrire `champ & 0xFFFF`
+directement dans l'expression finale fait disparaître le `ands` chez
+nous, **séparer le load dans une statement à part** (`unsigned int tmp =
+ent->champ; return ((tmp & 0xFFFF) << 4) | ...;`) déjoue ce peephole
+précis et reproduit le `ldrh`+`ands` exact. Vu 1 fois, à confirmer sur
+un second cas avant de généraliser complètement, mais suffisamment net
+(reproductible sur les 2 variantes testées round 6) pour être noté.
+
+### 5. Ordre des instructions = ordre des statements C, littéralement
 
 Confirmé dès le round 1 (`func_0805E6CC`) et jamais contredit depuis :
 écrire le C dans le MÊME ORDRE que les lectures/calculs/écritures visibles
@@ -106,9 +123,26 @@ allocation.
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 gros budget
 
-**3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
+**4 échecs sur 4 tentatives** à ce jour sur cette classe précise :
+`func_0805E790` (round 1), `func_0800736C` (round 2 ET round 6, 2
+tentatives distinctes sur la même fonction), `func_0804E4AC` (round 3,
+`DrawGlyphAt`). Round 6 a généré 5 variantes systématiques sur
+`func_0800736C` (contre 2 au round 2) via le harnais rapide, et a
+réduit l'écart de -8/-16 octets à -12 octets avec une structure bien
+plus proche (accumulateur unique + epilogue partagé + reload du masque
+`& 0xFFFF` -- cf. règle 4bis ci-dessus -- matchent maintenant
+exactement), mais **n'a toujours pas convergé**. Piste explicitement
+fermée par le round 6, à ne PAS retenter telle quelle : lire le champ
+`h->unk_00` dans une variable locale distincte pour le second check
+"redondant" (idée notée comme non-testée à la fin du round 2) --
+testée round 6 via `h->AllocEntry(ent)` lié à une variable `ent2`
+distincte, résultat **identique** à ne pas utiliser `AllocEntry` du
+tout : `AllocEntry` est toujours inliné par agbcp, et son
+élimination du branchement redondant semble opérer sur l'IDENTITÉ DE
+REGISTRE (pseudo-valeur pré-allocation), pas sur l'identité de variable
+source -- aucune des 5 formulations testées (if plat, goto/label
+partagé, appel à `AllocEntry` avec ou sans variable de retour distincte)
+n'a préservé le second check. Signature du problème : une fonction avec
 **beaucoup de valeurs simultanément vivantes** (dépilement de liste
 libre, parcours de section déroulée, ou ici un blit conditionnel à 4
 tuiles avec flags), qui sature `r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où
