@@ -63,6 +63,7 @@ SECTIONS
         asm/main.o(.text);
         asm/sram_proxy_1.o(.text);
         asm/interrupt.o(.text);
+        src/code_0800057C.o(.text);
         src/new.o(.text);
         src/pure_virtual.o(.text);
         asm/sram_proxy_2.o(.text);
@@ -85,11 +86,12 @@ SECTIONS
         src/code_080070A4.o(.text);
         asm/code_080070D4.o(.text);
         src/code_08007110.o(.text);
-        asm/code_0800711C.o(.text);
+        src/code_0800711C.o(.text);
         src/hardware.o(.text);
         asm/hardware.o(.text);
         src/code_08008DB8.o(.text);
         asm/code_08008DE8.o(.text);
+        src/code_080099EC.o(.text);
         src/farm.o(.text);
         src/field.o(.text);
         src/shipping_bin.o(.text);
@@ -109,6 +111,7 @@ SECTIONS
         src/rucksack.o(.text);
         asm/more_items.o(.text);
         asm/game_scene.o(.text);
+        src/code_080100F0.o(.text);
         src/code_08010158.o(.text);
         asm/code_080101A0.o(.text);
         asm/game_state.o(.text);

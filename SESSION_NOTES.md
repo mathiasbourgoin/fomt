@@ -2745,7 +2745,6 @@ to newest): `e1b1931` (`08080DC4`), `1f085cf` (`08081A70`), `7c09c6d`
 - **What's left in this family**: 13 sites (`080521BC` through
   `0808048C`) not covered by this worktree -- explicitly assigned to a
   parallel worktree (w11) for the same round, no overlap.
-||||||| 88b3c2e
 
 ## Round 7 (worktree `w14`) -- les 2 derniers getters `GameState`
 (`func_08010F04`, `func_08010F1C`) matchés
@@ -2845,7 +2844,6 @@ pas.
 - Piste laissée pour un futur round (voir section ci-dessus) : le getter
   non catalogué à `0x08010F14` (7 bits, offset+2, halfword), actuellement
   toujours en `.byte` brut dans `asm/code_08010F0C.s`.
-||||||| 18c2c07
 
 ## 2026-08-20, round 7 (worktree `w13`, branch `parallel-13`) -- `func_0804E4AC`
 nesting-depth hypothesis tested, still not matched, same 1-instruction gap
@@ -3075,7 +3073,6 @@ targets list (end of file) remains the reference for the next round.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin. Worked alone in the isolated `w17` worktree per the
   round brief; did not touch anything outside `func_08010F14`.
-||||||| 59d9b13
 
 ## 2026-08-20, round 8 (worktree `w16`, branch `parallel-16`) -- `func_0804E4AC`,
 the "between BL and TR" `CpuFastSet` lead tested and CLOSED, 3rd independent
@@ -3256,7 +3253,6 @@ here have considered, rather than continuing to shape-hunt blind.
   update (`SESSION_NOTES.md`) is the only change in this worktree.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
-||||||| 59d9b13
 
 ## Round 8 (worktree w15) -- func_08004C68 callee sweep
 
@@ -3499,7 +3495,6 @@ structural one).
   against origin. No concurrent-session activity observed (other
   worktrees `w16`/`w17` mentioned as active in parallel on unrelated
   targets, per the mission brief -- no interference seen in `git log`).
-||||||| ad592f2
 
 ## Round (worktree w20, isolated, branche `parallel-20`) -- chasse "méthode
 sœur" par classe déjà matchée, 1 match, 1 near-miss documenté, 2 cibles
@@ -3675,3 +3670,187 @@ d'arrêter cette piste.
   convergée, aucun fichier `src/`/`asm/`/`fomt.lds` touché pour cette
   cible, toute l'itération faite dans le scratchpad de session).
 - `origin` non touché, rien poussé, pas de PR.
+
+## 2026-08-20, round 9 (worktree `w18`, branch `parallel-18`) -- systematic
+scan for more hidden `.byte` blobs: 5 blobs found and matched, 17 functions
+total
+
+Brief for this round: generalize the round 8 (`func_08010F14`) discovery
+into a *method* -- write a script to scan the whole `asm/*.s` tree for
+short, unlabeled `.byte` data blobs squeezed between two real functions,
+verify each candidate by hand-disassembly + xref + compile before trusting
+it, port and match the best 2-3, document the rest (found and discarded
+alike).
+
+### Method (script: `tools/scripts/scan_hidden_code_blobs.py`)
+
+Parses every `asm/*.s` file into column-0-label-delimited blocks, flags a
+block as a genuine function only if a `thumb_func_start NAME` directive
+sits immediately before its `NAME:` label (a real parser bug here cost an
+hour: `thumb_func_start` almost always appears as the *tail* of the
+PREVIOUS block's raw lines, not as a "preceding directive" of the new
+block, because this is a line-based parser and the directive line is
+textually still part of the block that hasn't ended yet -- fixed by having
+`block_is_function` also scan the tail of the previous block, see the
+script's docstring/comments), then looks for blocks that are 100% `.byte`
+directives (no mnemonics, no `.4byte` -- `.4byte` is this codebase's
+convention for genuine literal-pool/pointer constants, `.byte` is reserved
+for genuinely undecoded raw bytes), 4-40 bytes long (1-2 Thumb instructions,
+with slack for a small cluster of back-to-back tiny functions like the
+`0x0800057C` case below), sitting between two real function blocks (walking
+back past pure `.4byte` literal-pool blocks to find the "real" previous
+neighbor). For each candidate it hand-decodes every 16-bit halfword with a
+small partial Thumb decoder (covers all the common formats: data
+processing, branches, load/store, push/pop, hi-reg/bx) and flags it
+"plausible" only if every halfword decodes to a *known* Thumb encoding and
+the last one is a branch/`bx` (a real function-ending shape) -- this is a
+strong filter, not a proof; the real proof step (unchanged from round 8) is
+always disassemble-by-hand -> compile via the quick harness -> compare
+bytes, done for every candidate below before touching the tracked tree.
+
+The script also separately reports (a) files that are 100% raw `.byte` with
+*zero* `thumb_func_start` at all (`asm/code_080101A0.s`, ~424 bytes) -- a
+fundamentally different, much bigger phenomenon (an entire never-split
+region, not a hidden gap inside an otherwise-processed file), explicitly
+out of scope for this round's "hidden short blob" signature and not
+investigated further; and (b) larger (>40 byte) blobs matching the same
+"sandwiched between two real functions" shape but not auto-verified
+(false-positive risk from coincidental literal-pool bytes rises with size)
+-- a worklist for a future round, not a set of confirmed finds.
+
+### Candidates found and matched (4 blobs, all bit-exact)
+
+1. **`func_0800711C`** (`asm/code_080070D4.s`, 12 bytes, right after
+   func_08007110's own literal pool, right before the already-ported
+   func_08007128) -- `return (char*)self + 0x461C;`, the same constant
+   func_08007110 (the function right before it) adds after dereferencing
+   `self+4`. Committed `4329ae7`.
+2. **`func_0800057C`/`func_08000580`/`func_08000584`/`func_08000590`**
+   (`asm/interrupt.s`, 32 bytes total, right after func_08000568, right
+   before the already-ported `src/new.cc`) -- four tiny functions: two
+   identical placement-new-shaped stubs ("ignore arg0, return arg1",
+   matching the inline `operator new(size_t, void*)`/`operator
+   new[](size_t, void*)` bodies declared in `tools/libagbc++/new`) and two
+   forwarding thunks to the already-ported `operator new`/`operator delete`
+   (linked as `__builtin_new`/`__builtin_delete`), byte-identical in shape
+   to `__builtin_vec_new`/`__builtin_vec_delete` already compiled elsewhere
+   inside `src/new.cc` itself (`nm build/src/new.o` offsets 0x48/0x78) --
+   confirms agbcp does not fold/dedupe identical compiler-generated bodies
+   across translation units, so multiple TUs each get their own private
+   copy. Committed `7fd2ab1`.
+3. **`func_080099EC`/`func_08009A04`/`func_08009A2C`/`func_08009A38`**
+   (`asm/hardware.s`, 92 bytes total, right after func_080099D4, right
+   before the already-ported `Farm::Farm(char const*)`) -- two constructors
+   stamping already-known, heavily-referenced vtables
+   (`vtable_unk_080E5BB4`/`080E5BD8`/`080E5BE8` from `asm/vtables.s`, used
+   at dozens of still-unported call sites across the tree) onto raw offsets
+   of an uncharacterized object (no site referencing those vtables is
+   ported anywhere else yet, so ported as raw pointer arithmetic, not an
+   invented C++ class -- same discipline as the "family riche" destructors,
+   `src/code_0800371C.cc`), a matching "is this sentinel pair still in its
+   constructed/empty state" predicate, and one unrelated leaf utility (a
+   branchless nonzero-word predicate, `(neg(x)|x)>>31`, a GCC/agbcp idiom
+   -- required writing the C literally as `u32 x = *(u32*)self; return
+   ((u32)(-(int)x) | x) >> 31;` to get the exact register allocation;
+   `x != 0` alone compiled to a branching `cmp`/`beq` shape instead, wrong
+   instruction count). Committed `d417e87`.
+4. **`func_080100F0`/`func_08010104`/`func_08010118`/`func_08010128`/
+   `func_08010138`/`func_08010148`/`func_0801014C`** (`asm/game_scene.s`,
+   104 bytes total, right after func_0801004C, right before the
+   already-ported func_08010158) -- seven accessors, six reading the
+   already-known global `gUnk_0300040C` (declared in
+   `src/code_08011FE8.cc`) at various constant offsets, one a bare integer
+   constant getter (`return 25;`). Strong coherence signal: func_08010158's
+   own header comment already documents it as *clearing* this exact global
+   in its destructor -- these are plausibly sibling accessors on the same
+   object, though the class layout itself remains uncharacterized (ported
+   as plain free functions, not methods). Committed `dc8fd26`.
+
+Total: **5 blobs (`0x0800711C` counted separately from the other 4-blob
+group above, since it was ported after the others -- see below), 17
+hidden functions**, all verified byte-exact via the quick
+compiler+assembler harness first, then via a full clean rebuild (`rm -rf
+build fomt.gba fomt.elf fomt.map && make compare`, `sha1sum -c
+fomt.sha1`) immediately before each commit, one blob per commit. No caller
+found anywhere in `asm/`/`src/` for ANY of the 17 addresses (full-tree grep
+negative on every one) -- same "no symbolic caller found" situation as
+`func_08010F14` in round 8; not investigated further, out of scope for a
+port+match round (would need a broader scan of jump/dispatch tables
+elsewhere in the binary to explain how they're reached).
+
+**Process note, told straight:** `func_0800711C` (item 1 above) was
+actually the FIRST candidate found and hand-verified via the quick harness,
+but got set aside mid-round while investigating the `code_080C7F00.s`
+"Unpack family" false-positive (below) and the `0x0800057C` group, and was
+never applied to the tracked tree in the moment. It only got caught and
+finished because the scan script's `thumb_func_start`-adjacency bug (see
+Method above) was found and fixed afterward, and a rerun of the corrected
+script re-surfaced it as still-present. Lesson for future rounds: apply and
+commit each verified candidate immediately, don't batch verification ahead
+of application even under time pressure -- the fix-then-rerun catch this
+time was lucky, not guaranteed.
+
+### Candidate investigated and explicitly discarded: `code_080C7F00.s`
+"Unpack family" blobs are real code, but already-diagnosed infeasible
+
+The strict scan (correctly) never flagged these as candidates (their
+"previous block" is a branch-target label containing real instructions,
+not a `thumb_func_start`-marked function, so the adjacency filter excludes
+them) -- found instead via manual inspection while eyeballing the medium-
+size blob list. Several `.byte` blocks around `.L080D12D0`-`.L080D1426` in
+`asm/code_080C7F00.s`, each sitting right after a `mov lr, pc; bx sb`
+trampoline call, hand-decode as fully valid Thumb code (confirmed for one,
+22 bytes at `.L080D137A`: `adds/lsls/bmi/lsls/add/strh/mov/cmp/bcc/pop
+{r4}/bx r4` -- ends with the same `pop {r4}; bx r4` epilogue visible
+elsewhere in the same function). These addresses (`0x080D1xxx`) fall
+squarely inside the `Unpack`/body-mode bit-reader family that a prior
+dedicated round (`worktree parallel-1`, see the "Classe de problème 'ABI
+partagée entre `bl`'" section of `DECOMP_RULES.md`) already diagnosed as
+**structurally impossible to port as C**: the bit-reader state is passed
+in `r2`/`r3` across `bl` calls without reloading, violating the ARM/Thumb
+calling convention itself, not just a stylistic quirk a C reformulation
+could work around. This round's finding **confirms** that diagnosis
+independently (real, valid, hand-written-style Thumb, not disassembler
+noise) and additionally shows the family's code footprint is *wider* than
+`DECOMP_RULES.md`'s existing location note suggested (previously pointed
+only at `asm/code_809E804.s`, "around line 103423" -- also present, at
+least in these trampoline-continuation fragments, in
+`asm/code_080C7F00.s`). No action taken beyond documenting this -- per the
+existing rule, this family is retired from the target list, not
+re-attempted.
+
+### Remaining leads for a future round (not pursued this round, budget/focus discipline)
+
+- `tools/scripts/scan_hidden_code_blobs.py`'s "larger, not auto-verified"
+  list: `asm/code_entities_08034CEC.s` `.L0803A804` (160 bytes, EOF-of-file
+  after `func_0803A798`), `asm/code_08010F54.s` `.L08011ED8` (272 bytes,
+  EOF-of-file after `func_08011DC4`), `asm/code_actor_0809BFE8.s`
+  `.L0809E1B4` (288 bytes, EOF-of-file after `func_0809E1A4`). All three
+  match the same "EOF of an already-processed file" shape that was real in
+  all 4 short candidates matched this round -- good odds, but not
+  auto-verified (size raises false-positive risk) and not manually
+  disassembled this round. Next round should hand-decode these the same
+  way before trusting them.
+- `asm/code_080101A0.s` (424 bytes, ENTIRELY raw `.byte`, zero
+  `thumb_func_start`) -- a different, bigger phenomenon (a never-split
+  region, not a hidden gap), explicitly out of scope for the "hidden short
+  blob" signature this round targeted. Would need the normal `asm/*.s`
+  splitting method applied fresh, likely across multiple functions, not a
+  quick single-blob port.
+- Re-running `tools/scripts/scan_hidden_code_blobs.py` from a clean
+  worktree after this round's 4 matches should print 0 short candidates
+  (verified before writing this note) -- any that reappear in a future
+  round are genuinely new, not something this round missed.
+
+### Repo state at end of round 9
+
+- Working tree clean after the last commit (`git status --short` empty,
+  verified post-commit).
+- Five new commits (`4329ae7`, `dc8fd26`, `d417e87`, `7fd2ab1`, plus the
+  `tools/scripts/scan_hidden_code_blobs.py` addition) touching
+  `src/`/`asm/`/`fomt.lds`/`tools/`, `make compare` bit-exact on a clean
+  rebuild immediately before every commit that touched `src/`/`asm/`/
+  `fomt.lds`.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. Worked alone in the isolated `w18` worktree per the
+  round brief; did not touch anything outside the blobs listed above.

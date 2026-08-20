@@ -509,6 +509,58 @@ dispatch virtuel. Corrigé en qualifiant :
   `unk_ADDR`), ne pas inventer un nom qui suggère une certitude non
   acquise.
 
+## Scan systématique des blobs `.byte` cachés (round 9, `tools/scripts/scan_hidden_code_blobs.py`)
+
+Généralisation de la découverte round 8 (`func_08010F14`) en méthode
+outillée : `python3 tools/scripts/scan_hidden_code_blobs.py` (aucune
+dépendance hors stdlib) parcourt tout `asm/*.s`, repère les blocs
+purement `.byte` (jamais `.4byte` -- convention du dépôt : `.4byte` =
+littéral/pointeur légitime, `.byte` = octets bruts jamais désassemblés)
+de 4 à 40 octets coincés entre deux VRAIES fonctions (`thumb_func_start`),
+et tente un désassemblage Thumb partiel maison pour juger la plausibilité
+(tous les halfwords doivent décoder vers un mnémonique connu, le dernier
+doit être un branchement/`bx` -- signal fort, pas une preuve : la
+vérification réelle reste toujours désassemblage manuel -> harnais rapide
+-> `make compare`). Round 9 : **4 blobs / 16 fonctions matchées en une
+passe** (`func_0800711C` ; `func_0800057C`/`08000580`/`08000584`/`08000590` ;
+`func_080099EC`/`08009A04`/`08009A2C`/`08009A38` ;
+`func_080100F0`/`08010104`/.../`0801014C`, 7 fonctions), voir
+`SESSION_NOTES.md` round 9 pour le détail complet de chaque cas. Après ce
+round, relancer le script doit afficher 0 candidat court -- tout nouveau
+candidat dans un round futur est réellement nouveau.
+
+**Piège de parsing vécu** : `thumb_func_start NAME` apparaît textuellement
+comme fin du bloc PRÉCÉDENT dans un parseur ligne-par-ligne naïf (pas comme
+un "préfixe" du bloc `NAME:` qui suit) -- un premier script naïf a raté
+`func_0800711C` à cause de ça (candidat vérifié via harnais mais jamais
+appliqué faute d'avoir été re-détecté). Toujours vérifier l'adjacence
+`thumb_func_start` en regardant la QUEUE du bloc précédent, pas seulement
+un éventuel "préfixe" du bloc courant.
+
+**Discipline appliquée à chaque candidat** (identique au round 8, à ne pas
+raccourcir même sous pression de temps) : désassembler les octets bruts
+(`arm-none-eabi-objdump -D -bbinary -marmv4t -Mforce-thumb
+--adjust-vma=0x08000000`, piège `--adjust-vma` déjà documenté plus haut),
+vérifier qu'aucun appelant symbolique n'existe (grep négatif attendu,
+comme pour `func_08010F14` -- pas anormal en soi), écrire le C candidat,
+compiler via le harnais rapide, comparer octet à octet, PUIS SEULEMENT
+appliquer au fichier `asm/*.s` + `fomt.lds` + rebuild propre complet +
+`sha1sum -c fomt.sha1` avant CHAQUE commit (un blob = un commit). Ne
+jamais laisser un candidat "vérifié en harnais" sans l'appliquer
+immédiatement -- voir le piège de process ci-dessus.
+
+**Famille "Unpack" retrouvée ailleurs** : le scan (correctement) ne
+signale JAMAIS les blobs `.byte` de `asm/code_080C7F00.s` autour de
+`.L080D12D0`-`.L080D1426` (leur "bloc précédent" est une étiquette de
+branchement interne à une fonction, pas un `thumb_func_start`) -- mais une
+inspection manuelle round 9 confirme que ce sont de vrais octets Thumb
+valides (pas du bruit), appartenant à la famille `Unpack`/lecteur de bits
+déjà diagnostiquée infaisable en C (section dédiée plus haut) --
+**empreinte plus large que documenté** : la note de localisation
+d'origine ne citait que `asm/code_809E804.s`, ces fragments de
+continuation après `mov lr,pc; bx sb` existent aussi dans
+`asm/code_080C7F00.s`. Ne pas re-tenter, diagnostic confirmé indépendamment.
+
 ## Historique des matchs confirmés (voir `SESSION_NOTES.md` pour le détail)
 
 | fonction | rôle | round | commit |
@@ -529,13 +581,15 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_08080DC4`, `func_08081A70`, `func_08082144`, `func_08083AEC`, `func_08085528`, `func_080881AC`, `func_0808AB68`, `func_0808C59C`, `func_0808ED08`, `func_08090E84`, `func_080925C4`, `func_080931E0`, `func_08093A88` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), même corps que `func_0809A518` | 7 (w12) | `e1b1931`, `1f085cf`, `7c09c6d`, `0271566`, `91f7ebe`, `5b09238`, `0f8825f`, `3c6bf9f`, `7631bff`, `228b133`, `9b04a4d`, `d1cc3d2`, `ef78680` (1 commit/fonction) |
 | `func_080C0D44` | destructeur "riche", 1 enfant offset+4 (MI) | 7 (w12) | `18e8b5e` |
 | `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
-||||||| 88b3c2e
 | `func_08010F04`, `func_08010F1C` | getters `GameState` (bit `0x10` octet 0 ; champ 6 bits octet 3 bits[1:6]) -- complètent les 4 setters round 6 | 7 (w14) | (voir `git log`) |
 | `func_08010F14` | getter `GameState` NON catalogué (7 bits à `P=2` du halfword `self+2`, adjacent au champ 5 bits de `func_08010F0C` sur le même mot `self+0`) -- ex-`.byte` bruts sans symbole, décodé et porté | 8 (w17) | `05e966f` |
-||||||| 59d9b13
 | `func_0806EA6C`, `func_08007110`, `func_08005A3C` | getters `*(self+4)+OFFSET` sur les 3 familles de widgets de `func_08004C68` (saisie texte, confirmation, sélecteur) | 8 (w15) | `95de198`, `bbf7765`, `476d93c` |
 | `func_08007078`, `func_0800598C`, `func_0806E9D8` | constructeurs de placement des mêmes 3 familles de widgets (stamp vtable, `operator new`, init opaque, stocke à `self+4`, `return self`) | 8 (w15) | `476d93c`, `9c50133` |
 | `func_08008DB8` | wrapper `m4aSongNumStartOrChange` (troncature u16) | 8 (w15) | `b7e035a` |
+| `func_0800711C` | accesseur pointeur+offset (`self + 0x461C`) NON catalogué, ex-`.byte` bruts juste après le pool littéral de `func_08007110` | 9 (w18) | `4329ae7` |
+| `func_0800057C`, `func_08000580`, `func_08000584`, `func_08000590` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_08000568` : 2 stubs placement-new (`operator new(size_t,void*)`/`new[]`), 2 thunks vers `operator new`/`delete` (forme identique à `__builtin_vec_new`/`__builtin_vec_delete` déjà compilés dans `src/new.cc`) | 9 (w18) | `7fd2ab1` |
+| `func_080099EC`, `func_08009A04`, `func_08009A2C`, `func_08009A38` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_080099D4` : 2 constructeurs qui stampent des vtables déjà connues (`vtable_unk_080E5BB4`/`080E5BD8`/`080E5BE8`), 1 prédicat "sentinelle vide" assorti, 1 utilitaire sans rapport (test non-nul branchless) | 9 (w18) | `d417e87` |
+| `func_080100F0`, `func_08010104`, `func_08010118`, `func_08010128`, `func_08010138`, `func_08010148`, `func_0801014C` | 7 accesseurs NON catalogués, ex-`.byte` bruts après `func_0801004C` : 6 lisent le global déjà connu `gUnk_0300040C` à divers offsets constants, 1 retourne une constante entière brute | 9 (w18) | `dc8fd26` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -850,8 +904,6 @@ suit cette convention plutôt que `r0` direct).
    liste (round dédié worktree `parallel-1`) : classe "ABI partagée
    entre `bl`", structurellement infaisable en C, cf. section dédiée
    ci-dessus. Ne pas re-tenter.
-||||||| 88b3c2e
-||||||| 43c9148
 5. ~~`func_08010F04`, `func_08010F1C`~~ -- matchés round 7 (w14), voir
    tableau des matchs ci-dessus. ~~Piste annexe découverte en les
    portant~~ : le getter GameState NON catalogué à `0x08010F14` (7 bits
@@ -862,7 +914,6 @@ suit cette convention plutôt que `r0` direct).
    piste non explorée plus loin : peut-être appelé via une table
    indirecte, ou mort. Aucun symbole officiel trouvé ailleurs (Ghidra/
    dépôt patch non consultés ce round, nom `func_ADDR` gardé par défaut).
-||||||| 43c9148
 4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
    la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté
    dépôt patch). Dimensionnée round 6 : 0x6F4 octets (~800 lignes de
