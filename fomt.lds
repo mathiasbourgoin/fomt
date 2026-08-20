@@ -94,6 +94,8 @@ SECTIONS
         asm/code_08008AE0.o(.text);
         src/code_08008DB8.o(.text);
         asm/code_08008DE8.o(.text);
+        src/code_080098DC.o(.text);
+        asm/code_08009908.o(.text);
         src/code_080099EC.o(.text);
         src/farm.o(.text);
         src/field.o(.text);
