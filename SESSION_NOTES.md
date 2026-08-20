@@ -7564,3 +7564,88 @@ ont été vérifiées ensemble).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - Aucun recoupement avec w45/w48 (cibles `func_0803A798`/`func_0803BF78`
   jamais touchées ce round).
+
+## Round w50 -- symbolisation du premier tiers de `asm/vtables.s` (mission cross-cutting, portion `vtable_unk_080E59EC` à `vtable_unk_080E6A98`)
+
+Mission différente du matching habituel, lancée après le bug crash vécu
+(un trampoline de hook mal dimensionné a décalé une fonction, rendant
+faux un pointeur de vtable codé en dur -- crash direct au milieu d'une
+fonction au lieu de son début). Objectif : remplacer les blobs `.incbin`
+bruts des vtables C++ par des `.4byte` symboliques référençant les labels
+déjà existants dans le dépôt, pour que le linker recalcule automatiquement
+en cas de futur décalage -- élimine la classe de bug pour de bon, pour la
+portion traitée.
+
+### Méthode
+
+- Baseline : rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map &&
+  make` avec `build/franglais_stub.bin` factice) -> `sha1sum fomt.gba` =
+  `edc0b545851bf6b921d979a5de0e8e9c20611b9a`.
+- Résolution des labels faite depuis la table de symboles de l'ELF LIÉ
+  (`arm-none-eabi-nm fomt.elf`), PAS depuis un grep statique sur
+  `asm/*.s`/`src/*.cc` -- découverte en cours de route : un grep statique
+  (thumb_func_start + `ALIAS()`) sur-résout, car il suppose que le nom
+  `func_ADDR` désigne encore l'adresse ADDR dans le lien ACTUEL, ce qui
+  n'est plus garanti si un décalage préexistant traîne déjà dans l'arbre
+  (le check `sha1sum -c fomt.sha1` global est désactivé depuis `cb06198`,
+  donc plus aucun garde-fou global ne détecterait un tel décalage résiduel
+  avant cette mission). Exemple concret trouvé : `func_08010158` (nom
+  canonique, adresse vanilla censée être `0x08010158`) est actuellement lié
+  à `0x0801006C` dans CE build (`-0xEC` de décalage) -- un octet brut de
+  vtable référençant littéralement `0x08010159` (bit thumb inclus) NE DOIT
+  PAS être réécrit `.4byte func_08010158`, sous peine de changer le
+  contenu binaire (le linker recalculerait la VRAIE adresse actuelle,
+  différente de l'octet brut déjà en place). Règle appliquée : un mot n'est
+  symbolisé QUE si l'adresse qu'il encode correspond EXACTEMENT à l'adresse
+  ACTUELLE (post-lien) d'un symbole existant -- pas juste "un symbole du
+  même nom existe quelque part".
+- Pour chaque mot de 4 octets de chaque blob de ma portion (107 vtables,
+  lignes 3-524 de `asm/vtables.s`) : si nul -> `.4byte 0` inchangé (mots de
+  préfixe MI/RTTI, cf. `DECOMP_ARCHIVE.md` "2 mots nuls de préfixe") ; si
+  bit thumb posé (`val & 1`) ET qu'un symbole `T`/`t`/`W`/`w` de `nm`
+  atterrit EXACTEMENT à `val & ~1` -> `.4byte NOM` (nom sémantique préféré
+  si déjà porté, sinon `func_ADDR`, sinon `vtable_unk_ADDR`) ; sinon ->
+  `.4byte 0xVALEUR @ no label yet` littéral inchangé, aucun label inventé.
+- Script Python jetable (`/tmp/w50_vtable_apply.py`, pas commité --
+  scratch de session) a fait la substitution mécaniquement sur toute la
+  portion en une passe, à partir de la table nm dumpée dans
+  `/tmp/w50_syms.txt`.
+
+### Résultat
+
+- 107 vtables touchées, 980 mots au total.
+- **214 mots symbolisés** : 173 vers `__pure_virtual` (stub partagé de
+  méthode virtuelle non implémentée, symbole réel de `src/pure_virtual.o`,
+  PAS inventé -- trouvé dans la table `nm`, pas dans un grep statique) +
+  ~41 vers des fonctions réellement portées/connues (`func_0800371C`,
+  `func_0800374C`, etc.).
+- **213 mots laissés `.4byte 0`** (préfixes offset-to-top/RTTI nuls,
+  layout `-fvtable-thunks` standard, pas des pointeurs manquants).
+- **553 mots laissés littéraux `@ no label yet`** : soit valeurs non-code
+  (offsets de this-adjustment MI, ex. `0xFFFFFFE4`, bit thumb absent),
+  soit adresses de code dont AUCUN symbole n'atterrit exactement à cette
+  adresse dans le lien actuel -- inclut potentiellement des fonctions déjà
+  connues mais actuellement décalées (cf. `func_08010158` ci-dessus) : ne
+  pas retenter de les résoudre par nom sans revérifier individuellement
+  contre `nm`, le décalage peut avoir changé entre deux rounds.
+
+### Vérification
+
+- Rebuild complet après édition (mêmes commandes que la baseline) ->
+  `sha1sum fomt.gba` = `edc0b545851bf6b921d979a5de0e8e9c20611b9a`, **identique
+  bit à bit** à la baseline. Aucune erreur de lien (aucune référence non
+  définie, aucune définition multiple) -- `pure_virtual.o`/tous les objets
+  `func_ADDR`/`.cc` référencés étaient déjà dans le lien avant cette
+  mission.
+- `git status --short` : seul `asm/vtables.s` modifié.
+
+### État du worktree en fin de round
+
+- 1 commit (voir message ci-dessous), seul `asm/vtables.s` modifié +
+  `SESSION_NOTES.md`.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant commit.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Portion traitée : `vtable_unk_080E59EC` à `vtable_unk_080E6A98` (premier
+  tiers de `asm/vtables.s`, lignes 3-524) uniquement -- les 2/3 restants
+  (jusqu'à la fin du fichier) sont hors scope de ce round, traités par
+  d'autres agents en parallèle sur d'autres worktrees.
