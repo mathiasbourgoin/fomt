@@ -152,6 +152,32 @@ SECTIONS
         asm/code_0807F5F0.o(.text);
         src/code_0808048C.o(.text);
         asm/code_080804CC.o(.text);
+        src/code_08080DC4.o(.text);
+        asm/code_08080E04.o(.text);
+        src/code_08081A70.o(.text);
+        asm/code_08081AB0.o(.text);
+        src/code_08082144.o(.text);
+        asm/code_08082184.o(.text);
+        src/code_08083AEC.o(.text);
+        asm/code_08083B2C.o(.text);
+        src/code_08085528.o(.text);
+        asm/code_08085568.o(.text);
+        src/code_080881AC.o(.text);
+        asm/code_080881EC.o(.text);
+        src/code_0808AB68.o(.text);
+        asm/code_0808ABA8.o(.text);
+        src/code_0808C59C.o(.text);
+        asm/code_0808C5DC.o(.text);
+        src/code_0808ED08.o(.text);
+        asm/code_0808ED48.o(.text);
+        src/code_08090E84.o(.text);
+        asm/code_08090EC4.o(.text);
+        src/code_080925C4.o(.text);
+        asm/code_08092604.o(.text);
+        src/code_080931E0.o(.text);
+        asm/code_08093220.o(.text);
+        src/code_08093A88.o(.text);
+        asm/code_08093AC8.o(.text);
         src/code_0809A518.o(.text);
         asm/code_0809A558.o(.text);
 
@@ -176,6 +202,8 @@ SECTIONS
         asm/code_080B3C3C.o(.text);
         src/code_080BC8C0.o(.text);
         asm/code_080BC8F0.o(.text);
+        src/code_080C0D44.o(.text);
+        asm/code_080C0D74.o(.text);
         src/code_080C7ED0.o(.text);
         asm/code_080C7F00.o(.text);
 
@@ -209,6 +237,8 @@ SECTIONS
         asm/code_080E09BC.o(.text);
         *(.gnu.linkonce.t.__lower_bound__H4ZPC12JumpTableEntZiZ28ScriptJumpTableSearchCompareZl_X01T0RCX11X21PX31_X01);
         asm/code_linkonce.o(.text.code_080E0EF0);
+        src/code_080E41B0.o(.text);
+        asm/code_080E41E8.o(.text);
 
         *(.gnu.linkonce.d.__vt_6AScene);
         *(.gnu.linkonce.d.__vt_13AUnk_0800080C);

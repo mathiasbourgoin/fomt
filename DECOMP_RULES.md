@@ -175,7 +175,6 @@ seule variable (le paramètre pointeur de sortie, évincé vers `ip` par
 l'original dès la 1re instruction, jamais reproduit malgré une forme C
 jugée par ailleurs correcte), `func_0800736C` (round 2), `func_0804E4AC`
 (round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
-||||||| 43c9148
 **3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
 `func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
 (round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
@@ -199,7 +198,6 @@ REGISTRE (pseudo-valeur pré-allocation), pas sur l'identité de variable
 source -- aucune des 5 formulations testées (if plat, goto/label
 partagé, appel à `AllocEntry` avec ou sans variable de retour distincte)
 n'a préservé le second check. Signature du problème : une fonction avec
-||||||| 43c9148
 (round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
 (round 3, `DrawGlyphAt`). Round 6 identifie un 4e candidat mais NE
 TENTE PAS le port -- `func_080AC674` (analyse complète en asm/champ
@@ -219,7 +217,6 @@ récupérable juste en relisant l'ordre des instructions, il faut deviner
 la forme EXACTE de l'expression C source pour forcer le même pic de
 pression de registres. **Ne pas re-tenter cette classe sans budget de
 plusieurs rounds dédiés.** Signal d'alerte AVANT de commencer une
-||||||| 43c9148
 **3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
 `func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
 (round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
@@ -496,15 +493,16 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
 | `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
 | `func_08010158` | destructeur dérivé, classe construite par `func_080D3EF4` (0x554 octets, membre `ScriptEngine` à +8) -- variante SIMPLE (appels directs, pas de dispatch virtuel) de la famille "riche" | 6 | `a85f4b1` |
-||||||| 43c9148
 | `func_0800371C`, `func_08004BDC`, `func_080059D0`, `func_080070A4` | famille "riche" : destructeur dérivé + teardown conditionnel d'un champ enfant à `self+4` | 6 | `ef58287` |
-||||||| 43c9148
 | `func_0809A518` | destructeur "riche" de la famille des ~23, 2 enfants (offset+4 MI, offset+8 plain) | 6 (w7) | `95a55f3` |
 | `func_080C7ED0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e902a6c` |
 | `func_080BC8C0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `3f33b7d` |
 | `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
 | `func_080521BC`, `func_08057E1C`, `func_0805CEFC`, `func_0805E658`, `func_0805FD04`, `func_08069E58`, `func_0807561C`, `func_0807DD68`, `func_0807EE44`, `func_0807F5B0`, `func_0808048C` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain) | 6 (w11) | commits successifs (voir `git log`) |
 | `func_0806D918`, `func_0806EA00`, `func_080709D8` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w11) | commits successifs (voir `git log`) |
+| `func_08080DC4`, `func_08081A70`, `func_08082144`, `func_08083AEC`, `func_08085528`, `func_080881AC`, `func_0808AB68`, `func_0808C59C`, `func_0808ED08`, `func_08090E84`, `func_080925C4`, `func_080931E0`, `func_08093A88` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), même corps que `func_0809A518` | 7 (w12) | `e1b1931`, `1f085cf`, `7c09c6d`, `0271566`, `91f7ebe`, `5b09238`, `0f8825f`, `3c6bf9f`, `7631bff`, `228b133`, `9b04a4d`, `d1cc3d2`, `ef78680` (1 commit/fonction) |
+| `func_080C0D44` | destructeur "riche", 1 enfant offset+4 (MI) | 7 (w12) | `18e8b5e` |
+| `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -602,9 +600,63 @@ restent à traiter, cf. worktree w12**), ~~0809A518, 080B3C0C, 080BC8C0,
 à traiter). **8 + 14 = 22 matchés sur les 37 sites de la famille**, 15
 restants (worktree w12 en cours sur la seconde moitié de la liste
 restante).
+ou un autre patron pas encore vu). Triés par adresse croissante :
+0800371C, 08004BDC (**4 premiers, matchés round 6**), 080059D0,
+080070A4, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
+08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
+0807F5B0, 0808048C, 08080DC4, 08081A70, 08082144, 08083AEC, 08085528,
+080881AC, 0808AB68, 0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0,
+08093A88, 0809A518, 080B3C0C, 080BC8C0, 080C0D44, 080C7ED0, 080E41B0.
+**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante** ;
+un worktree parallèle (w7) travaille la seconde moitié -- pas de
+recoupement possible, worktrees git séparés.
+ou un autre patron pas encore vu). Triés par adresse croissante,
+~~biffés~~ = matchés :
+
+~~0800371C~~, ~~08004BDC~~ (4 premiers, matchés round 6), ~~080059D0~~,
+~~080070A4~~, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
+08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
+0807F5B0, 0808048C, ~~08080DC4~~, ~~08081A70~~, ~~08082144~~,
+~~08083AEC~~, ~~08085528~~, ~~080881AC~~, ~~0808AB68~~, ~~0808C59C~~,
+~~0808ED08~~, ~~08090E84~~, ~~080925C4~~, ~~080931E0~~, ~~08093A88~~,
+~~0809A518~~, ~~080B3C0C~~, ~~080BC8C0~~, ~~080C0D44~~, ~~080C7ED0~~,
+~~080E41B0~~.
+
+**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante ;
+worktree w7 a pris `0809A518`/`080C7ED0`/`080BC8C0`/`080B3C0C`.
+Round 7 (worktree w12) a pris les 15 derniers de la liste restante**
+(`08080DC4` -> `080E41B0`, en incluant les 13 sites plus tard vus dans
+`asm/code_0805E760.s`, `080C0D44` dans `asm/code_080BC8F0.s`, et
+`080E41B0` dans `asm/code_linkonce.s`) -- **les 15 ont matché du premier
+coup**, tous suivant l'un des 3 corps déjà connus (2-enfants façon
+`func_0809A518` pour 13 d'entre eux, 1-enfant façon `func_080B3C0C` pour
+`func_080C0D44`), sauf `func_080E41B0` qui introduit une 4e variante,
+voir section dédiée juste en dessous.
+
+**Il ne reste plus que `080521BC` à `0808048C` (13 sites) à traiter dans
+cette famille** -- pris par un autre worktree en parallèle (w11) au
+moment du round 7, cf. répartition ci-dessus.
+
+### Variante "sans restamp de vtable propre" (round 7, `func_080E41B0`)
+
+Un seul site vu jusqu'ici sur les 15 traités ce round : `func_080E41B0`
+a exactement le corps "2 enfants" (`self+8` plain puis `self+4` MI, même
+ordre, même `_call_via_r2`/arg `3`) mais **ne stocke aucune valeur à
+`[r4]` (self+0) et ne référence aucun littéral `vtable_unk_ADDR`** --
+confirmé en lisant le désassemblage brut au complet, aucune instruction
+`str r0, [r4]` ni pool littéral pour une vtable dans le corps entier. Ne
+pas deviner pourquoi (candidats non vérifiés : classe intermédiaire dont
+le vtable stamp est fait ailleurs par un caller, ou un cas où le
+compilateur a pu élider un stamp redondant) -- porté strictement tel
+quel : la struct C locale garde un champ `unk_00` (offset 0) jamais
+écrit, seuls `unk_04`/`unk_08` sont lus. Confirmé bit-exact via
+`make compare` en rebuild propre. **Si un futur site montre ce même
+manque de stamp, vérifier d'abord s'il partage un point commun
+structurel avec `func_080E41B0`** (ex. serait-il appelé UNIQUEMENT
+depuis un autre destructeur "riche" déjà-stampé plutôt que directement
+depuis une vtable ?) avant de généraliser une explication.
 
 ## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
-||||||| 43c9148
 ## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
 ## Piège `SmartPtr<T>` : ne jamais nommer localement une valeur de retour
 
@@ -634,7 +686,6 @@ suit cette convention plutôt que `r0` direct).
    _call_via_r2`), toujours **ne pas deviner le layout du champ enfant à
    l'offset +4 avant de le caractériser côté dépôt patch** (Ghidra sur
    2-3 exemples).
-||||||| 43c9148
 2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
    d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
    enfant à l'offset +4 avant de le caractériser côté dépôt patch**
@@ -649,7 +700,6 @@ suit cette convention plutôt que `r0` direct).
    NE PAS oublier une fonction non-portée intercalée entre deux
    découpages dans le même fichier, cf. `func_080070D4` oubliée puis
    retrouvée via `undefined reference` au link).
-||||||| 43c9148
 2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
    d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
    enfant à l'offset +4 avant de le caractériser côté dépôt patch**
@@ -664,7 +714,6 @@ suit cette convention plutôt que `r0` direct).
    `code_linkonce.s` compris, pas encore attaqué -- cf.
    `SESSION_NOTES.md` round 6 "What's left in this family").
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-||||||| 43c9148
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. **`func_08004C68` (round 6, tenté, NON convergé)** : identifié avec
    certitude structurelle comme `Run()` de la classe scène de
@@ -680,7 +729,6 @@ suit cette convention plutôt que `r0` direct).
    `func_08007110`/`func_080070A4`, avant de retenter le port complet
    de `func_08004C68` lui-même.
 4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-||||||| 43c9148
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. `func_0804E4AC` (`DrawGlyphAt`, plain) -- round 6 : near-miss à UNE
    instruction de 2 octets près (250/252 octets), tout le reste du
@@ -698,7 +746,6 @@ suit cette convention plutôt que `r0` direct).
    script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
    "pression de registres", cf. section dédiée ci-dessus -- pas sans
    gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
-||||||| 43c9148
    cf. règle "point de vue vanilla" ci-dessus), `Unpack` (`0x080D102C`,
    référence Python déjà disponible côté patch repo), table de dispatch
    script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
@@ -712,7 +759,6 @@ suit cette convention plutôt que `r0` direct).
    liste (round dédié worktree `parallel-1`) : classe "ABI partagée
    entre `bl`", structurellement infaisable en C, cf. section dédiée
    ci-dessus. Ne pas re-tenter.
-||||||| 43c9148
 4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
    la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté
    dépôt patch). Dimensionnée round 6 : 0x6F4 octets (~800 lignes de

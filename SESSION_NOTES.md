@@ -1304,7 +1304,6 @@ succeeded) on the first attempt.
   in the `.s` file so needs its own small split) and `func_08010F1C`
   (getter on byte 3, needs the exact bitfield width worked out before
   writing the C, unlike the plain single-bit getters/setters).
-||||||| 43c9148
 
 ## Round 6
 
@@ -1469,7 +1468,6 @@ directory unexpectedly in this environment, verify with `python3 -c
   "direct-calls-only" shape `func_08010158` turned out to have, before
   assuming they all need the harder child-layout characterization work;
   (3) everything still open from rounds 1-5's priority lists (unchanged).
-||||||| 43c9148
 
 ## Round 6 (worktree w3, parallel-3) -- first half of the "richer" AScene-derived destructor family matched
 
@@ -1575,7 +1573,6 @@ Verified bit-exact via two independent full clean rebuilds
   didn't already cover it) can reuse the exact same body template,
   changing only the `vtable_unk_ADDR` constant per site, and the same
   quicktest-first-then-split workflow documented above.
-||||||| 43c9148
 
 ## Round 6 -- `func_0800736C` (OBJ-palette allocator) retried, real progress,
 still not bit-exact -- documented honestly, nothing committed
@@ -1801,7 +1798,6 @@ starting and after finishing this round's experimentation.
   already reflected in the matched `func_080071BC` (`FreeEntry`/`Alloc`
   cycle) and doesn't depend on `func_0800736C` itself being ported to be
   usable by that investigation.
-||||||| 43c9148
 
 ## Round 6
 
@@ -2037,7 +2033,6 @@ sanity check of the ABI/signature analysis above:
      `DrawGlyphAt`/recolor, `docs/DIALOGUE.md`,
      `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
      `docs/MFOMT_ADDITIONS.md`).
-||||||| 43c9148
 
 ## Round 6
 
@@ -2220,7 +2215,6 @@ through `+0xFDF` of `object_base+4` hold 13 `DefinedSprite`-typed
 sub-objects (per-costume/pose sprite archives), which is the kind of
 field a sprite-swap patch (Claire's alternate archives) would plausibly
 need to enumerate.
-||||||| 43c9148
 
 ## Round 6 (this session, worktree `w7`/branch `parallel-7`) -- child-object
 field layout for the "~23 richer destructors" family finally characterized
@@ -2373,7 +2367,6 @@ should be a same-day match rather than exploratory work.
   nothing pushed, no PR, no network action against origin, no `git push`
   attempted or considered.
 - Working tree clean at the end of the round.
-||||||| 43c9148
 
 ## Round 6 -- systematic shape-hunt on `func_0804E4AC` (`DrawGlyphAt`, plain):
 real progress, still not matched, honest near-miss with the gap fully
@@ -2612,7 +2605,6 @@ budget already spent getting this close.
   still-`asm/`-resident original -- caught and fixed before finishing).
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
-||||||| 3bf9cbd
 
 ## Round 6 (worktree w11) -- 14 sites supplémentaires de la famille "riche"
 
@@ -2669,3 +2661,87 @@ CHAQUE commit, sans exception.
   `08080DC4, 08081A70, 08082144, 08083AEC, 08085528, 080881AC, 0808AB68,
   0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0, 08093A88, 080C0D44,
   080E41B0`.
+
+## Round 7 (worktree w12, isolated) -- last 15 sites of the "~37 richer
+destructors" family
+
+Assigned range: second half of the 29 still-unmatched sites from the
+family list in `DECOMP_RULES.md`, specifically the last ~14-15 by
+ascending address, from `08080DC4` through `080E41B0` (a parallel
+worktree, w11, took the first half `080521BC`..`0808048C`). All 15 sites
+matched, all on the first attempt -- no near-misses, no failed tries to
+report.
+
+### Classification pass (before touching anything)
+
+Read the raw disassembly of all 15 target addresses first, per
+`DECOMP_RULES.md`'s explicit instruction to re-scan rather than assume.
+Result:
+
+- **13 sites** (`08080DC4`, `08081A70`, `08082144`, `08083AEC`,
+  `08085528`, `080881AC`, `0808AB68`, `0808C59C`, `0808ED08`, `08090E84`,
+  `080925C4`, `080931E0`, `08093A88`) -- all consecutive inside the same
+  monolithic file `asm/code_0805E760.s` -- match the "2-child" body
+  exactly as already characterized for `func_0809A518`: own vtable
+  stamp at self+0, conditional teardown of `self+8` (plain child, vtable
+  at pointee+0) then `self+4` (MI-shaped child, vtable at pointee+4),
+  tail-call to `func_080007EC`. Byte-for-byte identical shape across all
+  13, only the `vtable_unk_ADDR` constant differs per site.
+- **1 site** (`080C0D44`, in `asm/code_080BC8F0.s`) matches the simpler
+  "1-child" body already characterized for `func_080B3C0C`/
+  `func_080C7ED0`/`func_080BC8C0`: vtable stamp + single conditional
+  teardown of `self+4` only, no `self+8` field at all.
+- **1 site** (`080E41B0`, in `asm/code_linkonce.s`, inside the
+  `.text.code_080E0EF0` COMDAT section) has the same "2-child" teardown
+  shape as the 13 above, but **does not stamp its own vtable at all** --
+  no `str r0, [r4]`, no `vtable_unk_ADDR` literal anywhere in the
+  function body. This is a genuinely new 4th variant of the family, not
+  seen in rounds 4-6. Ported literally (struct with an unwritten
+  offset-0 field), not guessed at semantically -- see the new
+  "Variante sans restamp de vtable propre" subsection added to
+  `DECOMP_RULES.md`. Only one instance seen so far; not enough data to
+  explain *why* yet (candidate explanations noted but explicitly flagged
+  as unverified).
+
+### Mechanics
+
+Each function required splitting its owning monolithic `asm/*.s` file at
+its `thumb_func_start`, per the documented method: automated with a small
+one-off Python script
+(`scratchpad/split_asm.py`, not committed to the repo -- pure tooling,
+lives in the session's scratch dir) that takes `(file, target_addr,
+next_addr)` and does the head/tail split + new-file creation
+mechanically, to avoid manual `sed` mistakes across 15 repeated splits.
+Each of the 13 sites in `code_0805E760.s` was split off *sequentially in
+address order*, since each split's tail file becomes the head file for
+the next split's target -- confirmed via `tail` on each new file that it
+still ends immediately before the already-known-good `func_0809A518`
+boundary (existing entry `src/code_0809A518.o(.text);` in `fomt.lds`),
+which served as a running structural sanity check the whole way through.
+`080C0D44` and `080E41B0` live in unrelated files/sections and were split
+independently, checked the same way against their known following
+neighbor (`func_080C7ED0` and end-of-file respectively).
+
+15 commits, one per function (matching the "un commit par fonction, pas
+un seul gros commit" discipline), each preceded by a from-scratch clean
+rebuild (`rm -rf build fomt.gba fomt.elf fomt.map && make compare`) that
+passed `sha1sum -c fomt.sha1` before staging/committing. Commits (oldest
+to newest): `e1b1931` (`08080DC4`), `1f085cf` (`08081A70`), `7c09c6d`
+(`08082144`), `0271566` (`08083AEC`), `91f7ebe` (`08085528`), `5b09238`
+(`080881AC`), `0f8825f` (`0808AB68`), `3c6bf9f` (`0808C59C`), `7631bff`
+(`0808ED08`), `228b133` (`08090E84`), `9b04a4d` (`080925C4`), `d1cc3d2`
+(`080931E0`), `ef78680` (`08093A88`), `18e8b5e` (`080C0D44`), `ae97047`
+(`080E41B0`).
+
+### Repo state at end of round 7 (w12)
+
+- 15 new commits (listed above), each individually verified bit-exact
+  via a full clean rebuild before being staged.
+- `DECOMP_RULES.md` updated: matched sites struck through in the "37
+  sites" list, historique table extended, new vtable-less variant
+  documented.
+- `origin` push URL untouched, nothing pushed, no PR.
+- Working tree clean at the end of the round.
+- **What's left in this family**: 13 sites (`080521BC` through
+  `0808048C`) not covered by this worktree -- explicitly assigned to a
+  parallel worktree (w11) for the same round, no overlap.
