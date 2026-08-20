@@ -7017,3 +7017,77 @@ caractériser d'abord les 2 helpers en boîte noire avant de coder.
   "ordre d'évaluation des arguments") ni avec les cibles en pause
   (`func_0803BDFC`, `func_08083A7C`, `func_08075334`, `DrawGlyphAt`
   recolor).
+
+## Round w46 (suite) : match `func_080222A8`, cible sœur plus dure (`r8`
++ 2 helpers)
+
+Enchaîné dans la foulée sur la cible sœur restante identifiée ci-dessus.
+`func_080222A8` (`asm/code_entities.s`) est la même sous-variante
+("self" déjà alloué par l'appelant, propre vtable stampée à `self+4`
+après délégation à `func_080324BC`), mais garde `ctx` vivant dans `r8` à
+travers 2 appels supplémentaires à des helpers feuille triviaux
+(`func_08022320`/`func_08022334`, tous deux un simple dispatch par
+valeur sur leur unique argument -- `0`/`1` -> une valeur, tout le reste
+-> une autre -- caractérisés en boîte noire, pas portés) qui calculent
+les arguments-pile `a`/`b` de l'appel délégué à partir du 3e argument
+`x` :
+
+```c
+int a = func_08022320(x);
+int b = func_08022334(x);
+func_080324BC(self, ctx, 5, 13, a, b, 0, false);
+*(void**)(self+4) = vtable_unk_080E64B4;
+```
+
+Convergé du PREMIER coup en harnais rapide, aucun near-miss malgré
+l'usage de `r8` -- la crainte "pression de registres" annoncée dans
+`DECOMP_ARCHIVE.md` ne s'est pas matérialisée ici (seulement 2 valeurs
+vivantes simultanées via `r8`/pile, pas la accumulation `r8`+`sb`+`sl`
+qui caractérise les vraies cibles bloquées).
+
+Découpage : `asm/code_entities.s` coupé juste avant
+`thumb_func_start func_080222A8` (ligne 3271 d'origine) ; nouveau
+fragment `asm/code_08022320.s` recommence AVANT le blob `.byte` orphelin
+`.L080222F4` (44 octets, entre la fin du bloc cible -- qui inclut son
+propre littéral PC-relatif `vtable_unk_080E64B4`, taille totale `0x4c`
+-- et `thumb_func_start func_08022320`) : ce blob n'appartient pas à la
+fonction portée, il migre tel quel en tête du nouveau fichier, comme la
+suite naturelle du fichier d'origine à cet endroit -- pas un cas de
+l'anti-pattern #14 (`.align` de padding), le blob est du contenu réel
+(vraisemblablement un fragment de scan de blobs cachés déjà catalogué
+ailleurs, non retouché ici).
+
+**Vérification** (même standard qu'au round précédent) :
+1. Taille `.text` de `build/src/code_080222A8.o` = `0x4c`, égale à
+   `next_addr - this_addr` (`0x080222F4 - 0x080222A8`), littéral de
+   vtable inclus.
+2. Désassemblage du `.o` fraîchement compilé comparé instruction par
+   instruction à `baserom.gba` borné à `[0x080222A8, 0x080222F4)` --
+   identique (seules les cibles de `bl`/le littéral de vtable diffèrent,
+   relocations non résolues dans un `.o` isolé, normal).
+3. Désassemblage de `fomt.gba` (lien complet, ROM décalée par le payload
+   franglais) à l'adresse RÉELLEMENT liée `0x080221b4` (cf. `fomt.map`)
+   -- identique aussi, relocations cette fois résolues correctement
+   (cibles de `bl` décalées de manière cohérente, littéral de vtable
+   résolu vers la vraie adresse de `vtable_unk_080E64B4`).
+4. Rebuild propre + lien complet sans erreur ; `sha1sum -c fomt.sha1`
+   échoue toujours (attendu, documenté depuis `cb06198`).
+5. Sweep : `grep -rl ".L080222A8\|.L080222F0\|.L080222F4" asm/*.s` ->
+   seul `asm/code_08022320.s` (nouvelle maison légitime du label du
+   blob), aucune duplication.
+
+Commit `6709750` (`decomp: match func_080222A8, harder "self
+pre-allocated" entity-factory sibling`), local à `parallel-46`.
+
+### État du worktree en fin de round (après les 2 matchs)
+
+- 2 matchs commités ce round (`func_08032A00` commit `ff4fa30`,
+  `func_080222A8` commit `6709750`), tous deux vérifiés octet à octet
+  selon le nouveau standard isolé.
+- La sous-variante "self déjà alloué + stamp vtable propre après
+  délégation" documentée dans `DECOMP_ARCHIVE.md` est maintenant
+  ENTIÈREMENT close : ses 2 seuls sites connus sont matchés.
+- `git status --short` propre après commit.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Aucun recoupement avec w45 ni avec les cibles en pause (inchangé
+  depuis l'entrée précédente).
