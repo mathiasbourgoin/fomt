@@ -108,7 +108,15 @@ gros budget
 
 **3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
 `func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
+(round 3, `DrawGlyphAt`). Round 6 identifie un 4e candidat mais NE
+TENTE PAS le port -- `func_080AC674` (analyse complète en asm/champ
+mémoire faite, `param_2` élucidé avec certitude statique, voir
+`SESSION_NOTES.md` round 6) utilise `r8`+`sb`+`sl`+`ip` simultanément
+sur ~180 instructions (pire que les 3 précédents), avec en plus deux
+boucles d'init de pool ET 13 sites d'appel `func_0805E6CC` dont
+plusieurs offsets sont des incréments du registre d'ITÉRATION
+PRÉCÉDENTE plutôt que des littéraux frais -- signal d'alerte cumulé,
+pas juste un des symptômes. Signature du problème : une fonction avec
 **beaucoup de valeurs simultanément vivantes** (dépilement de liste
 libre, parcours de section déroulée, ou ici un blit conditionnel à 4
 tuiles avec flags), qui sature `r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où
