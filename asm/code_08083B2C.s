@@ -2380,28 +2380,3 @@ sub_080854D8: @ 0x080854D8
 	pop {r0}
 	bx r0
 
-	thumb_func_start func_080854F4
-func_080854F4: @ 0x080854F4
-	push {r4, r5, r6, lr}
-	adds r4, r0, #0
-	adds r6, r1, #0
-	adds r5, r2, #0
-	ldr r0, .L08085520 @ =vtable_unk_080E7D20
-	str r0, [r4]
-	ldr r0, .L08085524 @ =0x000061F4
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_08083BD4
-	str r0, [r4, #4]
-	ldr r1, [r6]
-	movs r0, #0
-	str r0, [r6]
-	str r1, [r4, #8]
-	adds r0, r4, #0
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L08085520: .4byte vtable_unk_080E7D20
-.L08085524: .4byte 0x000061F4
-

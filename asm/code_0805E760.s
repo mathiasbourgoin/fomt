@@ -2596,28 +2596,3 @@ func_0805FBB8: @ 0x0805FBB8
 .L0805FCC8: .4byte 0x00001C41
 .L0805FCCC: .4byte gUnk_080FB1E4
 
-	thumb_func_start func_0805FCD0
-func_0805FCD0: @ 0x0805FCD0
-	push {r4, r5, r6, lr}
-	adds r4, r0, #0
-	adds r6, r1, #0
-	adds r5, r2, #0
-	ldr r0, .L0805FCFC @ =vtable_unk_080E79F8
-	str r0, [r4]
-	ldr r0, .L0805FD00 @ =0x00006430
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_0805ED4C
-	str r0, [r4, #4]
-	ldr r1, [r6]
-	movs r0, #0
-	str r0, [r6]
-	str r1, [r4, #8]
-	adds r0, r4, #0
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L0805FCFC: .4byte vtable_unk_080E79F8
-.L0805FD00: .4byte 0x00006430
-

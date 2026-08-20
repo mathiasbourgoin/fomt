@@ -42,7 +42,15 @@ vieilles notes.
   1. taille du `.text` du `.o` fraîchement compilé comparée à
      `next_addr - this_addr` (`arm-none-eabi-objdump -h build/src/code_ADDR.o`) ;
   2. diff de désassemblage borné à cette taille exacte contre l'original
-     (`--adjust-vma=0x08000000`, piège déjà documenté plus bas) ;
+     (`--adjust-vma=0x08000000`, piège déjà documenté plus bas) --
+     **vérifier le vrai CONTENU octet à octet, pas seulement que le
+     symbole atterrit à la bonne adresse dans `fomt.map`/le lien.** Bug
+     réel vécu (round 12/w35) : un premier commit passait le check
+     "adresse correcte après lien" alors que le nombre d'instructions
+     était identique mais leur ORDRE/registres différaient -- seul un
+     diff direct de l'ELF lié contre `baserom.gba` à l'adresse cible l'a
+     révélé. L'adresse qui atterrit juste ne prouve que la TAILLE est
+     bonne, pas le contenu ;
   3. optionnellement, un lien complet (avec le `franglais_stub.bin`
      factice ci-dessus) pour vérifier l'absence d'erreur structurelle
      (référence non définie, définition multiple) -- ça prouve l'absence
@@ -317,6 +325,60 @@ d'allocateur agbcp" -- voir `DECOMP_ARCHIVE.md` pour le détail complet
 (4 variantes du même idiome dans une seule fonction). Généralise à toute
 future cible de la classe "pression de registres" : chercher l'aliasing
 explicite avant d'abandonner.
+
+### 12. `x & 1` testé dans un `if` : `!!(x & 1)` force l'écriture du
+résultat DANS le registre-maison de `x`, `x & 1` nu le laisse dans un
+registre scratch
+
+Near-miss d'1 instruction vu round 10 (`func_080D7944`, worktrees w28 puis
+w30) : le désassemblage cible fait `movs r0,#1` puis `ands r5,r0` (le
+masque écrase le registre déjà alloué au paramètre `flags`, ici `r5`),
+alors que TOUTE formulation naïve de `if (flags & 1)` -- y compris
+`flags &= 1; if (flags)`, `flags = flags & 1;`, `if ((flags &= 1) != 0)`,
+une variable intermédiaire nommée, ou un `do {} while(0)` autour -- compile
+systématiquement en `ands r0,r5` (résultat dans un registre scratch,
+`flags` intact mais mort ensuite, la "sauvegarde" vers son propre registre
+étant éliminée comme store mort). La seule formulation qui a fonctionné :
+la double négation explicite **`if (!!(flags & 1))`** -- le `!!` déclenche
+chez agbcp un chemin de normalisation booléenne différent qui réécrit le
+résultat dans le registre du paramètre au lieu de le garder en scratch,
+même si `flags` n'est jamais relu après. Signal pratique : si un `if (x &
+CONST)` résiste à toute reformulation de l'expression/l'assignation et
+que l'écart residuel est *exactement* "le AND écrit dans le mauvais
+registre" (taille identique, un seul encodage différent), essayer `!!()`
+avant de conclure à un mur d'allocateur irrécupérable.
+
+### 13. Argument scalaire "flag" débordant sur la pile (au-delà de r0-r3) :
+typer `bool`, pas `char`/`u8`
+
+Quand un appel passe plus de 4 arguments et que le désassemblage montre,
+pour l'un des arguments en trop (stocké sur la pile), une paire `add rX,
+sp, #N; strb rY, [rX]` (store d'un OCTET via adresse calculée) plutôt
+qu'un `str rY, [sp, #N]` (mot) direct : typer ce paramètre `char`/`u8`
+dans le prototype C++ compile mais produit un `str` (mot) -- agbcp
+promeut apparemment `char` comme les autres scalaires dans ce contexte
+d'argument-sur-pile. Typer **`bool`** (et passer `true`/`false`) restaure
+exactement la paire `add`+`strb`. Vu round (worktree w40, famille
+"entity factory" de 38 sites autour de `func_080324BC`) : bit-exact sur
+tous les sites une fois `char d` remplacé par `bool d`.
+
+### 14. Découpage : un `.align 2, 0` en fin de bloc cible appartient à la
+frontière suivante, pas à la fonction portée
+
+Si le bloc `thumb_func_start` de la cible se termine par un `.align 2, 0`
+explicite juste après son dernier `bx`/`pop`/branchement de retour (padding
+zéro visible quand la fonction compte un nombre impair d'instructions
+16-bit) : NE PAS l'inclure dans le C à porter ni le supprimer avec le
+reste du bloc -- le faire migrer en tête du fragment `asm/*.s` SUIVANT
+(avant son propre `thumb_func_start`), comme une ligne de plus dans le
+header standard. Le padding implicite de fin de section qu'`as` ajoute
+déjà à l'objet compilé de la fonction portée rend cet `.align` déplacé un
+no-op inoffensif la plupart du temps (pas de doublon de padding) --
+vérifier via `objcopy -O binary --only-section=.text` + inspection des
+derniers octets (`00 00` attendu, pas un nop `c0 46`) plutôt que de
+supposer. Vu round (worktree w40) : 8 sites sur 38 concernés, détecté par
+une comparaison octet-à-octet (pas seulement mnémonique) entre le bloc
+original réassemblé tel quel et le C compilé.
 
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
