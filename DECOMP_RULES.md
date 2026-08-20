@@ -60,6 +60,20 @@ dès que le désassemblage montre une paire `lsls`/`lsrs` sans littéral.
 Vu 2 fois, généralise (`func_0800736C` round 2, `func_0804E8F0`/
 `func_0804E958` round 3).
 
+### 1bis. Formule pour déduire la largeur/position exacte d'un bitfield
+lu via double-shift AVANT d'écrire le C
+
+Quand le désassemblage lit directement un champ via `ldrb`/`ldrh`/`ldr`
+suivi d'une paire `lsls #S1` puis `lsrs #S2` (sans `ands` entre les deux),
+c'est l'extraction d'un champ non-signé de largeur `N = 32 - S2` bits,
+démarrant au bit `P = (32 - S1) - N` du mot chargé. Vérifié round 7
+(`func_08010F04`, `S1=27,S2=31` -> 1 bit à `P=4` soit masque `0x10` ;
+`func_08010F1C`, `S1=25,S2=26` -> 6 bits à `P=1` soit masque `0x7E>>1`).
+Écrire le C en double-shift littéral (`(u32)(champ) << S1 >> S2`), pas en
+`(champ >> P) & mask`, cohérent avec l'anti-pattern #1 ci-dessous -- les
+deux formes ont le même résultat arithmétique mais seule la première
+reproduit l'absence de `ands`/littéral dans le désassemblage cible.
+
 ### 2. Branches "mortes" redondantes -> `switch`/`default` explicite,
 pas `if`/`else if`
 
@@ -505,6 +519,7 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
 | `func_080521BC`, `func_08057E1C`, `func_0805CEFC`, `func_0805E658`, `func_0805FD04`, `func_08069E58`, `func_0807561C`, `func_0807DD68`, `func_0807EE44`, `func_0807F5B0`, `func_0808048C` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain) | 6 (w11) | commits successifs (voir `git log`) |
 | `func_0806D918`, `func_0806EA00`, `func_080709D8` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w11) | commits successifs (voir `git log`) |
+| `func_08010F04`, `func_08010F1C` | getters `GameState` (bit `0x10` octet 0 ; champ 6 bits octet 3 bits[1:6]) -- complètent les 4 setters round 6 | 7 (w14) | (voir `git log`) |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -712,6 +727,16 @@ suit cette convention plutôt que `r0` direct).
    liste (round dédié worktree `parallel-1`) : classe "ABI partagée
    entre `bl`", structurellement infaisable en C, cf. section dédiée
    ci-dessus. Ne pas re-tenter.
+5. ~~`func_08010F04`, `func_08010F1C`~~ -- matchés round 7 (w14), voir
+   tableau des matchs ci-dessus. Piste annexe découverte en les portant,
+   pas encore traitée : un getter GameState NON catalogué (pas de
+   `func_ADDR`/`thumb_func_start` dans le `.s` d'origine, actuellement de
+   simples `.byte` bruts) à `0x08010F14`, juste après `func_08010F0C`
+   dans `asm/code_08010F0C.s` -- décodage manuel confirme du vrai code
+   Thumb valide (`ldrh [r0,#2]; lsls #23; lsrs #25; bx lr`, champ 7 bits
+   à `P=2` d'un halfword). Avant de le porter : déterminer s'il a un
+   symbole officiel quelque part (vérifier Ghidra/le dépôt patch) plutôt
+   que d'en inventer un.
 ||||||| 43c9148
 4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
    la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté

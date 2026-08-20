@@ -2669,3 +2669,102 @@ CHAQUE commit, sans exception.
   `08080DC4, 08081A70, 08082144, 08083AEC, 08085528, 080881AC, 0808AB68,
   0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0, 08093A88, 080C0D44,
   080E41B0`.
+
+## Round 7 (worktree `w14`) -- les 2 derniers getters `GameState`
+(`func_08010F04`, `func_08010F1C`) matchés
+
+Cible assignée : les 2 getters `GameState` laissés ouverts par le round 6
+(4 setters déjà matchés dans `src/game_state.cc`). Worktree isolé, aucun
+recoupement avec `w12`/`w13` (destructeurs "riches"/autres cibles).
+
+### Analyse du bitfield (obligatoire avant d'écrire le C, cf. brief)
+
+Les deux fonctions désassemblent en une paire `ldrb`+`lsls`+`lsrs` SANS
+`ands`/littéral -- même motif que la règle "double-shift littéral" de
+`DECOMP_RULES.md`, mais ici c'est le désassemblage ORIGINAL qui l'utilise
+directement (pas une correction après coup). Formule générale pour un
+champ non-signé de largeur `N` bits démarrant au bit `P` d'un mot 32
+bits : `(x << (32-(P+N))) >> (32-N)`, donc `N = 32 - S2` et
+`P = (32-S1) - N` où `S1`/`S2` sont les deux montants de shift observés.
+
+- `func_08010F04` (`ldrb [r0]`, `lsls #27`, `lsrs #31`) : `S1=27, S2=31`
+  -> `N=1, P=4`. Un seul bit, bit `0x10` de l'octet 0 -- confirmé être le
+  même octet que les 4 setters (round 6 l'avait déjà identifié comme tel
+  sans le porter). Getter simple 0/1.
+- `func_08010F1C` (`ldrb [r0,#3]`, `lsls #25`, `lsrs #26`) : `S1=25,
+  S2=26` -> `N=6, P=1`. Champ de **6 bits** (valeurs 0-63), bits [1:6] de
+  l'octet 3 (masque `0x7E`, décalé de 1). Les bits 0 et 7 de cet octet ne
+  sont PAS touchés par ce getter -- restent non caractérisés (probablement
+  d'autres flags dans le même octet, non élucidés ici, hors scope de cette
+  cible précise).
+
+Formes C écrites en double-shift littéral (pas `(x >> n) & mask`), par
+cohérence avec la règle "anti-pattern #1" -- vérifié directement via le
+harnais rapide (compilateur+assembleur sans lien, `DECOMP_RULES.md`
+section "Itération rapide") : les deux ont matché du PREMIER coup, octet
+pour octet identiques au désassemblage cible.
+
+### Découverte annexe (non portée, notée pour un futur round)
+
+En délimitant `func_08010F0C` (fonction intercalée entre les deux cibles,
+non demandée, laissée en asm) pour l'isoler proprement, le bloc de 8
+octets `.L08010F14` juste après (actuellement des `.byte` bruts, sans
+symbole `func_ADDR`) se décode en fait comme du VRAI code Thumb valide :
+`ldrh r0,[r0,#2]; lsls r0,r0,#23; lsrs r0,r0,#25; bx lr` -- un 4e getter
+de la même famille, non catalogué (pas de `thumb_func_start` dans le `.s`
+d'origine, donc jamais repéré comme fonction). Même formule : `S1=23,
+S2=25` -> `N=7, P=2`, un champ de 7 bits (0-127) sur un HALFWORD (pas un
+octet) à l'offset 2 de l'objet. **Pas porté ce round** (hors du périmètre
+assigné, et nécessite de vérifier s'il a un symbole `func_ADDR` officiel
+quelque part avant de le nommer) -- laissé en `.byte` brut dans
+`asm/code_08010F0C.s`, signalé ici pour qu'un futur round ne le manque
+pas.
+
+### Mécanique de découpage
+
+`func_08010F04` et `func_08010F1C` ne sont PAS contiguës entre elles
+(séparées par `func_08010F0C` + les 8 octets de données ci-dessus,
+16 octets au total) -- deux découpages distincts nécessaires :
+
+1. `asm/game_state.s` tronqué juste avant `func_08010F04` (1460 lignes,
+   était 1483).
+2. `func_08010F04` seule (8 octets) -> nouveau `src/code_08010F04.cc`.
+3. `func_08010F0C` + le bloc `.byte` -> nouveau `asm/code_08010F0C.s`
+   (16 octets, fichier "du milieu" sans fonction suivante dans le même
+   fichier -- le fragment suivant en adresse, `func_08010F1C`, part
+   directement dans un `.cc` différent).
+4. `func_08010F1C` : heureusement CONTIGUË à `func_08010F24` (déjà dans
+   `src/game_state.cc`, `0x08010F1C`-`0x08010F24` puis `0x08010F24`
+   pile) -- ajoutée en TÊTE de `src/game_state.cc` (avant les 4 setters)
+   plutôt que dans un fichier séparé, aucune nouvelle entrée `fomt.lds`
+   nécessaire pour elle spécifiquement (le compilateur préserve l'ordre
+   des déclarations source, confirmé round 6, donc son emplacement en
+   tête du fichier source place ses octets AVANT ceux des 4 setters dans
+   l'objet compilé, ce qui correspond exactement à l'adresse attendue).
+5. `fomt.lds` : `asm/game_state.o(.text); src/game_state.o(.text);
+   asm/code_08010F54.o(.text);` devient `asm/game_state.o(.text);
+   src/code_08010F04.o(.text); asm/code_08010F0C.o(.text);
+   src/game_state.o(.text); asm/code_08010F54.o(.text);`.
+6. Tailles vérifiées avant contenu (`readelf -S`, méthode standard) :
+   `code_08010F04.o` = 8 octets, `code_08010F0C.o` = 16 octets,
+   `game_state.o` = 56 octets (8 + 4x12, au lieu de 48 avant ce round).
+   `rm -rf build fomt.gba fomt.elf fomt.map && make compare` bit-exact
+   au premier essai.
+
+### Repo state à la fin de ce round (w14)
+
+- Un commit attendu regroupant : `asm/game_state.s` (tronqué),
+  `asm/code_08010F0C.s` (nouveau), `src/code_08010F04.cc` (nouveau),
+  `src/game_state.cc` (fonction ajoutée en tête), `fomt.lds` (2 lignes
+  ajoutées). `make compare` vérifié bit-exact sur rebuild propre avant
+  commit.
+- Cible assignée entièrement traitée (2/2 matchés, 0 échec) -- pas de
+  budget restant investigué pour `func_08004C68` (gros morceau,
+  nécessiterait son propre round dédié) ni pour la famille des
+  destructeurs "riches" (déjà couverte par `w11`/`w12` d'après
+  `DECOMP_RULES.md`, pas de recoupement tenté par prudence).
+- `origin` intact, rien poussé, aucune PR, discipline "un seul agent actif
+  sur ce worktree" respectée (worktree isolé dédié).
+- Piste laissée pour un futur round (voir section ci-dessus) : le getter
+  non catalogué à `0x08010F14` (7 bits, offset+2, halfword), actuellement
+  toujours en `.byte` brut dans `asm/code_08010F0C.s`.
