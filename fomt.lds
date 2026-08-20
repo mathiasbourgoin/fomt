@@ -94,6 +94,8 @@ SECTIONS
         asm/more_items.o(.text);
         asm/game_scene.o(.text);
         asm/game_state.o(.text);
+        src/game_state.o(.text);
+        asm/code_08010F54.o(.text);
         src/entity.o(.text);
         src/code_entity_08020018.o(.text);
         asm/code_entities.o(.text);
