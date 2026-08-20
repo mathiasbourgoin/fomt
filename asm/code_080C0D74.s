@@ -14347,24 +14347,3 @@ func_080C7DF8: @ 0x080C7DF8
 	.align 2, 0
 .L080C7EA0: .4byte 0x000008BC
 .L080C7EA4: .4byte 0x000008C4
-
-	thumb_func_start func_080C7EA8
-func_080C7EA8: @ 0x080C7EA8
-	push {r4, r5, lr}
-	adds r4, r0, #0
-	adds r5, r1, #0
-	ldr r0, .L080C7EC8 @ =vtable_unk_080E8560
-	str r0, [r4]
-	ldr r0, .L080C7ECC @ =0x0000098C
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_080C0DCC
-	str r0, [r4, #4]
-	adds r0, r4, #0
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L080C7EC8: .4byte vtable_unk_080E8560
-.L080C7ECC: .4byte 0x0000098C
-

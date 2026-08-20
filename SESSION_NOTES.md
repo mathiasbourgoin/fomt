@@ -4075,3 +4075,130 @@ après le split (docs uniquement).
   structure du fichier. Au prochain merge, router leurs nouvelles
   entrées de table/historique vers `DECOMP_ARCHIVE.md`, pas
   `DECOMP_RULES.md`.
+## 2026-08-20, round 10 (worktree `w24`, branch `parallel-24`) -- sister-method
+hunt: 18 placement-constructor siblings of the "richer" AScene-derived
+destructor family found and matched
+
+Brief for this round: apply the "sister method" that worked well in round
+(w20) -- instead of picking a random target, search `asm/*.s` for functions
+NOT yet matched whose byte pattern strongly resembles a family ALREADY
+matched and understood in this repo, since the C model is already known and
+only needs adapting to the new site's offsets/constants. Two documented
+templates given as starting points: the ~37 "richer" derived destructors
+(all 37/37 already matched, not a target anymore) and the placement
+constructors (3 widget families already matched via `func_08004C68`'s New
+Game sequence).
+
+### Method
+
+Wrote a small parser (`/tmp/.../scratchpad/find_ctor.py`, not committed) that
+splits every `asm/*.s` file into `thumb_func_start` blocks and flags any
+block containing BOTH a `vtable_unk_ADDR` literal AND a `bl __builtin_new`
+call -- the exact double signature of the already-known placement-constructor
+shape (`func_08007078`/`func_0800598C`, round 8). Cross-referenced against
+`arm-none-eabi-nm build/src/*.o | grep ' T func_'` (built once at the start
+of the round) to exclude already-ported functions -- a naive `grep func_ADDR
+src/*.cc` first pass produced false "matched" positives because it matched
+`extern` declarations of still-opaque callees too, not just real
+definitions; `nm` on the actual build output is the only reliable oracle for
+"is this symbol really defined with a body in this repo".
+
+The candidate list, sorted by instruction count, immediately surfaced a
+cluster of ~15 functions at exactly 21 instructions, all in files whose
+names correspond to already-matched "richer" 2-child destructors' asm
+splits. Manual inspection of the first one, `func_0807EE14` (right before
+the already-matched `func_0807EE44` destructor in `asm/code_0807DDA8.s`),
+confirmed the hypothesis instantly: it stamps the EXACT SAME
+`vtable_unk_080E7C4C` that `func_0807EE44`'s destructor also stamps, and
+initializes the same two child fields (`self+4` MI, `self+8` plain) that the
+destructor tears down -- a genuine constructor/destructor pair, previously
+invisible because no one had searched for the constructor side specifically.
+
+### Matches (19 functions total, verified bit-exact, 4 commits)
+
+1. **`func_0807EE14`** (`55821f1`) -- first find, full writeup of the shape
+   in `src/code_0807EE14.cc`'s header comment and in the new
+   `DECOMP_RULES.md` section "Les constructeurs de placement, contreparties
+   de la famille 'riche'". Body: vtable stamp, `operator new(0x710)`, opaque
+   init call `func_0807E4D4(obj, a2)` stored at `self+4`, then a "move-in"
+   of the plain child at `self+8` -- reads `*a1`, zeroes `*a1`, stores the
+   old value. New C idiom not seen before in this repo (previous
+   constructors only ever allocated both children, never received one
+   pre-built via an out-parameter).
+2. **14 sisters, identical body, only vtable/size/init-callee differ**
+   (`42960fa`): `func_0805218C`, `func_080755EC`, `func_0807DD38`,
+   `func_0807F580`, `func_0808045C`, `func_08080D94`, `func_08081A40`,
+   `func_08082114`, `func_0808AB38`, `func_0808C56C`, `func_0808ECD8`,
+   `func_08090E54`, `func_080931B0`, `func_08093A58` -- each cross-checked
+   against its destructor sibling's `vtable_unk_ADDR` via `grep -l` in
+   `src/*.cc` BEFORE compiling, confirming the pairing independently of the
+   harness result. All 14 sit as the LAST function of their respective
+   already-split asm files (the simple "tail-trim + append lds entry" case,
+   no new asm file needed) -- verified individually via the quick
+   compiler+assembler harness (exact mnemonic match including the
+   `movs #k; lsls #n` constant-materialization for each distinct allocation
+   size), then all together via one clean rebuild.
+3. **`func_080A3744`** (`16aac6b`) -- 15th sister, same body, but no
+   destructor stamping `vtable_unk_080E8278` was found anywhere in the tree
+   (grep negative across `src/*.cc` and `asm/*.s`) -- ported anyway on shape
+   match alone, harness-verified bit-exact like the other 14. Needed a real
+   mid-file split (`asm/code_809E804.s`, not the last function in its file)
+   rather than the tail-trim used for the other 14 -- new
+   `asm/code_080A3774.s` holds the function that follows it.
+4. **3 more, 1-child variant (no move-in)** (`3e23c90`): `func_080BC898`,
+   `func_080C7EA8`, `func_080C0D1C` -- same shape as the ALREADY-known
+   `func_08007078`/`func_0800598C` constructors (round 8), i.e. the simpler
+   sibling of the 1-child "richer" destructors `func_080BC8C0`/
+   `func_080C7ED0`/`func_080C0D44` (already matched). Found by the same
+   scan script, just further down the candidate list (15-instruction
+   bracket instead of 21). Confirmed the same vtable pairing via `grep -l`
+   before compiling. All 3 are tail-trim splits.
+
+### Constant-materialization note (generalizes a small but real risk)
+
+Every allocation size in this family was written as a plain hex literal in C
+(`operator new(0x710)`, `operator new(0xB78)`, etc.) -- NOT hand-reproduced
+as the `movs #k; lsls #n` shift decomposition visible in the disassembly.
+agbcp picks the encoding itself from the literal value: shift-decomposable
+sizes (`0x710 = 0xe2<<3`, `0x10c = 0x86<<1`, etc.) compile to the exact same
+`movs`/`lsls` pair seen in the target, and non-decomposable sizes (`0xB78`,
+`0x98C` -- no `k<<n` with 8-bit `k` produces these) fall back to a literal
+pool load, ALSO matching the target exactly. Verified across all 18 distinct
+allocation sizes in this round without a single case needing manual shift
+reconstruction -- useful data point against over-applying anti-pattern #1
+(masks) to unrelated constant-loading contexts.
+
+### Repo state at end of round 10
+
+- 4 commits (`55821f1`, `42960fa`, `16aac6b`, `3e23c90`), each preceded by a
+  clean rebuild (`rm -rf build fomt.gba fomt.elf fomt.map && make compare`)
+  and `sha1sum -c fomt.sha1` showing "Réussi" immediately before the commit.
+- `git status --short` clean after the last commit.
+- `DECOMP_RULES.md` updated: new match-table rows + a dedicated section
+  documenting the constructor family's two variants and the constant-
+  materialization note above, for future rounds to reuse without re-deriving
+  it.
+- `origin` push URL untouched, nothing pushed, no PR, no network action.
+  Solo worktree (`w24`/`parallel-24`), no concurrent-session interference
+  observed (checked `git log`/`git status` before starting and before each
+  commit).
+- Scan script (`find_ctor.py`) left only in the session scratchpad, not
+  committed -- rerun it in a future round if hunting for more sisters of
+  this or another family; the `nm`-based "already ported" oracle it uses is
+  the reusable part.
+
+
+**Post-merge note (coordinateur)** : ce round a tourné sur `w24` avant
+l'atterrissage du commit `cb06198` ("port hooks to source build", pivot
+vers un payload embarqué réel) sur `main` -- le `Réussi` mentionné
+ci-dessus porte sur l'ancien standard (ROM entière bit-exact contre
+`baserom.gba`), qui ne s'applique plus après `cb06198`. Vérifié après
+fusion que les 19 fonctions matchées ici n'entrent en collision avec
+aucun site touché par `cb06198` (régions d'adresses disjointes dans
+`asm/code_0804E9C8.s`, seul fichier partagé). Les 3 agents (w22, w23,
+w24) ont tous été interrompus par la limite de crédit 5h du compte
+(le message d'erreur mentionnait "monthly spend limit", mais Mathias
+confirme que c'est bien la fenêtre 5h qui s'est refermée) -- w22/w23
+n'ont rien committé, w24 a committé avant de tomber. w22 (fable,
+`DrawGlyphAt`) relancé pour ne pas perdre sa progression (variante `g5`
+à -2 octets/122 instructions au moment de l'interruption).

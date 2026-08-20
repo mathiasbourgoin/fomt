@@ -18080,24 +18080,3 @@ func_080BC288: @ 0x080BC288
 	.align 2, 0
 .L080BC890: .4byte 0x00000AA8
 .L080BC894: .4byte 0x00000AEC
-
-	thumb_func_start func_080BC898
-func_080BC898: @ 0x080BC898
-	push {r4, r5, lr}
-	adds r4, r0, #0
-	adds r5, r1, #0
-	ldr r0, .L080BC8B8 @ =vtable_unk_080E8528
-	str r0, [r4]
-	ldr r0, .L080BC8BC @ =0x00000B78
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_080B3CC8
-	str r0, [r4, #4]
-	adds r0, r4, #0
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L080BC8B8: .4byte vtable_unk_080E8528
-.L080BC8BC: .4byte 0x00000B78
-

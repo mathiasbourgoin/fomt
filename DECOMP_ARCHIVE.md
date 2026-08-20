@@ -45,6 +45,10 @@ gardée ici.
 | `func_080099EC`, `func_08009A04`, `func_08009A2C`, `func_08009A38` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_080099D4` : 2 constructeurs qui stampent des vtables déjà connues, 1 prédicat "sentinelle vide" assorti, 1 utilitaire sans rapport | 9 (w18) | `d417e87` |
 | `func_080100F0`, `func_08010104`, `func_08010118`, `func_08010128`, `func_08010138`, `func_08010148`, `func_0801014C` | 7 accesseurs NON catalogués, ex-`.byte` bruts après `func_0801004C` : 6 lisent le global déjà connu `gUnk_0300040C`, 1 retourne une constante entière brute | 9 (w18) | `dc8fd26` |
 | `func_08008A68` | teardown de `func_08008980` (registre du root object démarrage, `AgbMain`/`func_0801004C`) | 9 (w21) | `2bab4c4` |
+| `func_0807EE14` | constructeur de placement, contrepartie du destructeur "riche" 2-enfants `func_0807EE44` déjà matché (`vtable_unk_080E7C4C`) : alloc+init opaque du champ MI à self+4, "move-in" du champ plain à self+8 depuis un out-param | 10 (w24) | `55821f1` |
+| `func_0805218C`, `func_080755EC`, `func_0807DD38`, `func_0807F580`, `func_0808045C`, `func_08080D94`, `func_08081A40`, `func_08082114`, `func_0808AB38`, `func_0808C56C`, `func_0808ECD8`, `func_08090E54`, `func_080931B0`, `func_08093A58` | 14 sœurs de `func_0807EE14` (même forme exacte), une par site restant de la famille "riche" 2-enfants déjà cataloguée | 10 (w24) | `42960fa` |
+| `func_080A3744` | 15e sœur de `func_0807EE14`, mais AUCUN destructeur stampant `vtable_unk_080E8278` trouvé dans le dépôt -- porté par pure similarité de forme | 10 (w24) | `16aac6b` |
+| `func_080BC898`, `func_080C7EA8`, `func_080C0D1C` | 3 constructeurs de placement, variante 1-enfant (sans move-in), contreparties des destructeurs "riches" 1-enfant `func_080BC8C0`/`func_080C7ED0`/`func_080C0D44` déjà matchés | 10 (w24) | `3e23c90` |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
@@ -254,6 +258,61 @@ pris les 4 premiers par adresse croissante (`0800371C`, `08004BDC`,
 `080B3C0C` ; w11 a pris 11+3 sites (2-enfants et 1-enfant) ; round 7/w12
 a pris les 15 derniers (`08080DC4` -> `080E41B0`), tous matchés du
 premier coup en suivant l'un des 3 corps déjà connus.
+
+## Les constructeurs de placement, contreparties de la famille "riche" des destructeurs (round 10, w24)
+
+Trouvés par méthode sœur pure (round 10) : chaque destructeur "riche" déjà
+matché (vtable + teardown d'un ou deux champs enfant, section précédente)
+a un CONSTRUCTEUR jumeau ailleurs dans `asm/*.s`, jamais répertorié tant
+qu'on ne cherchait que le côté destructeur. Signature grep pour les
+retrouver : un bloc `thumb_func_start` qui contient À LA FOIS un littéral
+`vtable_unk_ADDR` ET un `bl __builtin_new` -- un script Python parcourant
+tous les blocs de `asm/*.s` avec ce double critère, croisé avec
+`arm-none-eabi-nm build/src/*.o | grep ' T func_'` pour exclure les
+fonctions déjà portées, suffit à les lister tous d'un coup (script laissé
+en scratch, non commité -- à refaire au besoin ; attention à un piège
+vécu round 10 : un `grep func_ADDR src/*.cc` naïf produit de faux
+positifs "déjà porté" car il matche aussi les déclarations `extern` de
+callés encore opaques, pas seulement les vraies définitions -- `nm` sur
+le build réel est le seul oracle fiable).
+
+Deux variantes vues, toutes deux avec EXACTEMENT le même corps d'un site
+à l'autre (seuls la constante `vtable_unk_ADDR`, la taille d'allocation,
+et le nom de la fonction d'init opaque changent) :
+
+**Variante 2-enfants** (contrepartie de la famille "riche" 2-enfants,
+`self+4` MI / `self+8` plain) -- `func_0807EE14` et 14 sœurs :
+```c
+void *ctor(void *self, void **a1, void *a2)
+{
+    *(void **)self = vtable_unk_ADDR;
+    void *obj = operator new(SIZE);
+    obj = init_opaque(obj, a2);
+    *(void **)((char *)self + 4) = obj;      // champ MI (self+4)
+    void *stolen = *a1;                       // "move-in" du champ plain
+    *a1 = nullptr;                             // (self+8) depuis un
+    *(void **)((char *)self + 8) = stolen;    // out-param appelant
+    return self;
+}
+```
+Le second champ (`self+8`) n'est PAS alloué ici -- il est "volé" à un
+pointeur passé par le CALLEUR (`void **a1`) : lecture, mise à zéro de la
+case appelante, puis stockage dans l'objet neuf. 14 des 15 sites stampent
+une vtable déjà vue dans un destructeur "riche" 2-enfants déjà matché
+(vérifiable par `grep -l vtable_unk_ADDR src/*.cc`) -- confirme le lien
+constructeur/destructeur avant même de compiler. Le 15e (`func_080A3744`,
+`vtable_unk_080E8278`) n'a aucun destructeur correspondant matché dans ce
+dépôt à ce jour -- probablement encore en asm quelque part, non recherché
+plus loin -- mais a été porté quand même par pure similarité de forme,
+bit-exact confirmé comme les 14 autres.
+
+**Variante 1-enfant** (contrepartie de la famille "riche" 1-enfant,
+`self+4` seulement, pas de champ plain à `self+8`) -- `func_080BC898`,
+`func_080C7EA8`, `func_080C0D1C`, contreparties de `func_080BC8C0`/
+`func_080C7ED0`/`func_080C0D44` : corps identique au constructeur de
+placement déjà connu depuis le round 8 (`func_08007078`/`func_0800598C`),
+pas de move-in, juste vtable + alloc + init + store à self+4 + return
+self.
 
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
