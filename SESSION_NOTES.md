@@ -1575,3 +1575,229 @@ Verified bit-exact via two independent full clean rebuilds
   didn't already cover it) can reuse the exact same body template,
   changing only the `vtable_unk_ADDR` constant per site, and the same
   quicktest-first-then-split workflow documented above.
+||||||| 43c9148
+
+## Round 6 -- `func_0800736C` (OBJ-palette allocator) retried, real progress,
+still not bit-exact -- documented honestly, nothing committed
+
+### Scope
+
+Dedicated retry of `func_0800736C` (round 2's failed OBJ-palette
+allocator, `franglais_objpal_alloc` in the patch repo's `docs/HUD.md`,
+directly relevant to the open `docs/CHARACTER_SELECT.md`
+female-character-invisibility investigation in the parallel
+`character-select` worktree). Round 2 only tried 2 variants; this round
+was asked for genuine shape-hunting with more variants, using the fast
+`arm-none-eabi-cpp | agbcp | as` harness (no full link) to iterate
+quickly. Worked alone in worktree `w5` (`parallel-5`), no other agent
+touched this file this round (`git status` clean throughout).
+
+### Disassembly re-read in full, statement-by-statement
+
+Re-derived the exact semantics of all 52 original instructions
+(0x0800736C-0x080073E0, 0x74 = 116 bytes, `push {r4,r5,lr}` /
+`pop {r4,r5}; pop {r1}; bx r1`) against the already-matched
+`Unk_hardware_03000404` struct/helpers in `src/hardware.cc`
+(`AllocEntry`, `IndexOf`, `inl_func_1`, `GetEntry`). Confirmed role:
+pop the free list (`h->unk_00`), set `entry->params.unk_00 = 1`
+(refcount), stamp a fresh generation counter (`h->unk_4A`, wrapping
+`0xFFFF -> 1`, never 0) into both the entry and the allocator struct,
+return the packed handle `(generation << 4) | (bank_index & 0xF)`, or
+`0` on an empty free list.
+
+Two structural details not written up in round 2's notes, now confirmed
+by direct disassembly re-reading:
+
+1. **A single shared accumulator/exit pattern.** The original does NOT
+   have per-path `return` statements compiling to independent `movs r0,
+   #0` / final-expression-into-r0 sequences. Every path (`ent == nullptr`
+   at either check, or the full success path) assigns into the SAME
+   register (`r2` in the original) and falls through to one shared tail:
+   `adds r0, r2, #0; pop {r4, r5}; pop {r1}; bx r1`. This is the classic
+   `goto done;`-into-a-single-`return result;` shape already used
+   elsewhere in this file (`func_080071BC`'s `goto alloc_loop`) -- NOT
+   the plain `if (...) return 0;` written at each check site, which
+   round 2's and this round's early literal attempts both used and which
+   produces a *different*, per-site `movs r0,#0` epilogue shape.
+2. **The final packed-value computation re-reads `ent->params.unk_02`
+   from memory instead of reusing the register that already holds the
+   freshly-computed generation value.** `strh r0, [r5, #2]` (write) is
+   immediately followed, a few instructions later, by `ldrh r0, [r5, #2]`
+   (read) of the exact same address, even though the register `r0`
+   written was never clobbered in between and could have been reused for
+   free. This is not optimizable-away sloppiness -- it is direct evidence
+   that the original C source's final `return` expression textually
+   references the **field** (`ent->params.unk_02`) again, not the local
+   variable that held the value right before the store.
+
+### Concrete new finding: agbcp has a real (if narrow) redundant-load-elimination pass
+
+Confirmed empirically (not documented in `DECOMP_RULES.md` before this
+round): `agbcp -O2` DOES eliminate a trivially-redundant `& 0xFFFF` mask
+immediately following a `ldrh` of the SAME expression in the SAME
+statement (i.e. `field & 0xFFFF` where `field` is a `u16` struct member,
+written as a single expression) -- the mask instruction is dropped
+entirely, no literal-pool load, nothing. This is a real, useful,
+generalizable finding: agbcp is not *uniformly* non-optimizing the way
+`DECOMP_RULES.md`'s anti-pattern #1 implies; it has at least this one
+narrow peephole. Splitting the field read into its own statement
+(`unsigned int packed = ent->params.unk_02; return ((packed & 0xFFFF)
+<< 4) | ...;`) defeats this specific peephole and reproduces the
+original's `ldrh` + `ands` pair exactly -- confirmed bit-for-bit
+identical encoding to the original at that point. **New rule for
+`DECOMP_RULES.md`**: when a mask `& 0xFFFF` immediately following a same
+type-width memory load inside ONE expression keeps getting silently
+eaten by agbcp, split the load into its own statement first; this is a
+different, narrower phenomenon than anti-pattern #1's `& 0xFFFF` vs
+double-shift byte-count issue, and is now confirmed as a second, real
+agbcp peephole worth knowing about.
+
+### Best variant reached (v4/v5 below) -- NOT committed, does not match
+
+```c
+EC u32 func_0800736C(void)
+{
+    Unk_hardware_03000404 *h = gUnk_03000404;
+    Unk_hardware_ent_080D6D98 *ent = h->unk_00;
+    unsigned int result;
+
+    if (ent == nullptr)
+    {
+        result = 0;
+        goto done;
+    }
+
+    {
+        unsigned int idx = h->IndexOf(ent);
+
+        h->unk_00 = ent->next_free;
+        /* the redundant second `if (ent == nullptr)` check from the
+           original does NOT survive here -- see "what did not converge"
+           below */
+
+        h->inl_func_1(idx);
+
+        h->unk_48++;
+        ent->params.unk_00 = 1;
+
+        unsigned int gen = h->unk_4A + 1;
+
+        if (gen > 0xFFFF)
+            gen = 1;
+
+        ent->params.unk_02 = gen;
+        h->unk_4A = gen;
+
+        unsigned int packed = ent->params.unk_02;
+
+        result = ((packed & 0xFFFF) << 4) | (idx & 0xF);
+    }
+
+done:
+    return result;
+}
+```
+
+(Actual tested ordering had `h->unk_00 = ent->next_free;` right after the
+first null check, then `idx` computed after, matching the original's
+literal instruction order -- see the quicktest scratch files this round
+used for exact wording, not preserved in the repo since nothing
+committed. Also tried explicitly routing the alloc through
+`h->AllocEntry(ent)` with the result bound to a second, textually
+distinct local (`ent2`) per round 2's own suggested-but-untried idea --
+**identical compiled output**, confirming `AllocEntry` always gets fully
+inlined by agbcp here and contributes nothing new.)
+
+**Total: 104 bytes compiled vs 116 bytes (0x74) original -- 12 bytes
+short**, down from round 2's -8 and -16 byte misses, and structurally
+much closer:
+
+- Single shared accumulator register (mine: `r1`; original: `r2` -- pure
+  numbering difference, not a shape difference) feeding one shared
+  epilogue `adds r0, rX, #0; pop {...}; pop {r1}; bx r1` -- **this part
+  now matches exactly in shape**, was completely different in round 2's
+  attempts.
+- The mask-preserving `ldrh` + `ands` reload of `ent->params.unk_02` --
+  **now matches exactly**, confirmed via the redundant-load-elimination
+  finding above.
+- Register footprint: mine is `push {r4, lr}` (2 registers); original is
+  `push {r4, r5, lr}` (3 registers) -- **still wrong**. `push`/`pop` cost
+  the same 2 bytes regardless of how many registers are listed, so this
+  alone isn't the source of the 12-byte gap, but it's the visible symptom
+  of the real gap: the original keeps the popped entry pointer alive in
+  TWO different registers at different points in the function (`r3`
+  early, `r5` late, despite `r3` never being technically clobbered in
+  between) -- a genuine weak-allocator quirk (per-basic-block, not
+  whole-function, register binding) that none of the 5 variants tried
+  this round reproduced. Every variant kept the entry pointer in a single
+  register (`r3`) for the whole function, which is provably sufficient
+  (never clobbered) but not what the original compiled to.
+
+### What did NOT converge: the redundant second null check
+
+Round 2 already found that `agbcp` collapses the original's two
+`cmp r3, #0; beq ...` checks (same register, no intervening write to
+that register) into one. This round confirms that finding generalizes
+across every phrasing tried: plain `if`, `goto`-style early exit, and
+routing the pop through the already-matched `AllocEntry` helper with the
+result bound to a fresh, textually distinct variable -- **all five
+produce the exact same single-check code**, because `agbcp`'s
+CSE/dead-branch-elimination appears to operate on register identity
+(pseudo-value, pre-allocation) rather than source-variable identity, and
+`AllocEntry` gets fully inlined regardless of how it's called, so no
+"function call boundary" is ever actually present at the IR level to
+block the fold. **This is a real, load-bearing negative result**: the
+"read the field into a second, distinct local for the second check" idea
+explicitly flagged as untried at the end of round 2 has now been tried
+(as variant 5, via `AllocEntry`) and does NOT work -- update
+`DECOMP_RULES.md`'s register-pressure section to close this off as a
+known dead end rather than leaving it dangling as a hopeful lead.
+
+### Honest assessment
+
+This round made real, measurable progress (structural shape mostly
+right, byte gap roughly halved, two new generalizable agbcp behaviors
+found) but did **not** reach a bit-exact match. The remaining gap is
+narrow but specific: reproducing (a) a genuinely redundant branch that
+survives agbcp's own dead-code elimination, and (b) a register footprint
+where the SAME pointer variable is bound to two different physical
+registers at two different points despite never being clobbered. Neither
+is fixable by further guessing at *statement order* (round 4/5's
+generally-reliable technique) -- both look like they need either the
+TRUE original source shape (which we don't have and can't derive further
+from this call site alone), or a deeper understanding of agbcp's
+register-allocation pass internals than is practical to reverse-engineer
+black-box, one quicktest iteration at a time. Consistent with
+`DECOMP_RULES.md`'s existing "register pressure" classification --
+**now 4 failed attempts total across the project** on this specific
+difficulty class (`func_0805E790` round 1, `func_0800736C` round 2 and
+this round, `func_0804E4AC` round 3). Not recommending a 3rd attempt at
+`func_0800736C` specifically without either (a) a way to inspect a
+second independent call site of the same free-list-pop idiom elsewhere
+in the ROM (if one exists) to cross-check the register-footprint
+hypothesis, or (b) substantially more budget than a single round.
+
+**Nothing committed.** `src/hardware.cc` and `asm/hardware.s` are
+byte-for-byte unchanged from before this round; all experimentation was
+done in scratch files outside the repo
+(`/tmp/claude-1000/.../scratchpad/test_v{1..5}.cc`, not part of this
+repo, gitignored working directory anyway). `git status --short` clean
+throughout, `make compare` reconfirmed bit-exact via a full clean rebuild
+(`rm -rf build fomt.gba fomt.elf fomt.map && make compare`) both before
+starting and after finishing this round's experimentation.
+
+### Repo state at end of round 6
+
+- Working tree clean, no changes. `make compare` passes bit-exact
+  (verified via full clean rebuild at the end of this round).
+- No new commits.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
+- Relevant to the parallel `character-select` investigation: the
+  allocator's *mechanism* is now fully understood and documented above
+  (free-list pop, refcount=1, generation stamp wrapping past 0xFFFF to 1
+  never 0, packed handle `(generation << 4) | (index & 0xF)`) even though
+  the C port itself isn't bit-exact yet -- this semantic understanding is
+  already reflected in the matched `func_080071BC` (`FreeEntry`/`Alloc`
+  cycle) and doesn't depend on `func_0800736C` itself being ported to be
+  usable by that investigation.
