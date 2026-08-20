@@ -10,19 +10,19 @@
 
 EC u32 func_0804E4AC(u32 dims, void * dest, u32 x, u32 y, u32 code);
 
-EC void func_0804E8F0(u32 dims, void * dest, u32 x, u32 y, char const * s)
+EC void franglais_vwf_draw_string_plain(u32 dims, void * dest, u32 x, u32 y, char const * s)
 {
-    u32 right = (dims << 16) >> 13;
+    u32 right_edge_x = (dims << 16) >> 13;
     u32 code = 0;
     char c = *s;
 
-    while (c != 0 && x < right)
+    while (c != 0 && x < right_edge_x)
     {
         code |= (u8) c;
 
-        u32 kind = func_0804E4AC(dims, dest, x, y, code);
+        u32 glyph_kind = func_0804E4AC(dims, dest, x, y, code);
 
-        switch (kind)
+        switch (glyph_kind)
         {
         case 1:
             code = 0;
@@ -43,3 +43,9 @@ EC void func_0804E8F0(u32 dims, void * dest, u32 x, u32 y, char const * s)
         code <<= 8;
     }
 }
+
+// asm/*.s callers still reference this by its address-name symbol (dozens
+// of `bl func_0804E8F0` sites across code_0805E760.s, code_809E804.s,
+// new_game.s, etc. -- not worth touching individually) -- keep it as an
+// alias onto the real definition above rather than renaming those sites.
+EC void func_0804E8F0() ALIAS(franglais_vwf_draw_string_plain);
