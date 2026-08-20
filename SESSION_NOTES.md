@@ -3075,3 +3075,184 @@ targets list (end of file) remains the reference for the next round.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin. Worked alone in the isolated `w17` worktree per the
   round brief; did not touch anything outside `func_08010F14`.
+||||||| 59d9b13
+
+## 2026-08-20, round 8 (worktree `w16`, branch `parallel-16`) -- `func_0804E4AC`,
+the "between BL and TR" `CpuFastSet` lead tested and CLOSED, 3rd independent
+confirmation of the same 1-instruction gap, this is now the function's 3rd
+serious attempt to fail
+
+### Scope
+
+Round 7 left one specific untested lead open: "try altering what's *between*
+the BL blit and the BR blit specifically... since the reload sits right
+after the second and third `CpuFastSet` calls the function makes." This
+round chased exactly that, mechanically rather than by shape-hunting: traced
+every single instruction between the BL block's `bl CpuFastSet`
+(`0x804e582`/offset `0x9e` in the quicktest harness numbering) and the TR
+block's `bl CpuFastSet` (`0x804e5b6`-equivalent), and separately between TR's
+and BR's, directly against the vanilla disassembly
+(`asm/code_0803EE94.s:27928-28061`, re-extracted fresh via
+`arm-none-eabi-objdump -D -bbinary -marmv4t -Mforce-thumb
+--adjust-vma=0x08000000 --start-address=0x0804E4AC
+--stop-address=0x0804E5AC baserom.gba`, cf. the `objdump -bbinary` trap in
+`DECOMP_RULES.md`). **Result: closed, negative.** No commit -- nothing
+bit-exact. Working tree in this worktree was never touched (`git status
+--short` empty throughout; all iteration happened in a session scratch
+directory, `/tmp/fomt-w16-drawglyph-scratch/`, never inside the repo).
+
+### What's actually between BL's and TR's `CpuFastSet` calls
+
+Read directly off the vanilla disassembly, register-by-register:
+
+```
+.L0804E54E:                  ; falls through here after BL's `bl CpuFastSet`
+    ldr r0, [sp, #0x88]      ; reload has_right flag FROM STACK (not a register)
+    cmp r0, #0
+    beq .L0804E594
+    mov r1, sl               ; sl = kind (never spilled, stays in sl all along)
+    cmp r1, #1
+    bls .L0804E594
+    adds r1, r6, #0          ; r6 = TL tile address (already computed for TL's blit)
+    adds r1, #0x20           ; TR address = TL address + one tile column
+    add r0, sp, #0x24
+    movs r2, #8
+    bl CpuFastSet             ; TR
+```
+
+None of these 9 instructions touch `r4` (`tile_x`), `r5` (`tile_y + 1`, needed
+again at BR) or `r8` (`width_tiles`, also needed again at BR) -- the TR
+address is computed purely from `r6` (the already-computed TL address, reused
+directly), not recomputed from `tile_x`/`width_tiles`. **The only value
+reloaded from memory in this zone is `has_right` itself**, and that reload is
+NOT a redundant/mysterious one -- `has_right` (unlike `has_bottom`, which
+stays resident in `r7` for the whole function) was never given a register at
+all: it's assigned via `str` both times it's set (`.L0804E508`-`0518`, sp+
+`0x88`), the classic materialized-boolean idiom already confirmed elsewhere
+in this function (`DECOMP_RULES.md` rule 6). That's simply because, by the
+time `has_right` is computed, `r4`-`r7` are already fully committed
+(`r4`=`tile_x`, `r5`=`tile_y+1`, `r6`=TL address, `r7`=`has_bottom`) -- **all
+four low callee-saved registers are simultaneously live at that point**,
+leaving no free register for a fifth value (`has_right`), so it goes to the
+stack by simple exhaustion, not by any interaction with the BL/TR call
+boundary. Independently reproduced this exact 4-way full commitment of
+`r4`-`r7` with the quicktest harness (see below) -- confirms the read, not
+new information on its own.
+
+Symmetric check on the TR-to-BR span (the other side of the lead): also
+walked instruction-by-instruction (`.L0804E54E`+13 through the BR block's own
+`bl CpuFastSet`). Same result -- nothing there touches `r4` either. The
+`ldr r2, [sp, #0x84]` reload of `tile_x` for BR's address calc is the FIRST
+thing in the BR block itself, immediately preceded only by `mov r0, r8; muls
+r0, r5, r0` (both `r8` and `r5` read directly from their still-resident
+registers, no reload) -- i.e. even at the point of use, two of the three
+operands needed for the exact same formula are trusted from registers and
+only `tile_x` specifically is forced through memory, with literally nothing
+distinguishing its live range from `r5`'s or `r8`'s in the intervening code.
+
+### Empirical test: does a C shape matching this description actually reproduce the gap?
+
+Reconstructed the function fresh a third time (independently of both round
+6's and round 7's now-deleted `.cc` files, written directly from the
+disassembly read above) via the quicktest harness
+(`arm-none-eabi-cpp | agbcp -O2 -fhex-asm | as`, `EC u32
+func_0804E4AC(u32 dims, void * dest, u32 x, u32 y, u32 code)` matching the
+signature already established in `src/code_0804E8F0.cc`'s forward
+declaration). **Result: 120 instructions vs the original's 121, same exact
+single missing `str` (the `tile_x` definition-site spill) -- third
+independent confirmation of the identical near-miss** (round 6: 249/250 vs
+250; round 7: 120/121; this round: 120/121, same instruction). Automated
+mnemonic-sequence diff (`diff -u` over normalized objdump output, `@`-comment
+and branch-target-label noise stripped) confirms the divergence starts and
+ends at exactly the same point rounds 6/7 already characterized: no new
+divergence anywhere else in the function.
+
+Two additional targeted probes this round, both negative:
+
+1. **Swapped declarative order** (`width_tiles`/`height_tiles` computed
+   before `tile_x`/`tile_y`, instead of after): changes which variable lands
+   in a low vs high register (as round 6 already found), but this time
+   produced a WORSE result -- 118/121 instructions, because the swap
+   happened to let the allocator avoid needing a stack slot for `tile_x`
+   *at all* (no spill, no reload, straight register reuse through to BR).
+   This is actually informative: it shows the "extra" `str`+`ldr` pair in
+   the original is not a fixed tax paid by `tile_x` regardless of
+   allocation -- it can be avoided ENTIRELY by a different but equally
+   literal ordering, which means the original's choice to pay it is a real,
+   specific allocator decision, not an unavoidable consequence of the
+   variable's live range. Reverted immediately (back to the 120/121
+   baseline).
+2. **Forcing a memory-mediated read of `tile_x` specifically at the BR site**
+   via `u32 volatile * px = &tile_x; ... *px ...`: produced a MUCH worse
+   result (132 instructions, extra stack traffic for the pointer itself,
+   different stack frame size) -- taking the address of `tile_x` changes its
+   storage class enough that agbcp reserves it a real stack slot for its
+   *entire* lifetime and adds address-computation overhead nowhere present
+   in the original. Confirms this isn't a viable lever either: whatever
+   causes the original's spill, it isn't something reachable by any
+   deliberate C-level "make this go through memory" idiom tried so far
+   (this round's `volatile u32 tile_x` from round 7 already ruled out the
+   blanket form; this round's address-taken form rules out the targeted
+   form too). Reverted immediately.
+
+### Conclusion: this specific lead is closed
+
+The round 7 recommendation ("check precisely what's between BL and TR") has
+now been followed to the instruction level on both sides (BL-to-TR and
+TR-to-BR) and the answer is unambiguous: **nothing in either intervening
+span references `tile_x` (or the registers it competes with) at all** --
+there is no side effect, no intermediate call touching r4, no memory write
+that would give a principled reason for the original compiler to distrust
+`r4`'s contents specifically at the BR site while trusting `r5`/`r8`
+(carrying the same-shape live ranges) at the identical point. Combined with
+round 7's finding that *articially adding nesting* also fails to reproduce
+it (and instead spills a different, unrelated variable), the most
+defensible remaining explanation is a narrow, two-pass allocator artifact
+internal to `agbcp` (ex: a stack slot reserved conservatively at
+definition-time by an early pass, before the allocator has seen the whole
+function, then opportunistically consumed by a later pass at whichever
+particular use site its own bookkeeping picks -- plausibly the textually
+LAST use in program order, which `tile_x`'s BR reference is) rather than
+anything expressible as a deliberate, motivated C source shape. This is not
+new information different in kind from round 7's conclusion, but it removes
+the one specific lead round 7 left open, closing the identified path to a
+3rd documented dead end.
+
+### Recommendation
+
+This function has now had **three separate serious attempts** (round 3:
+total failure, 20 bytes short from the first instruction; round 6: shape-hunt
+converged to a 1-instruction/2-byte gap; round 7: nesting-depth hypothesis
+tested and closed; round 8/this round: the "between BL/TR" lead tested and
+closed, plus two fresh negative probes) all converging on the exact same
+2-byte gap, from three independently-written C reconstructions. Per
+`DECOMP_RULES.md`'s own register-pressure-class rule ("ne pas re-tenter cette
+classe sans budget de plusieurs rounds dédiés"), this function should now be
+**formally retired from the priority list**, not just deprioritized --
+there is no further untested lead identified across three rounds of
+dedicated attention, and the remaining candidate explanation (an internal
+two-pass spill-slot artifact of `agbcp` itself) is not something a C source
+reformulation can address in principle, similar in spirit (though not
+mechanism) to the `Unpack` "ABI partagée entre `bl`" class already retired
+outright. `func_0804E5AC` (the recolor sibling) was not attempted, consistent
+with round 6's note that it would very likely hit the identical wall.
+**Recommendation: do not schedule a 4th round on `func_0804E4AC`/
+`func_0804E5AC` without a genuinely new idea not already covered by the four
+rounds' combined notes** (rounds 3, 6, 7, 8) -- if a future session wants
+this function anyway, the one thing NOT yet tried is inspecting whether
+`StanHash/fomt`'s own upstream Ghidra decompilation (if it exists for this
+address) shows a source shape none of the four independent reconstructions
+here have considered, rather than continuing to shape-hunt blind.
+
+### Repo state at end of round 8
+
+- Working tree clean throughout (`git status --short` empty at start and
+  end); no `src/`/`asm/`/`fomt.lds` files touched at any point, all
+  iteration in `/tmp/fomt-w16-drawglyph-scratch/` (session-unique scratch
+  path, per the `/tmp/qt.s` collision trap already documented in
+  `DECOMP_RULES.md`).
+- No commits touching `src/`/`asm/`/`fomt.lds` -- nothing matched
+  bit-exact, nothing committed there, per discipline. This documentation
+  update (`SESSION_NOTES.md`) is the only change in this worktree.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.

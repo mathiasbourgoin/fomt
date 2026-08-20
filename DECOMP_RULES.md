@@ -747,28 +747,34 @@ suit cette convention plutôt que `r0` direct).
    de `func_08004C68` lui-même.
 4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-3. `func_0804E4AC` (`DrawGlyphAt`, plain) -- round 6 : near-miss à UNE
-   instruction de 2 octets près (250/252 octets), tout le reste du
-   contrôle de flux et des rôles de registres matché. **Round 7 a testé
-   la piste "profondeur d'imbrication" (prometteuse selon round 6) --
-   fermée, sans effet** : aplatir le bloc BR en early-return, extraire le
-   bloc BR dans une fonction `static inline` (entièrement inlinée par
-   agbcp même à -O2, donc pas un levier ici), ou imbriquer artificiellement
-   le bloc TL à la même profondeur que BR ne reproduit PAS le spill+reload
-   de `tile_x` -- au contraire, imbriquer TL déplace un spill ailleurs
-   (sur `y`) parce que chaque `if` factice consomme de vrais registres pour
-   évaluer sa condition, ce qui confond toute tentative de tester "la
-   profondeur" isolément de "la pression de registres". Une reconstruction
-   C indépendante (round 7, sans relire le `.cc` du round 6) retombe sur
-   EXACTEMENT le même écart d'1 instruction -- signal que c'est un mur
-   d'allocateur de registres réel, pas un artefact de formulation. Piste
-   ouverte restante (non testée) : ce qui se passe spécifiquement ENTRE
-   les appels `CpuFastSet` de BL et TR (le reload semble lié au nombre
-   d'appels `bl` traversés, pas à la profondeur syntaxique -- voir
-   `SESSION_NOTES.md` round 7 pour le détail). Sinon, classer définitivement
-   dans la classe "pression de registres" (section dédiée plus haut) et
-   ne pas retenter sans budget dédié. Porter `func_0804E5AC` (variante
-   recoloration, même forme) juste après si `func_0804E4AC` matche un jour.
+3. ~~`func_0804E4AC` (`DrawGlyphAt`, plain)~~ -- **RETIRÉE de la liste des
+   cibles priorisées (round 8, worktree w16), pas juste dépriorisée.**
+   Historique : round 3, échec total (20 octets d'écart dès la 1re
+   instruction) ; round 6, shape-hunt systématique convergé à un near-miss
+   d'UNE instruction de 2 octets (250/252 octets, spill+reload redondant de
+   `tile_x` avant le blit BR) ; round 7, piste "profondeur d'imbrication"
+   testée et fermée (aucun effet isolable de la profondeur syntaxique,
+   confondue avec la pression de registres réelle) ; round 8, piste "ce qui
+   se passe entre les appels `CpuFastSet` de BL et TR" testée et fermée --
+   tracé instruction par instruction (les deux zones BL->TR et TR->BR),
+   AUCUNE des deux ne touche `r4`(`tile_x`)/`r5`/`r8`, donc aucun effet de
+   bord n'explique le spill à cet endroit précis. **4 tentatives sérieuses,
+   3 reconstructions C indépendantes retombant sur EXACTEMENT le même écart
+   d'1 instruction** -- signal net d'un mur d'allocateur de registres réel
+   (probablement un artefact interne à `agbcp`, slot de spill réservé tôt
+   par une passe puis consommé opportunément par une passe ultérieure au
+   site d'usage textuellement LE PLUS TARDIF, indépendant de toute
+   restructuration C testée). Voir `SESSION_NOTES.md` round 8 pour le détail
+   complet (2 probes empiriques supplémentaires testées et négatives : ordre
+   de déclaration inversé -> écart PIRE, 118/121 ; lecture forcée via
+   pointeur `volatile` de `tile_x` juste au site BR -> bien pire, 132
+   instructions). **Ne pas retenter sans idée réellement nouvelle non
+   couverte par les rounds 3/6/7/8** -- si retenté un jour, la seule piste
+   non essayée identifiée est de comparer avec la décompilation Ghidra
+   amont de `StanHash/fomt` pour cette adresse, si elle existe, plutôt que
+   de continuer le shape-hunting à l'aveugle. `func_0804E5AC` (variante
+   recoloration, même forme attendue) n'a jamais été tentée -- pas la peine
+   avant que le corps plain ne matche.
 4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
