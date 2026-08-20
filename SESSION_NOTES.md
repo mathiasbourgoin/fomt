@@ -2979,3 +2979,99 @@ opaque `bl`" tractable class.
   bit-exact, nothing committed there, per discipline.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
+
+## 2026-08-20, round 8 (worktree `w17`, branch `parallel-17`) -- hidden
+GameState getter `func_08010F14` catalogued and matched
+
+Priority-1 target for this round, flagged as an annex discovery at the end
+of round 7 (w14, see `func_08010F04`/`func_08010F1C` entry above): 8 bytes
+of raw `.byte` data sitting right after `func_08010F0C` in
+`asm/code_08010F0C.s`, at `.L08010F14:`, never given a `thumb_func_start`/
+`func_ADDR` symbol despite decoding as fully valid Thumb code.
+
+Verified the address first: `func_08010F0C` (`ldr r0,[r0]`; `lsls #0xe`;
+`lsrs #0x1b`; `bx lr`) is exactly 4 instructions = 8 bytes, so it spans
+`0x08010F0C`-`0x08010F14`, meaning the `.byte` blob starts exactly at
+`0x08010F14` (matching its own label name). The very next symbol,
+`func_08010F1C` (already ported in `src/game_state.cc`, round 7), starts at
+`0x08010F1C` -- so the blob is exactly 8 bytes / one function, snugly
+between two already-known functions, no ambiguity about its extent.
+
+Hand-decoded the 8 bytes (`40 88 C0 05 40 0E 70 47`) as four 16-bit Thumb
+halfwords, little-endian:
+- `0x8840` = format-10 `LDRH`: bits `1000 1 00001 000 000` -> L=1
+  (load), Offset5=1 (x2 = byte offset 2), Rb=R0, Rd=R0 -> `ldrh r0,[r0,#2]`.
+- `0x05C0` = format-1 shift: bits `000 00 10111 000 000` -> op=00 (LSL),
+  offset5=`10111`=23, Rs=Rd=R0 -> `lsls r0,r0,#23`.
+- `0x0E40` = format-1 shift: bits `000 01 11001 000 000` -> op=01 (LSR),
+  offset5=`11001`=25, Rs=Rd=R0 -> `lsrs r0,r0,#25`.
+- `0x4770` = the standard `bx lr` encoding.
+
+Applied DECOMP_RULES.md rule 1bis (`S1=23,S2=25` -> `N=32-25=7` bits wide,
+`P=(32-23)-7=2`): a 7-bit unsigned field starting at bit 2 of the halfword
+read from `self+2`. Noted in passing (not asserted as fact, just an
+observation worth a comment): this halfword is the upper half of the same
+32-bit word `func_08010F0C` reads from `self+0` and extracts bits `[13:18)`
+from (`S1=14,S2=27` -> `N=5,P=13`) -- our new field's bits `[18:25)` of
+that full word are immediately adjacent to `func_08010F0C`'s `[13:18)`,
+consistent with (but not proof of) both being sub-fields of one packed
+bitfield word on the same GameState-family object.
+
+Verified the C port byte-exact via the quick compiler+assembler harness
+(`DECOMP_RULES.md` "Iteration rapide" recipe, redirected to a session-
+unique scratch path per the round-6 `/tmp/qt.s` collision lesson) BEFORE
+touching the tracked tree:
+
+```c
+EC u32 func_08010F14(void * self)
+{
+    return (u32)(*(u16 *)((u8 *)self + 2)) << 23 >> 25;
+}
+```
+
+`arm-none-eabi-objdump` on the resulting `.o` reproduced the exact 4
+instructions/8 bytes above, byte-for-byte.
+
+No caller anywhere in `asm/`/`src/` references `.L08010F14` or
+`func_08010F14` symbolically (a full-tree grep came up empty except the
+label definition itself) -- this function is either called only via an
+indirect table/computed address, or genuinely dead code the original
+compiler emitted and never referenced. Not investigated further this
+round (out of scope for "port + match", would need a broader scan of
+jump tables elsewhere in the binary).
+
+Applied the "target is the last function in an already-mostly-split file"
+case of the `asm/*.s` splitting method: removed the 8-byte blob from
+`asm/code_08010F0C.s` (leaving only `func_08010F0C`'s own body, no new
+asm file needed since the function following the blob, `func_08010F1C`,
+was already carved out into `src/game_state.cc` in round 7), added
+`src/code_08010F14.cc` with the standard header-comment discipline, and
+inserted `src/code_08010F14.o(.text);` into `fomt.lds` between the
+existing `asm/code_08010F0C.o(.text);` and `src/game_state.o(.text);`
+entries (exact original position of the 8 bytes).
+
+Clean rebuild (`rm -rf build fomt.gba fomt.elf fomt.map && make compare`)
+passed bit-exact (`sha1sum -c fomt.sha1` -> `fomt.gba: Reussi`). Committed
+as `05e966f` (`asm/code_08010F0C.s`, `fomt.lds`, new
+`src/code_08010F14.cc`; `git status --short` confirmed clean, all three
+changed/added files staged via `git add -A`, no stray untracked files).
+
+### Priority 2
+
+Not attempted this round: priority-1 (the hidden getter) was the full
+scope delivered, and the brief explicitly said priority 2 only "if time
+allows" with a strong caution against re-attempting `func_0800736C`
+(OBJ-palette allocator, 4 documented failures) without a genuinely new
+angle -- none surfaced while working priority 1, so left untouched rather
+than force a 5th unproductive attempt. `DECOMP_RULES.md`'s prioritized-
+targets list (end of file) remains the reference for the next round.
+
+### Repo state at end of round 8
+
+- Working tree clean after the commit (`git status --short` empty,
+  verified post-commit).
+- One new commit (`05e966f`) touching `src/`/`asm/`/`fomt.lds`, `make
+  compare` bit-exact on a clean rebuild immediately before committing.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. Worked alone in the isolated `w17` worktree per the
+  round brief; did not touch anything outside `func_08010F14`.

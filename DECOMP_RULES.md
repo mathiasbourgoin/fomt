@@ -519,6 +519,7 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
 ||||||| 88b3c2e
 | `func_08010F04`, `func_08010F1C` | getters `GameState` (bit `0x10` octet 0 ; champ 6 bits octet 3 bits[1:6]) -- complètent les 4 setters round 6 | 7 (w14) | (voir `git log`) |
+| `func_08010F14` | getter `GameState` NON catalogué (7 bits à `P=2` du halfword `self+2`, adjacent au champ 5 bits de `func_08010F0C` sur le même mot `self+0`) -- ex-`.byte` bruts sans symbole, décodé et porté | 8 (w17) | `05e966f` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -793,15 +794,15 @@ suit cette convention plutôt que `r0` direct).
 ||||||| 88b3c2e
 ||||||| 43c9148
 5. ~~`func_08010F04`, `func_08010F1C`~~ -- matchés round 7 (w14), voir
-   tableau des matchs ci-dessus. Piste annexe découverte en les portant,
-   pas encore traitée : un getter GameState NON catalogué (pas de
-   `func_ADDR`/`thumb_func_start` dans le `.s` d'origine, actuellement de
-   simples `.byte` bruts) à `0x08010F14`, juste après `func_08010F0C`
-   dans `asm/code_08010F0C.s` -- décodage manuel confirme du vrai code
-   Thumb valide (`ldrh [r0,#2]; lsls #23; lsrs #25; bx lr`, champ 7 bits
-   à `P=2` d'un halfword). Avant de le porter : déterminer s'il a un
-   symbole officiel quelque part (vérifier Ghidra/le dépôt patch) plutôt
-   que d'en inventer un.
+   tableau des matchs ci-dessus. ~~Piste annexe découverte en les
+   portant~~ : le getter GameState NON catalogué à `0x08010F14` (7 bits
+   `P=2` d'un halfword `self+2`, adjacent au champ `func_08010F0C` sur
+   le même mot `self+0`) est désormais **matché round 8 (w17)**, voir
+   tableau des matchs ci-dessus (`func_08010F14`, commit `05e966f`).
+   Aucun appelant symbolique trouvé dans `asm/`/`src/` (grep négatif) --
+   piste non explorée plus loin : peut-être appelé via une table
+   indirecte, ou mort. Aucun symbole officiel trouvé ailleurs (Ghidra/
+   dépôt patch non consultés ce round, nom `func_ADDR` gardé par défaut).
 ||||||| 43c9148
 4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
    la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté
