@@ -519,6 +519,9 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
 ||||||| 88b3c2e
 | `func_08010F04`, `func_08010F1C` | getters `GameState` (bit `0x10` octet 0 ; champ 6 bits octet 3 bits[1:6]) -- complètent les 4 setters round 6 | 7 (w14) | (voir `git log`) |
+| `func_0806EA6C`, `func_08007110`, `func_08005A3C` | getters `*(self+4)+OFFSET` sur les 3 familles de widgets de `func_08004C68` (saisie texte, confirmation, sélecteur) | 8 (w15) | `95de198`, `bbf7765`, `476d93c` |
+| `func_08007078`, `func_0800598C`, `func_0806E9D8` | constructeurs de placement des mêmes 3 familles de widgets (stamp vtable, `operator new`, init opaque, stocke à `self+4`, `return self`) | 8 (w15) | `476d93c`, `9c50133` |
+| `func_08008DB8` | wrapper `m4aSongNumStartOrChange` (troncature u16) | 8 (w15) | `b7e035a` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -731,19 +734,56 @@ suit cette convention plutôt que `r0` direct).
    `SESSION_NOTES.md` round 6 "What's left in this family").
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-3. **`func_08004C68` (round 6, tenté, NON convergé)** : identifié avec
-   certitude structurelle comme `Run()` de la classe scène de
+3. **`func_08004C68` (round 6, tenté, NON convergé ; round 8/w15, callees
+   attaqués, toujours NON tenté sur la fonction elle-même)** : identifié
+   avec certitude structurelle comme `Run()` de la classe scène de
    l'enregistrement #12 (séquence de saisie New Game : nom joueur,
    sélecteur 1 octet, nom ferme, nom chien -- voir round 6 pour le
-   détail complet du layout `+0x04`/`+0x14`/`+0x24`/`+0x28`). Bloqué
-   par 12 fonctions appelées entièrement non décompilées. **Prochaine
-   étape recommandée avant de retenter : décompiler d'abord la famille
-   `func_0806E9D8`/`func_0806EA30`/`func_0806EA6C`/`func_0806EA00`**
-   (petite, tractable, résoudrait aussi la sémantique du sélecteur --
-   candidat sérieux pour le genre du joueur, valeur non confirmée),
-   puis la famille de saisie de texte `func_08007078`/`func_080070D4`/
-   `func_08007110`/`func_080070A4`, avant de retenter le port complet
-   de `func_08004C68` lui-même.
+   détail complet du layout `+0x04`/`+0x14`/`+0x24`/`+0x28`).
+   **Round 8 (worktree w15) a matché 10 de ses 15 callees listées**
+   (voir tableau des matchs + `SESSION_NOTES.md` round 8) : les 3
+   familles de widgets (saisie texte, écran confirmation, sélecteur)
+   partagent toutes la même forme "constructeur de placement" (stamp
+   vtable, `operator new(SIZE)`, appel d'init opaque, stocke à
+   `self+4`, `return self`) -- généralise gratuitement, aucun
+   shape-hunting nécessaire une fois la forme identifiée une fois.
+   **Reste bloqué par 5 callees** :
+   - `func_080070D4`/`func_08005A00` (même forme, "assignation de champ
+     SmartPtr") : analysé en profondeur round 8, **classe de difficulté
+     nouvelle et distincte** de la classe "pression de registres" et du
+     piège `SmartPtr<T>` déjà connu (voir section dédiée
+     `SESSION_NOTES.md` round 8) -- ni pression de registres ni ABI
+     infaisable, un vrai problème de FORME C++ non résolu : le
+     destructeur conditionnel (`if(rhs.inner) vt[2](rhs.inner,3)`)
+     survit dans l'original alors que TOUTE reformulation testée
+     (if explicite, `.Move()` implicite, référence liée à un rvalue)
+     soit se fait éliminer par agbcp (peephole dead-store->dead-load
+     étroit mais réel, contredisant partiellement l'a priori "agbcp
+     n'optimise presque rien"), soit ne compile pas (piège
+     `SmartPtr<T>` copie privée, qui s'applique aussi à l'initialisation
+     de variable locale et au binding de référence, pas seulement au
+     `return`). Le détail `sp+4`/`sp+8` (stocke l'ADRESSE du slot ET une
+     COPIE de sa valeur juste après l'appel) reste inexpliqué par toute
+     hypothèse testée -- piste à creuser en priorité la prochaine fois.
+   - `func_0806EA30` : appelle `func_0806DB38` (classe "pression de
+     registres" confirmée, `r8`/`sb`/`sl`, ~180 lignes) -- mais
+     `func_0806EA30` elle-même pourrait rester portable en appelant
+     `func_0806DB38` comme boîte noire (comme fait pour tous les
+     constructeurs ce round) ; **pas encore essayé**, bon candidat
+     rapide.
+   - `func_08008980` (signal "pression de registres" présent dans son
+     propre prologue, `sb`/`r8`) et `func_08008A68` (pas encore
+     disassemblée en détail, semble courte) : **pas encore attaqués**,
+     budget round 8 épuisé.
+   **Avant de retenter `func_08004C68` elle-même** : soit fermer ces 5
+   callees, soit au minimum établir un prototype `extern "C"` correct
+   pour chacune (ce qui NE nécessite PAS de les porter bit-exact --
+   suffit pour les appeler depuis `func_08004C68` en tant que boîte
+   noire, cf. le principe déjà utilisé pour les 12 callees listées dès
+   le round 6). Le double-stamp de vtable (piège `SmartPtr<T>`, sous-
+   classe C++ réelle avec override de la méthode virtuelle pure) reste
+   une question ouverte indépendante des callees, à re-traiter au
+   moment de l'attaque de la fonction elle-même.
 4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 3. `func_0804E4AC` (`DrawGlyphAt`, plain) -- round 6 : near-miss à UNE
