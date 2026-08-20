@@ -76,6 +76,7 @@ SECTIONS
         asm/code_08004C0C.o(.text);
         src/code_08004C54.o(.text);
         asm/code_08004C68.o(.text);
+        src/code_0800598C.o(.text);
         src/code_080059D0.o(.text);
         asm/code_08005A00.o(.text);
         src/code_08005A3C.o(.text);
@@ -145,6 +146,7 @@ SECTIONS
         asm/code_08069E98.o(.text);
         src/code_0806D918.o(.text);
         asm/code_0806D948.o(.text);
+        src/code_0806E9D8.o(.text);
         src/code_0806EA00.o(.text);
         asm/code_0806EA30.o(.text);
         src/code_0806EA6C.o(.text);

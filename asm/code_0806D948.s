@@ -2064,24 +2064,3 @@ func_0806E7E0: @ 0x0806E7E0
 .L0806E9CC: .4byte 0xFFFFFF00
 .L0806E9D0: .4byte 0xFFFFFC00
 .L0806E9D4: .4byte 0xFFFFFE00
-
-	thumb_func_start func_0806E9D8
-func_0806E9D8: @ 0x0806E9D8
-	push {r4, r5, lr}
-	adds r4, r0, #0
-	adds r5, r1, #0
-	ldr r0, .L0806E9F8 @ =vtable_unk_080E7AD0
-	str r0, [r4]
-	ldr r0, .L0806E9FC @ =0x00000454
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_0806D990
-	str r0, [r4, #4]
-	adds r0, r4, #0
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L0806E9F8: .4byte vtable_unk_080E7AD0
-.L0806E9FC: .4byte 0x00000454
-
