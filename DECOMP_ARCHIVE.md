@@ -634,9 +634,14 @@ jamais utilisée dans ce dépôt).
   avec la famille "entity factory". Vérifié par scan exhaustif des blocs
   `thumb_func_start` de ces 3 fichiers (`bl __builtin_new` + AUCUN littéral
   `vtable_unk_` + alloc 0x8c) : aucun autre candidat non catalogué du shape
-  exact trouvé dans ces 3 fichiers. **`func_08032A00`/`func_080222A8`
-  restent des cibles ouvertes** pour un futur round dédié à cette
+  exact trouvé dans ces 3 fichiers. **`func_08032A00`/`func_080222A8` sont
+  maintenant matchés (round w46, commits `ff4fa30`/`6709750`)** -- la
   sous-variante "self déjà alloué + stamp vtable propre après délégation"
-  (candidat de nommage/forme à documenter séparément, pas encore tenté).
-  `func_080324BC` lui-même reste non porté (`r8`/`sb` utilisés tout du
-  long -- signal "pression de registres", pas attaqué).
+  est CLOSE, ses 2 seuls sites connus étant portés (`func_08032A00`
+  convergé du premier coup ; `func_080222A8`, malgré l'usage de `r8` +
+  2 helpers `func_08022320`/`func_08022334` -- simples dispatchs feuille
+  par valeur, boîte noire -- convergé du premier coup aussi, la crainte
+  "pression de registres" ne s'est pas matérialisée). Détail dans
+  `SESSION_NOTES.md` round w46. `func_080324BC` lui-même reste non porté
+  (`r8`/`sb` utilisés tout du long -- signal "pression de registres", pas
+  attaqué).
