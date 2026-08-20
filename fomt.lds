@@ -138,6 +138,8 @@ SECTIONS
         asm/code_080881EC.o(.text);
         src/code_0808AB68.o(.text);
         asm/code_0808ABA8.o(.text);
+        src/code_0808C59C.o(.text);
+        asm/code_0808C5DC.o(.text);
         src/code_0809A518.o(.text);
         asm/code_0809A558.o(.text);
 
