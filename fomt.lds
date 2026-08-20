@@ -70,6 +70,8 @@ SECTIONS
         asm/scene.o(.text);
         asm/intro_scene.o(.text);
         asm/new_game.o(.text);
+        src/code_08004C54.o(.text);
+        asm/code_08004C68.o(.text);
         src/hardware.o(.text);
         asm/hardware.o(.text);
         src/farm.o(.text);
