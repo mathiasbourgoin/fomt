@@ -971,3 +971,238 @@ nommage" section for future rounds.
   without a bigger dedicated budget; `docs/DIALOGUE.md`,
   `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
   `docs/MFOMT_ADDITIONS.md`).
+
+## Round 6
+
+### Goal
+
+External task: attack `func_08004C68` (the New Game naming sequence),
+per `docs/ENGINE.md` round 27 in the franglais-patch repo, which
+independently found this function, decompiled it via Ghidra, confirmed
+it dynamically (PC trace on the standard boot recipe), and identified
+it as the New Game player/farm/dog naming loop with an unidentified
+1-byte selector between the first two name captures. Mission: locate
+it in this repo's `asm/*.s`, port it to C/C++ matching real binary
+structure, verify `make compare` bit-exact, commit only if matching,
+and (budget permitting) resolve the selector byte's role.
+
+### Located and re-decompiled independently
+
+`func_08004C68` lives in `asm/code_08004C68.s:4-303` (0x08004C68-
+0x08004EFC, ~150 instructions, the largest single function attempted
+in this repo's own rounds so far -- for scale, ~15x the size of
+`func_08004C54`). It sits in the SAME split file that round 4 already
+carved out of the old monolithic `asm/new_game.s` (that split was done
+purely to isolate `func_08004C54`, its neighbor at the time; this round
+found the file's *next* function, `func_08004C68`, was never itself
+addressed).
+
+Independently confirmed the patch-repo's structural read (three
+bounded 12-char text captures via a widget triplet
+`func_08007078`/`func_080070D4`/`func_08007110`/`func_080070A4`,
+truncation clamp `cmp r4,#0xc; bls ...; movs r4,#0xc` inlined three
+times rather than a shared helper, `do { ... } while (!confirmed)`
+loop, terminal `0x38`-byte heap allocation via `__builtin_new` with two
+consecutive vtable-pointer stores at offset 0 -- `__vt_13AUnk_0800080C`
+then `vtable_unk_080E5A78`, the classic base-then-derived C++ ctor
+stamp order already established for this repo's `AUnk_0800080C`/`AScene`
+family, see `include/scene.hh`) and went further on the ABI/signature
+side, which the patch repo's Ghidra pseudocode (necessarily) left as
+raw `undefined4`/register-level detail:
+
+**`func_08004C68` is `AUnk_0800080C`-hierarchy's virtual `Run()`
+override, not a free-standing "builder" function.** Chain of evidence:
+
+1. `func_08004C54` (this repo's own round-4/5 finding, `AScene`-derived
+   destructor) writes `*self = vtable_unk_080E5A88` where
+   `vtable_unk_080E5A88 = 0x080E5A90 - 8` -- i.e. the record at
+   `0x080E5A90` (this scene-table record's #12, per the patch repo's
+   round-27 byte-literal scan of `0x08004C69` in ROM) is *itself* used
+   as the object's raw 2-entry vtable, offset by the usual 8-byte
+   CFront/ARM vtable header. That places `func_08004C54` at vtable
+   slot 0 (dtor -- confirmed, it forwards to `func_080007EC` ==
+   `AScene::~AScene()`) and **`func_08004C68` at vtable slot 1**, the
+   exact slot `AScene::Run()` occupies in this repo's
+   `include/scene.hh` (`virtual SmartPtr<AUnk_0800080C> Run() = 0;`).
+2. `func_08004C68`'s prologue only ever touches `r0` (saved to
+   `[sp+0x4c]` and never anything else at entry) -- no `r1` read at
+   all. Its epilogue does `ldr r0,[sp+0x4c]; str r6,[r0]` (the freshly
+   built `0x38`-byte object written through that saved `r0`) then
+   returns with that same `r0`. This is exactly the ARM/CFront hidden-
+   return-pointer convention: `r0` in, `r0` out, object constructed
+   in place at `*r0` -- **not** a `self`/`this` parameter (`AScene`'s
+   `Run()` takes no explicit args, and its body never touches its own
+   `this`, consistent with the vtable dispatch call site never passing
+   a second register either).
+3. The return type is forced to hidden-pointer convention (rather than
+   the plain-`r0` convention a 4-byte POD would get) because
+   `SmartPtr<T>` (`include/smart_ptr.hh`) has a user-defined destructor
+   (`~SmartPtr(){ delete inner; }`) -- non-trivial by the Itanium/CFront
+   ABI rule regardless of its 4-byte size. `AScene::Run()`'s declared
+   return type, `SmartPtr<AUnk_0800080C>`, matches exactly.
+
+**Conclusion: `func_08004C68`'s real signature is
+`SmartPtr<AUnk_0800080C> Run()`** (an override on the same anonymous
+scene-record-#12 class `func_08004C54` already partially exposed), not
+a bare C function -- this matters for the C-vs-C++ shape rule in
+`DECOMP_RULES.md` (round 5): this one genuinely needs the C++ method
+form to reproduce the hidden-return-pointer ABI, unlike `func_08004C54`
+which stayed a free function.
+
+### Buffer/selector layout in the terminal `0x38`-byte object, CONFIRMED
+
+Static byte-level trace of the tail (`.L08004E22` onward) against three
+16-byte stack scratch buffers filled by the three capture loops:
+
+| offset | field | source buffer | source prompt (ROM ASCII, confirmed round 27) |
+|---|---|---|---|
+| `+0x00` | vtable ptr | -- | `__vt_13AUnk_0800080C` then `vtable_unk_080E5A78` (base-then-derived stamp) |
+| `+0x04` | farm name, NUL-terminated, <=12 chars | 2nd capture buffer (`sb`) | `gUnk_080E893C` = `"Farm's"` |
+| `+0x14` | player name, NUL-terminated, <=12 chars | 1st capture buffer (`sl`) | `gUnk_080E8934` = `"Your "` |
+| `+0x24` | **selector, 1 byte** | register `r8` at loop exit | (not a text capture -- see below) |
+| `+0x28` | dog name, NUL-terminated, <=12 chars | 3rd capture buffer (stack) | `gUnk_080E8944` = `"Dog's "` |
+
+Layout confirmed directly from the `adds r5,r6,#0x??`/`memcpy`/`strb`
+sequence at `asm/code_08004C68.s:231-265`, not inferred.
+
+### Selector byte: origin traced, semantic role NOT fully resolved
+
+Per the mission's step 5. What's newly established this round, beyond
+the patch repo's "candidate for gender, unconfirmed" (`docs/ENGINE.md`
+round 27):
+
+- **The selector is NOT read from `func_08004C68`'s own input** --
+  `func_08004C68` takes no explicit parameter (see ABI finding above),
+  so it cannot be receiving a caller-supplied gender/config byte. Its
+  value is entirely LOCAL, computed in two places:
+  1. **At loop entry** (`asm/code_08004C68.s:24-30`), from register
+     `r8`'s value *before this function ever writes to it* -- i.e.
+     whatever `r8` held on entry from the caller's register file
+     (`r8`/`sb`/`sl` are callee-saved and only saved/restored here, not
+     parameters). Masked: `r8 &= ~3; r8 &= ~0x7C;` (two Thumb-forced AND
+     steps, net effect `r8 &= ~0x7F` -- clears the low 7 bits, keeps
+     bit 7 and above). **This reads as leftover/garbage-in caller
+     register content being defensively masked down to (effectively)
+     just its top bit**, not a meaningful "read a real parameter"
+     pattern -- consistent with `Run()` taking no arguments.
+  2. **Reassigned every loop iteration** (`asm/code_08004C68.s:94-96`):
+     `r8 = func_0806EA6C(widget)` -- a return value from one of the 4
+     unidentified `func_0806E9D8`/`func_0806EA30`/`func_0806EA6C`/
+     `func_0806EA00` family calls sandwiched between the player-name and
+     farm-name captures, called with the OLD `r8` as an argument to
+     `func_0806E9D8` first (`asm/code_08004C68.s:79-81`), then re-read
+     back out via `func_0806EA6C` after the widget's virtual-dispatch
+     step. **This is a genuine stateful read-modify-write cycle on an
+     interactive widget between the two capture loops -- structurally
+     exactly the shape of a selection UI (e.g. a left/right toggle
+     sprite)**, which is the strongest evidence yet for the "gender
+     selector" hypothesis, but the actual VALUE SPACE (is it 0/1?
+     0/0x80? a small enum?) is still unknown since none of the 4
+     `func_0806Exxx` functions have been decompiled (their own bodies
+     were out of scope for this session's budget -- they are a
+     self-contained widget family, distinct from the text-capture
+     widget family `func_08007xxx`, and from the confirm-screen family
+     `func_0800598C`/`func_08005Axx`).
+- **`func_0806E9D8`/`func_0806EA30`/`func_0806EA6C`/`func_0806EA00`
+  disassembled at a glance (not fully decompiled)**: `func_0806E9D8`
+  takes `(widget, value)` and is a short function; `func_0806EA6C`
+  takes `(widget)` and returns a value truncated/masked in some way at
+  its call site usage. Sizes and shapes look tractable (each is
+  visibly short in `objdump`, well under the "register pressure" class)
+  -- **good candidate for a focused follow-up session dedicated just to
+  this family**, which would likely settle the gender-selector question
+  with actual value semantics rather than structural inference.
+
+**Honest limit of this round's selector finding**: structural evidence
+(position between first two name captures, read-modify-write against
+an interactive widget, single byte, masked to keep only high bits at
+entry) is consistent with, and strengthens, the "gender selector"
+hypothesis from the patch repo -- but this round did **not** determine
+the actual bit meaning (which value = which gender, or whether it's a
+gender selector at all vs. some other small-enum UI choice). Concrete
+next step for `docs/CHARACTER_SELECT.md`: decompile the 4
+`func_0806Exxx` functions (small, tractable) and/or dynamically trace
+the selector byte's value across a save with a manually-chosen
+character gender.
+
+### Full C/C++ port: ATTEMPTED, NOT converged, NOT committed
+
+Given the size (~150 instructions, by far the largest single function
+tackled directly in this repo's own rounds) and the number of entirely
+undecompiled callees this function depends on (`func_08007078`,
+`func_080070D4`, `func_08007110`, `func_080070A4`, all 4
+`func_0806Exxx`, `func_0800598C`, `func_08005A00`, `func_08005A3C`,
+`func_080059D0`, `func_08008980`, `func_08008DB8`, `func_08008A68` --
+12 callees, none with an established C signature anywhere in this
+repo), a full bit-exact port was judged, honestly, out of reach of this
+round's budget. A draft was written and test-compiled via the
+quicktest harness (`DECOMP_RULES.md`'s fast-iteration recipe) as a
+sanity check of the ABI/signature analysis above:
+
+- First quicktest pass caught a real, generalizable issue worth
+  recording: **naively writing `SmartPtr<AUnk_0800080C> ret(ptr); return
+  ret;` does NOT compile** -- `SmartPtr`'s copy constructor
+  (`include/smart_ptr.hh:47`) is `private` and a no-op (`SmartPtr(SmartPtr
+  &){}`, doesn't even copy `inner`), so naming a local `SmartPtr` and
+  returning it invokes that broken private copy ctor. **The correct
+  idiom for this codebase's `SmartPtr<T>` is `return
+  SmartPtr<T>(ptr);`** -- construct the temporary directly via the
+  explicit `SmartPtr(T*)` ctor so the compiler builds it straight into
+  the hidden return slot, no copy ever attempted. Same applies to any
+  future `Run()`-shaped override in this family. Worth adding to
+  `DECOMP_RULES.md` if a second function hits the same trap.
+- Second, unresolved issue: reproducing the base-then-derived
+  double-vtable-stamp at the new object's offset 0
+  (`__vt_13AUnk_0800080C` immediately overwritten by
+  `vtable_unk_080E5A78`) bit-exactly requires the terminal object to be
+  a *real* C++ subclass of `AUnk_0800080C` overriding its pure-virtual
+  `vfunc_0C()` (so the compiler emits the double-stamp as a genuine
+  base-subobject-then-derived construction side effect, not as two
+  raw pointer writes that `-O2` could dead-store-eliminate down to
+  one) -- but `vfunc_0C()`'s real body is itself out of scope/unported,
+  and the tail sequence around the widget's own `SmartPtr` member
+  (`asm/code_08004C68.s:266-283`, a set-then-immediately-cleared field
+  bracketing a virtual-dispatch call that traces out as *always*
+  skipped, `cmp r1,#0; beq skip` with `r1` provably 0 from three lines
+  above) was not fully re-derived to a clean C++ source shape within
+  budget -- flagged as a genuine open question, not guessed past.
+- **Not committed**: no `src/`/`asm/`/`fomt.lds` changes were made to
+  the tracked worktree this round. `git status --short` confirmed clean
+  before and after this round's exploration; a final `rm -rf build
+  fomt.gba fomt.elf fomt.map && make compare` re-confirmed the baseline
+  is still bit-exact, untouched.
+
+### Repo state at end of round 6
+
+- Zero new commits touching `src/`/`asm/`/`fomt.lds` (per the
+  non-negotiable "never commit a non-matching build" rule -- this
+  round's port did not converge, so nothing was staged). This
+  session-notes update (and a `DECOMP_RULES.md` priority-list update)
+  are the only tracked changes.
+- `make compare` reconfirmed bit-exact (`sha1sum -c fomt.sha1` ->
+  `Réussi`) on a full clean rebuild, both before touching anything and
+  again at the end of the round.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. No concurrent-session activity observed this round.
+- **Priority list for whoever picks this up next**:
+  1. Decompile the 4-function `func_0806E9D8`/`func_0806EA30`/
+     `func_0806EA6C`/`func_0806EA00` family first, in isolation --
+     small, tractable, and would resolve both the selector-byte
+     semantics AND remove 4 of `func_08004C68`'s 12 unknown-signature
+     callees before attempting the parent function again.
+  2. Re-attempt `func_08004C68` itself only after (1) and ideally after
+     at least the text-capture widget family (`func_08007078`/
+     `func_080070D4`/`func_08007110`/`func_080070A4`) is also
+     decompiled -- porting the parent around still-opaque callees is
+     what stalled this round; each resolved callee narrows the
+     remaining unknowns concretely instead of guessing at their
+     signatures.
+  3. Remember the `SmartPtr<T>` private-copy-ctor trap found this round
+     (`return SmartPtr<T>(ptr);`, never a named local) for that attempt
+     and any other `Run()`-shaped override.
+  4. Everything still open from rounds 1-5's lists (23-member richer-
+     destructor family, `franglais_transition_ctl_query` `0x08050DF0`,
+     `Unpack` `0x080D102C`, script dispatch table `0x0803F900`,
+     `DrawGlyphAt`/recolor, `docs/DIALOGUE.md`,
+     `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
+     `docs/MFOMT_ADDITIONS.md`).

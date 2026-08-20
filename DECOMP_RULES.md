@@ -308,14 +308,41 @@ wildcard `*(.gnu.linkonce.t...)` qui suivait déjà cette entrée dans le
 vestige inerte sans avoir vérifié son adresse assignée dans `fomt.map`
 sur un build propre AVANT de toucher au fichier.
 
-## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
+## Piège `SmartPtr<T>` : ne jamais nommer localement une valeur de retour
+
+`SmartPtr<T>::SmartPtr(SmartPtr&)` (`include/smart_ptr.hh:47`) est
+**privé et no-op** (ne recopie même pas `inner`). Conséquence directe
+pour tout `Run()`/méthode qui retourne un `SmartPtr<T>` par valeur :
+`SmartPtr<T> ret(ptr); return ret;` **ne compile pas** (tentative
+d'appel au copy-ctor privé). Le seul idiome correct est de construire
+le temporaire directement dans l'expression `return` :
+`return SmartPtr<T>(ptr);` -- le compilateur construit alors la valeur
+directement dans le slot de retour caché (convention ABI CFront/ARM
+pour les types à destructeur non-trivial, cf. `func_08004C68` round 6
+pour l'analyse complète du pourquoi `SmartPtr<T>`, malgré ses 4 octets,
+suit cette convention plutôt que `r0` direct).
+
+## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
 
 1. ~~`func_080E09B0`~~ -- matché round 5.
 2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
    d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
    enfant à l'offset +4 avant de le caractériser côté dépôt patch**
    (Ghidra sur 2-3 exemples).
-3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
+3. **`func_08004C68` (round 6, tenté, NON convergé)** : identifié avec
+   certitude structurelle comme `Run()` de la classe scène de
+   l'enregistrement #12 (séquence de saisie New Game : nom joueur,
+   sélecteur 1 octet, nom ferme, nom chien -- voir round 6 pour le
+   détail complet du layout `+0x04`/`+0x14`/`+0x24`/`+0x28`). Bloqué
+   par 12 fonctions appelées entièrement non décompilées. **Prochaine
+   étape recommandée avant de retenter : décompiler d'abord la famille
+   `func_0806E9D8`/`func_0806EA30`/`func_0806EA6C`/`func_0806EA00`**
+   (petite, tractable, résoudrait aussi la sémantique du sélecteur --
+   candidat sérieux pour le genre du joueur, valeur non confirmée),
+   puis la famille de saisie de texte `func_08007078`/`func_080070D4`/
+   `func_08007110`/`func_080070A4`, avant de retenter le port complet
+   de `func_08004C68` lui-même.
+4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
    pointeur de recherche -- si/quand cette fonction est portée ICI,
