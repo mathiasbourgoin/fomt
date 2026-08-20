@@ -127,9 +127,19 @@ même pic de pression de registres.
   s'effondre en 1 instruction compacte) ; round 4/w29, résidu réduit de
   44 à 24 octets (bloc TL correctement reproduit), cause isolée à une
   collision de registre entre `anchor` (alloué en `r2`) et le pointeur
-  de fin de boucle `end` (que l'original garde en `r2`, libre) -- piste
-  concrète pour un round futur. Voir `SESSION_NOTES.md` rounds 9/w22,
-  10/w27, 4/w29 pour le détail complet de chaque itération.
+  de fin de boucle `end` (que l'original garde en `r2`, libre) ; round
+  5/w31, résidu réduit à 4 octets, blocage localisé à un seul point
+  (pointeur de fin de boucle du bloc TL en registre haut `ip` au lieu
+  d'un registre bas) ; round 6/w34, **6e échec** -- 2 améliorations
+  mesurées (résidu 24->16->12 octets) mais chaque correction fait
+  RESSURGIR le résidu ailleurs (`dest` réalloué en `r9` au lieu de
+  `sl`), preuve que la pression de registres est pire que prévu, pas
+  juste un idiome manquant. **PAUSE recommandée par round 6 lui-même** :
+  ne pas retenter par itération de forme C -- la seule piste non
+  essayée est une comparaison avec une décompilation Ghidra amont de
+  `StanHash/fomt` pour cette adresse si elle existe. Voir
+  `SESSION_NOTES.md` rounds 9/w22, 10/w27, 4/w29, 5/w31, 6/w34 pour le
+  détail complet de chaque itération.
 - `func_08008980` (callee bloquant de `func_08004C68`) -- **caractérisée
   en détail round 9/w21**, confirmée classe "pression de registres" par
   inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur
