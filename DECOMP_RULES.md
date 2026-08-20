@@ -131,6 +131,65 @@ un seul fichier de doc (`docs/VWF.md` etc.) a la même difficulté** --
 même section de doc mais dans deux classes de difficulté totalement
 différentes.
 
+## Classe de problème "ABI partagée entre `bl`" -- INFAISABLE en C,
+ne pas re-tenter (constat, pas un échec de tentative)
+
+Round dédié `Unpack` (`0x080D102C`, worktree `parallel-1`) : contrairement
+à la classe "pression de registres" ci-dessus (qui reste un problème DE
+FORME C, récupérable avec assez de budget), cette classe est un problème
+DE NATURE -- aucune reformulation C, quel que soit le budget, ne peut
+produire la séquence observée, parce qu'elle **viole la convention
+d'appel elle-même**, pas juste la forme d'une expression.
+
+Constat sur `Unpack` (`0x080D102C`) et tout son arbre d'appel
+(`func_080D10F0`, `func_080D1186`, `func_080D11A4`/`sub_080D11B8`
+= lecteur de bits bit-à-bit, `sub_080D1224`/`129A`/`12EC`/`139C`/`1204`
+= les 5 modes de corps, `func_080D1518`/`1548`/`1564`/`1574` = les 4
+post-filtres, tous dans `asm/code_809E804.s` autour de la ligne 103423) :
+l'état du lecteur de bits (`buf` en r2, `avail` en r3) est **passé par
+valeur dans r2/r3 à travers une longue chaîne de `bl` vers des fonctions
+distinctes** (`Unpack` -> `func_080D11A4` -> `func_080D10F0` ->
+`sub_080D1224` etc.), SANS AUCUN rechargement entre deux `bl` consécutifs
+qui utilisent tous les deux ce même état. Exemple concret vérifié :
+`sub_080D1224` (mode de corps 0) commence directement par `bl
+func_080D14EC` puis `bl func_080D11A4`, tous deux consommant `r2`/`r3`
+comme lecteur de bits déjà initialisé -- ces registres n'ont pourtant été
+positionnés que dans `Unpack`, plusieurs `bl` plus haut, et rien dans
+`sub_080D1224` ne les recharge depuis la mémoire ou un registre
+callee-saved. Or `r0`-`r3` sont **caller-saved dans TOUTE convention
+d'appel ARM/Thumb standard** (APCS, AAPCS, et la convention utilisée par
+agbcp lui-même pour tout code qu'il génère) -- un compilateur C, quelle
+que soit la forme du code source, DOIT toujours supposer que `r0`-`r3`
+sont détruits par un appel `bl` et les recharger avant réutilisation.
+Voir la même valeur cette nuit-là côté dépôt patch (docs, section
+"Pourquoi pas la décompilation Ghidra directe" de
+`docs/BACKGROUNDS_INVENTORY.md` du dépôt `harvest-moon-franglais`) : "de
+l'assembleur Thumb écrit à la main, optimisé, pas une sortie de
+compilateur" -- ce round confirme ce constat de façon INDÉPENDANTE et
+plus précise (identification du mécanisme exact de la violation, pas
+seulement l'observation générale que Ghidra échoue dessus).
+
+**Conclusion : `Unpack` et tout son arbre d'appel ne sont PAS des cibles
+de décompilation C valides.** Ce n'est pas "pas encore réussi", c'est
+"structurellement impossible" -- toute tentative de porter une de ces
+fonctions comme fonction C libre appelant les autres via `bl` produirait
+nécessairement un code différent (rechargements de `r2`/`r3` que
+l'original n'a pas), donc jamais bit-exact. Seule option théorique
+(non tentée, jugée hors scope d'un round de décompilation C) : porter le
+bloc entier comme un unique gros morceau d'assembleur inline, ce qui ne
+serait qu'une recopie du `.s` existant sans valeur ajoutée. **Retirer
+`Unpack` de la liste des cibles priorisées** (voir en fin de fichier) --
+ne pas re-tenter sans une raison nouvelle et spécifique de penser que ce
+diagnostic était faux.
+
+Signal d'alerte généralisable pour de futures cibles : avant de commencer
+une tentative sur une fonction qui appelle plusieurs `bl` vers d'autres
+fonctions non triviales, vérifier si un registre `r0`-`r3` est
+**réutilisé après un `bl` sans rechargement visible entre-temps**, à la
+fois dans l'appelant ET dans le corps du callé juste après son propre
+prologue. Si oui, c'est cette classe -- pas la peine de tenter une
+reformulation C, le problème n'est pas la forme du source.
+
 ## Méthode de découpage d'un fichier `asm/*.s` monolithique
 
 1. `grep -n "thumb_func_start"` pour trouver la ligne de la fonction
@@ -320,9 +379,12 @@ sur un build propre AVANT de toucher au fichier.
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
    pointeur de recherche -- si/quand cette fonction est portée ICI,
    lui donner un nom neutre côté vanilla, pas ce nom-là littéralement,
-   cf. règle "point de vue vanilla" ci-dessus), `Unpack` (`0x080D102C`,
-   référence Python déjà disponible côté patch repo), table de dispatch
+   cf. règle "point de vue vanilla" ci-dessus), table de dispatch
    script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
    "pression de registres", cf. section dédiée ci-dessus -- pas sans
    gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
    `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
+4. ~~`Unpack` (`0x080D102C`)~~ -- **retiré définitivement** de cette
+   liste (round dédié worktree `parallel-1`) : classe "ABI partagée
+   entre `bl`", structurellement infaisable en C, cf. section dédiée
+   ci-dessus. Ne pas re-tenter.

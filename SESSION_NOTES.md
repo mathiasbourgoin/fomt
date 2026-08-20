@@ -971,3 +971,85 @@ nommage" section for future rounds.
   without a bigger dedicated budget; `docs/DIALOGUE.md`,
   `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
   `docs/MFOMT_ADDITIONS.md`).
+
+## 2026-08-20 -- worktree `parallel-1`, dedicated round -- `Unpack`
+(`0x080D102C`): negative result, target permanently dropped
+
+Assigned target: `Unpack` (`0x080D102C`), the LZSS+Huffman decompressor,
+with the patch repo's already-validated Python reference
+(`harvest-moon-franglais/tools/unpack_decoder.py`) and algorithm writeup
+(`harvest-moon-franglais/docs/BACKGROUNDS_INVENTORY.md`) as the intended
+guide for a real C/C++ port. **Result: no code was ported, no commit
+touching `src/`/`asm/`/`fomt.lds` was made.** The target is structurally
+infeasible for C decompilation, not merely difficult -- see
+`DECOMP_RULES.md`'s new section "Classe de problème 'ABI partagée entre
+`bl`'" for the full writeup, added this round. Summary here for the
+session log:
+
+1. **Located `Unpack`** in `asm/code_809E804.s` (line ~103423, already
+   labeled `Unpack` rather than `func_080D102C` -- someone earlier
+   pre-named the dispatcher entry point, its callees are still
+   `func_ADDR`/`sub_ADDR`). Confirmed the whole family already exists as
+   ~14 separate `thumb_func_start` entries between `0x080D102C` and
+   `0x080D15C0` (the top dispatcher itself is only 196 bytes,
+   `0x080D102C`-`0x080D10F0` -- small, looked tractable at first glance).
+2. **Traced the top dispatcher by hand**, instruction by instruction,
+   against `docs/BACKGROUNDS_INVENTORY.md`'s format description (info
+   byte bit layout `[7:5]`=filter, `[4:3]`=symbol width, `[2:0]`=body
+   mode) -- matches exactly, confirms the patch repo's algorithm
+   understanding is correct and directly maps onto this disassembly.
+3. **Found the actual blocker while checking `sub_080D1224` (body mode
+   0) as a sanity check before writing any C**: it opens with `bl
+   func_080D14EC` immediately followed by `bl func_080D11A4` (the bit
+   reader), both consuming the bit-reader state (`buf` in `r2`, `avail`
+   in `r3`) that was only ever initialized several `bl` boundaries
+   earlier, inside `Unpack` itself -- with **no reload of `r2`/`r3`
+   anywhere in between**, neither at the `Unpack` call sites nor at
+   `sub_080D1224`'s own entry. `r0`-`r3` are caller-saved in every
+   ARM/Thumb calling convention agbcp could plausibly generate code
+   under; no C source, in any form, compiles to a `bl` sequence that
+   relies on a non-return-value register surviving an intervening call
+   to a genuinely separate function. This is definitive, not a
+   probabilistic judgment call -- verified by direct inspection of both
+   the caller and the callee's entry, not inferred from difficulty.
+4. Cross-checked against the patch repo's own framing
+   (`docs/BACKGROUNDS_INVENTORY.md`, "Pourquoi pas la décompilation
+   Ghidra directe": "de l'assembleur Thumb écrit à la main, optimisé,
+   pas une sortie de compilateur") -- same conclusion, reached
+   independently this round from the raw disassembly rather than taken
+   on faith from that doc, and sharpened with the exact mechanism
+   (register-passed bit-reader state surviving uninitialized-in-between
+   across multiple `bl`s) rather than just the general observation that
+   Ghidra's decompiler output was unreliable.
+5. **No attempt was made to force a C translation anyway** (e.g. via
+   named register-variable extensions) -- this repo has zero precedent
+   for that pattern (`grep` for `asm("r` register-variable usage across
+   `src/`/`include/` returned nothing), and forcing it would only
+   reproduce the existing `.s` as inline asm dressed up as C, which
+   `DECOMP_RULES.md`'s own discipline treats as not a real decompilation
+   (no semantic gain, purely cosmetic, and never guaranteed bit-exact
+   without becoming a line-for-line asm transcription anyway).
+
+### Repo state at end of this round
+
+- **Zero changes to `src/`, `asm/`, `fomt.lds`, or any build-affecting
+  file.** `git status --short` before and after this round is identical
+  except for `DECOMP_RULES.md` and `SESSION_NOTES.md` (this entry).
+  `rm -rf build fomt.gba fomt.elf fomt.map && make compare` confirmed
+  bit-exact (`ok`) both before starting and after finishing, with no
+  intervening code edits -- nothing to break.
+- `DECOMP_RULES.md` updated: new section "Classe de problème 'ABI
+  partagée entre `bl`'" (general pattern + detection heuristic for
+  future rounds hitting similar hand-written-asm subsystems), and
+  `Unpack` struck from the "prochaines cibles priorisées" list with a
+  pointer to this reasoning -- **do not re-assign this target** without
+  a new, specific reason to doubt this diagnosis.
+- No parallel-session interference observed; `origin` untouched, no
+  push, no PR, per standing discipline.
+- Honest bottom line: the task requested a bit-exact C/C++ match for
+  `Unpack`. That specific deliverable is not achievable for this
+  function family as a matter of ABI, independent of effort invested --
+  reported as a negative result with full reasoning rather than forcing
+  a plausible-looking but fake C port, per the project's non-negotiable
+  "never commit a non-matching match" discipline (which extends here to
+  "never even attempt one once infeasibility is established").
