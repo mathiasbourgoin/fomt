@@ -1,7 +1,5 @@
 #include "farmer.hh"
 
-#include "franglais_poc.hh"
-
 Farmer::Farmer(char const * arg_1, GameDate const & arg_2)
     : unk_00(arg_1),
       unk_20(arg_2),
@@ -37,10 +35,25 @@ EC GameDate func_0800E4E8(Farmer const & self)
     return self.unk_20;
 }
 
-EC unsigned int func_0800E4F0(Farmer const & self)
+// The vanilla body of func_0800E4F0 is exactly 0xC bytes (adds/ldrh/lsls/
+// lsrs/bx lr, plus a 2-byte alignment pad before the next function). This
+// must stay a fixed-size trampoline instead of a free-size body
+// replacement: other tables in the ROM (vtables.s and similar) reference
+// downstream functions by raw absolute address, so any size drift here
+// shifts every function after it and silently corrupts those raw
+// pointers -- the exact class of bug that broke boot via func_0800912C
+// (see asm/code_08008DE8.s). r0 already holds `&self` on entry, matching
+// the vanilla calling convention, so it is passed through untouched.
+EC NAKED unsigned int func_0800E4F0(Farmer const & self)
 {
-    typedef unsigned int (*Fn)(Farmer const *);
-    return ((Fn)(FRANGLAIS_franglais_farmer_stamina | 1u))(&self);
+    asm_unified("\
+        ldr r3, .Lfranglais_farmer_stamina\n\
+        bx r3\n\
+        nop\n\
+        nop\n\
+        .align 2, 0\n\
+    .Lfranglais_farmer_stamina: .4byte 0x08801075 @ =franglais_farmer_stamina | 1 (thumb bit)\n\
+    ");
 }
 
 EC unsigned int func_0800E4FC(Farmer const & self)

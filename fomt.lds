@@ -134,8 +134,12 @@ SECTIONS
         src/entity.o(.text);
         src/code_entity_08020018.o(.text);
         asm/code_entities.o(.text);
+        src/code_080222A8.o(.text);
+        asm/code_08022320.o(.text);
         src/entity_actor.o(.text);
         asm/code_entities_080320DC.o(.text);
+        src/code_08032A00.o(.text);
+        asm/code_08032A30.o(.text);
         src/npc_entity.o(.text);
         asm/code_entities_08034CEC.o(.text);
         src/code_08035B38.o(.text);
@@ -214,11 +218,13 @@ SECTIONS
         asm/code_08037A04.o(.text);
         src/code_08039A30.o(.text);
         asm/code_08039A5C.o(.text);
+        src/code_0803A798.o(.text);
         src/code_0803A804.o(.text);
 
         asm/code_0803A8A4.o(.text);
+        src/code_0803BF78.o(.text);
+        asm/code_0803BFC8.o(.text);
         src/script_engine.o(.text);
-        . = . + 0x108;
         asm/code_0803EE94.o(.text);
         src/code_0804E4AC.o(.text);
         asm/code_0804E5AC.o(.text);
@@ -234,13 +240,16 @@ SECTIONS
         src/code_08050E80.o(.text);
         src/code_08050E8C.o(.text);
         asm/code_08050E98.o(.text);
+        src/code_08050EE4.o(.text);
+        asm/code_08050F4C.o(.text);
         src/code_08050F60.o(.text);
         src/code_08050F70.o(.text);
         asm/code_08050F74.o(.text);
         src/code_080512B8.o(.text);
         src/code_080512C8.o(.text);
         src/code_080512D0.o(.text);
-        asm/code_080512D8.o(.text);
+        src/code_080512D8.o(.text);
+        asm/code_08051320.o(.text);
         src/code_0805218C.o(.text);
         src/code_080521BC.o(.text);
         asm/code_080521FC.o(.text);
@@ -412,6 +421,8 @@ SECTIONS
         asm/code_linkonce.o(.text.code_080E0EF0);
         src/code_080E41B0.o(.text);
         asm/code_080E41E8.o(.text);
+        src/code_080E44E4.o(.text);
+        asm/code_080E4510.o(.text);
 
         *(.gnu.linkonce.d.__vt_6AScene);
         *(.gnu.linkonce.d.__vt_13AUnk_0800080C);
@@ -446,10 +457,14 @@ SECTIONS
     __iwram_vma_end = ADDR(.iwram) + SIZEOF(.iwram);
     __iwram_lma     = LOADADDR(.iwram);
 
+    /* Pads up to the payload. Size is COMPUTED from the current position:
+     * a hardcoded size (formerly 0x08800000 - 0x0875C240) silently breaks
+     * the moment any upstream object's size changes.
+     */
     .pad : ALIGN(4)
     {
         LONG(0);
-        . = 0x08800000 - 0x0875C240;
+        . = 0x08800000 - (__iwram_lma + SIZEOF(.iwram));
     } > ROM = 0xFF
 
     .franglais_payload 0x08800000 : ALIGN(4)

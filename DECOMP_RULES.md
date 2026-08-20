@@ -72,6 +72,32 @@ vieilles notes.
   soit utiliser `git add -A` sans restriction (puis vérifier `git status`
   avant de commiter), soit lister explicitement CHAQUE fichier modifié/
   supprimé/ajouté.
+- **Règle standing de Mathias (confirmée) : tout hook doit être un
+  trampoline à taille FIXE (identique à la fonction vanilla remplacée),
+  jamais un remplacement de corps à taille libre.** La vraie logique
+  (aussi complexe que nécessaire) vit dans `.franglais_payload`, une
+  section séparée en fin de ROM que rien ne référence par adresse brute
+  -- elle peut grossir/rétrécir librement. Le point d'accroche dans le
+  code vanilla, lui, doit rester un saut à taille identique à l'original
+  (padding `nop` si besoin), sinon toute fonction en aval décale et
+  n'importe quel pointeur brut existant ailleurs dans la ROM (vtables.s
+  ou une autre table jamais repérée) devient faux -- exactement le bug
+  qui a cassé le boot (`func_0800912C`/`f718114`) et qui reste ACTIF
+  aujourd'hui : mesuré (`nm` sur `fomt.elf`) un décalage résiduel
+  constant de **+8 octets** sur tout le binaire à partir de
+  `func_08050EE4` jusqu'à la fin de la ROM, causé par le fait que les
+  hooks C++ existants (`GetString`/`GetName`/`GetDesc` x3/
+  `franglais_season_of`/`franglais_farmer_stamina`, tous des
+  remplacements de corps à taille libre, pas des trampolines) ne
+  s'annulent PAS exactement à zéro comme on le pensait. Conversion de
+  ces hooks en trampolines à taille fixe = priorité actuelle des agents
+  parallèles avec la symbolisation de `vtables.s` (les deux éliminent la
+  même classe de bug, par les deux bouts). Le trampoline n'est PAS la
+  destination finale (Mathias : "il complique le code et garde du code
+  mort partout") -- une fois `vtables.s` et le reste des tables
+  d'adresses brutes symbolisés, le linker peut reloger librement chaque
+  fonction et le remplacement à taille libre redevient sûr sans
+  trampoline ni padding mort. Discipline transitoire, pas permanente.
 - **Avant de créer un nouveau worktree avec `git worktree add ... main`,
   vérifier que le checkout principal est vraiment SUR `main`** (`git
   branch --show-current`), pas juste faire confiance au nom de branche
@@ -379,6 +405,74 @@ derniers octets (`00 00` attendu, pas un nop `c0 46`) plutôt que de
 supposer. Vu round (worktree w40) : 8 sites sur 38 concernés, détecté par
 une comparaison octet-à-octet (pas seulement mnémonique) entre le bloc
 original réassemblé tel quel et le C compilé.
+
+### 15. Argument d'appel nécessitant un littéral non shift-décomposable :
+TOUJOURS hissé avant le montage des arguments-pile, indépendamment de
+l'ordre déclaré en C
+
+Near-miss root-causé pour de bon round (worktree w47, `func_08037B48`/
+`func_08037B80`) : quand un appel à 5+ arguments passe une constante
+"kind"/"tag" qui doit être chargée depuis le pool littéral (impaire, ou
+`> 0xFF`, donc pas exprimable en `movs #k; lsls #n`), agbcp calcule
+TOUJOURS ce littéral AVANT de monter le(s) argument(s) passé(s) sur la
+pile -- quelle que soit la position de cet argument dans la liste
+déclarée en C, et quel que soit l'ordre des sous-expressions écrit
+(cf. règle 5bis). Contrairement aux autres near-miss de ce fichier, **ce
+n'est pas un idiome C à trouver -- c'est structurellement infaisable**
+tant que la constante en cause n'est pas shift-décomposable : le seul
+gain possible serait de rendre le littéral décomposable, ce qui changerait
+la valeur elle-même, ou de renoncer si aucune formulation ne fait passer
+le calcul du littéral après le montage de la pile. Signal pratique : si un
+near-miss résiste à 5+ reformulations C ET que l'écart concerne
+spécifiquement quel calcul (littéral vs argument-pile) est fait en
+premier, vérifier si la constante en cause est shift-décomposable AVANT
+de chercher encore une forme C -- si non, fermer la piste plutôt que de
+continuer à itérer.
+
+### 16. Masque de clear construit par négation (`movs #N; negs`) sur un champ
+de largeur FIXE : c'est le codegen d'une vraie affectation de bitfield
+struct, pas un artefact d'expression `v & ~mask` à deviner
+
+Near-miss root-causé pour de bon round w49 (`func_08050EE4`/
+`func_080512D8`, après 2 échecs w39/w41 sur `v & ~0x3F`/`v & ~0x1F` en
+`u8`/`u32` local) : quand le désassemblage construit le masque de clear
+d'un champ via `movs rX,#N; negs rX,rX` (`N` = largeur du champ codée en
+positif, `~mask = -(mask+1) = -N`) plutôt qu'un immédiat direct, **et que
+la largeur du champ est FIXE à la compilation** (pas un paramètre
+d'appel), ce n'est presque jamais reproductible en écrivant `v & ~mask`
+à la main sur un entier brut -- agbcp plie systématiquement ce genre
+d'expression en immédiat direct, quelle que soit la formulation
+(variable locale nommée ou non, `u8` ou `u32`). **C'est le codegen normal
+d'agbcp pour une vraie affectation `self->champ = valeur;` sur un membre
+`: N` d'un `struct` C avec bitfields** (style déjà utilisé partout dans ce
+dépôt, `barn.hh`/`coop.hh`/`bachelorette.hh`) : le compilateur choisit lui-
+même l'unité d'accès (octet/demi-mot/mot) la plus étroite qui couvre
+entièrement le champ visé, et matérialise le masque de clear via
+négation quand `largeur_masque+1` tient dans un immédiat 8 bits (sinon,
+littéral pool 32 bits direct pour le masque déjà négé). Modéliser le
+mot/octet packé comme un vrai `struct { u32 a:5; u32 b:10; ...};` et
+assigner champ par champ (dans l'ordre du désassemblage, cf. règle 5)
+reproduit l'unité d'accès ET la construction du masque, y compris le cas
+où 2 bitfields de largeur 1 partageant le MÊME octet se retrouvent
+fusionnés en un seul `ldrb`/`strb` (un seul accès mémoire couvrant les 2
+micro-champs). **Signal pratique pour distinguer ce cas du cas non
+résolu** (masque construit à partir d'un paramètre d'appel dynamique,
+ex. `func_08050E98`/`func_08050EBC`, toujours ouvert) : si le "masque" à
+appliquer vient d'un REGISTRE ARGUMENT (pas d'un littéral connu à la
+lecture du désassemblage), ce n'est PAS une simple affectation de
+bitfield à largeur fixe -- cette règle ne s'applique pas, ne pas
+retenter la modélisation bitfield-struct sans nuance.
+
+**16bis. Reste de l'écart après le fix bitfield-struct, spécifique aux
+constructeurs : si le désassemblage restaure `lr` dans un registre
+scratch DIFFÉRENT de celui qu'une version `void` naïve produit (ex.
+`pop {r1}; bx r1` au lieu de `pop {r0}; bx r0`), essayer `return self;`
+(ou `return self_;`) explicite avant de chercher ailleurs** -- une fois
+`r0` occupé par la valeur de retour vivante (convention ARM/CFront pour
+les ctors, cf. règle 9/`SmartPtr`), agbcp restaure `lr` dans le prochain
+registre scratch libre (`r1`) plutôt que `r0`. Vu 2 fois d'affilée same
+round (`func_08050EE4`, `func_080512D8`) : le fix bitfield seul ne
+suffisait pas tant que la fonction restait typée `void`.
 
 ## Classes de difficulté à connaître AVANT de choisir une cible
 

@@ -78,8 +78,11 @@ int Tool::GetId() const
 
 char const * Tool::GetName() const
 {
-    typedef char const * (*Fn)(Tool const *);
-    return ((Fn)(FRANGLAIS_franglais_tool_name | 1u))(this);
+    // Vanilla body is 0x2C bytes (GetName__C4Tool, vanilla ROM). Trampoline
+    // to the real (franglais) implementation in .franglais_payload; see
+    // FRANGLAIS_TRAMPOLINE in franglais_poc.hh for why this must stay
+    // exactly this size.
+    FRANGLAIS_TRAMPOLINE("0x08801975", "15");
 }
 
 u16 Tool::GetIconId() const
@@ -101,8 +104,9 @@ static inline char const * GetToolDescById(u32 id)
 
 char const * Tool::GetDesc() const
 {
-    typedef char const * (*Fn)(Tool const *);
-    return ((Fn)(FRANGLAIS_franglais_tool_desc | 1u))(this);
+    // Vanilla body is 0x3C bytes (GetDesc__C4Tool, vanilla ROM). See
+    // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
+    FRANGLAIS_TRAMPOLINE("0x088019A1", "23");
 }
 
 ToolStack::ToolStack()
@@ -179,8 +183,9 @@ int Food::GetId() const
 
 char const * Food::GetName() const
 {
-    typedef char const * (*Fn)(Food const *);
-    return ((Fn)(FRANGLAIS_franglais_food_name | 1u))(this);
+    // Vanilla body is 0x28 bytes (GetName__C4Food, vanilla ROM). See
+    // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
+    FRANGLAIS_TRAMPOLINE("0x088019D1", "13");
 }
 
 u16 Food::GetIconId() const
@@ -242,8 +247,9 @@ static inline char const * GetFoodDescById(u32 id)
 
 char const * Food::GetDesc() const
 {
-    typedef char const * (*Fn)(Food const *);
-    return ((Fn)(FRANGLAIS_franglais_food_desc | 1u))(this);
+    // Vanilla body is 0x38 bytes (GetDesc__C4Food, vanilla ROM). See
+    // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
+    FRANGLAIS_TRAMPOLINE("0x088019FD", "21");
 }
 
 void Food::AddBonuses(i8 stamina_amount, i8 fatigue_amount)
@@ -344,8 +350,9 @@ int Article::GetId() const
 
 char const * Article::GetName() const
 {
-    typedef char const * (*Fn)(Article const *);
-    return ((Fn)(FRANGLAIS_franglais_article_name | 1u))(this);
+    // Vanilla body is 0x2C bytes (GetName__C7Article, vanilla ROM). See
+    // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
+    FRANGLAIS_TRAMPOLINE("0x08801A2D", "15");
 }
 
 u16 Article::GetIconId() const
@@ -386,8 +393,9 @@ static inline char const * GetArticleDescById(u32 id)
 
 char const * Article::GetDesc() const
 {
-    typedef char const * (*Fn)(Article const *);
-    return ((Fn)(FRANGLAIS_franglais_article_desc | 1u))(this);
+    // Vanilla body is 0x3C bytes (GetDesc__C7Article, vanilla ROM). See
+    // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
+    FRANGLAIS_TRAMPOLINE("0x08801A59", "23");
 }
 
 ArticleStack::ArticleStack()

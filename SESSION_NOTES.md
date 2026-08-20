@@ -6,6 +6,209 @@ worked on strictly offline: `origin`'s push URL is deliberately broken
 restored. Never `git push`, never open a PR, never touch `origin`. Commit
 locally only.
 
+## Round (worktree `w48`, branche `parallel-48`) -- `func_0803A798` matché
+bit-exact (1 commit), incertitude d'héritage multiple de w47 levée,
++ découverte méthodologique : ce worktree a un décalage global constant
+de ROM (`+0xF4`) déjà présent sur `main` avant toute modification
+
+Mission : reprendre `func_0803A798` (caractérisé mais non porté round
+w47) avec l'hypothèse bitfield `Location` chevauchant, en vérifiant
+d'abord la question laissée ouverte (héritage multiple via une 2e
+vtable) avant de coder.
+
+### Levée de l'incertitude d'héritage multiple
+
+En comparant le destructeur homologue de cette même vtable
+(`func_080DCF4C`, `asm/code_linkonce.s`) à celui d'`AEntity` lui-même
+(`func_080DCE60`, même fichier) : les deux stampent leur vtable respective
+**au MÊME offset `+0x14`** (`__vt_7AEntity` pour l'un, `vtable_unk_080E7568`
+pour l'autre). C'est exactement le motif ABI CFront/ARM d'héritage SIMPLE
+(chaque niveau de la hiérarchie re-stampe le même unique pointeur de
+vtable avec sa propre table, plus grande) déjà vu ailleurs dans ce dépôt
+(`func_080DCE60` vs `func_080DCF4C`) -- **pas** une 2e vtable de base
+distincte à un autre offset. `vtable_unk_080E7568` fait `0x34` octets
+(13 slots), EXACTEMENT la taille de la vtable d'`AEntity` seule (aucun
+virtuel supplémentaire) -- la classe dérivée ne fait qu'overrider des
+slots existants, pas en ajouter. Confirme aussi le layout de `Location`
+prédit round w47 (`include/actor.hh` : `map:10`@0, `x:16`@1, `y:16`@3,
+`PACKED ALIGN(2)`) -- 3 affectations logiques à zéro compilent bien en
+5 RMW physiques à cause du chevauchement de bits.
+
+### Port : fonction-usine procédurale, pas une classe C++ complète
+
+`func_0803A798` alloue lui-même (`operator new(0x20)`), ce qui exclut
+qu'il s'agisse du vrai ctor mangle de la classe dérivée (un ctor ne fait
+jamais lui-même l'allocation). Suivant le style déjà établi pour ce genre
+de classe non identifiée (`src/code_08004B94.cc`, `src/code_entity_08020018.cc`
+pour la convention de nom `Entity_<adresse_vtable>`) : fonction C libre
+qui appelle le VRAI ctor `AEntity::AEntity` (`__7AEntityP10GameObjectRC8Location`,
+déjà implémenté `src/entity.cc`) via son symbole mangle directement, puis
+stampe manuellement `vtable_unk_080E7568`, le 2e paramètre (`self+0x18`)
+et un flag `true` (`self+0x1c`). Classe `Entity_080E7568` gardée minimale
+(juste les 2 champs touchés) -- nom/rôle réel non identifié, destructeur
+homologue `func_080DCF4C` laissé non catalogué pour un futur round (pas
+nécessaire pour porter ce ctor). Convergé du premier coup en harnais
+rapide après correction de l'ORDRE (allocation AVANT le zeroing de
+`Location`, pas l'inverse comme un premier essai naïf l'avait fait).
+
+### Découverte méthodologique : décalage global constant de ROM
+(`+0xF4`) déjà présent sur `main`, indépendant de toute modification
+
+En vérifiant le match via la méthode standard (adresse liée dans
+`fomt.elf` vs `baserom.gba` à la même adresse absolue) : la fonction
+atterrit à `0x0803A6A4` dans `fomt.elf`/`fomt.map`, **pas** `0x0803A798`
+comme l'indique le commentaire `@ 0x0803A798` du fichier asm source --
+un décalage constant de `-0xF4` (244 octets). **Vérifié comme PRÉEXISTANT
+sur `main`** (`git stash` + rebuild propre sur HEAD non modifié : même
+décalage, ex. `func_08004C54` reste à sa vraie adresse `0x08004C54` --
+aucun décalage -- mais tout ce qui suit une certaine frontière autour de
+`0x0801xxxx`-`0x08020xxx` est décalé de `-0xF4`, cohérent partout ensuite
+jusqu'à `0x0803A6A4`). Cause probable : un vrai hook franglais (pas
+seulement le blob `.franglais_payload` à l'adresse fixe `0x08800000`,
+qui lui n'a AUCUN impact ici) inséré quelque part dans le flux de code
+normal, plus long de 244 octets que le code vanilla qu'il remplace.
+**Conséquence pratique pour la vérification bit-exacte d'une fonction
+dans cette zone décalée** : ne PAS utiliser l'adresse du commentaire
+`@ 0xADDR` du fichier `asm/*.s` comme `--start-address` sur `fomt.elf` --
+lire la VRAIE adresse liée dans `fomt.map` (`grep func_ADDR fomt.map`)
+et l'utiliser côté `fomt.elf`/`fomt.gba`, tout en gardant l'adresse
+d'origine côté `baserom.gba`. Une fois les deux bons offsets utilisés,
+la comparaison OCTET À OCTET (`fomt.gba` vs `baserom.gba`, tailles
+identiques) ne montre plus qu'UNE SEULE demi-instruction différente
+(l'encodage de l'offset relatif du `bl __builtin_new`, cible basse
+adresse non décalée) -- écart directement explicable par le décalage
+global, pas un vrai bug. **Règle pratique à ajouter/rappeler pour toute
+future cible dont l'adresse `@ 0xADDR` dépasse `~0x0801Fxxx`** : toujours
+croiser `fomt.map` avant de conclure à un near-miss depuis une comparaison
+d'adresse absolue -- un near-miss d'1 seule demi-instruction *spécifiquement
+dans l'encodage d'un `bl` vers une routine basse-adresse* (`__builtin_new`,
+`_call_via_r2`, etc.) peut être ce décalage global, pas un vrai défaut de
+forme C.
+
+### État du worktree en fin de round
+
+- **1 commit** : `func_0803A798` (`src/code_0803A798.cc`,
+  `asm/code_08039A5C.s` tronqué, `fomt.lds` mis à jour) -- taille `.o`
+  vérifiée (`0x6c` = 108 octets, exact), lien complet sans erreur,
+  contenu vérifié octet à octet (voir ci-dessus, 1 seule demi-instruction
+  de `bl` différente, expliquée par le décalage global préexistant).
+- `git status --short` propre après nettoyage `build/`/`fomt.gba`/
+  `fomt.elf`/`fomt.map`.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
+## Round (worktree `w47`, branche `parallel-47`) -- ZÉRO match commité,
+mais le near-miss "ordre d'évaluation des arguments" de w43 est enfin
+ROOT-CAUSÉ (mécanisme précis identifié empiriquement), + 1 cible fraîche
+mieux caractérisée pour un prochain round
+
+Mission : attaquer le near-miss `func_08037B48`/`func_08037B80` documenté
+round w43 (appel à 5 arguments : la cible calcule l'argument-pile
+littéral AVANT l'argument-registre `r3` littéral ; les 6 reformulations C
+de w43 produisaient systématiquement l'ordre inverse) avec une idée
+vraiment neuve, sans répéter les 6 déjà testées.
+
+### Méthode : harnais rapide (compilateur+assembleur sans lien),
+5 variantes empiriques ciblées sur `func_08037B48` reconstruit à
+l'identique (`obj = __builtin_new(0x44); func_08037008(obj, a1, a2, kind,
+extra); return obj;`)
+
+1. Reproduction baseline (kind=0x379→r3, extra=0xc→pile, littéraux
+   inchangés) : confirme le défaut connu -- `ldr r3,=0x379` (pool)
+   généré AVANT `movs r0,#0xc; str r0,[sp]` (pile).
+2. **Test décisif** : permutation des deux valeurs SANS changer leur rôle
+   ABI (extra=0xc→r3, kind=0x379→pile) -- le littéral qui nécessite le
+   POOL LITTÉRAL (`0x379`, non shift-décomposable, `889` est impair donc
+   aucune forme `k<<n` avec `k` 8 bits n'existe) est TOUJOURS calculé en
+   PREMIER, peu importe qu'il finisse en `r3` ou sur la pile. Le petit
+   littéral encodable en `movs` (`0xc`) est TOUJOURS calculé en second,
+   peu importe sa destination ABI.
+3. Confirmation avec littéraux tous DEUX encodables en `movs` (`0x37`,
+   `0xc`, aucun pool) : l'ordre naturel redevient pile-PUIS-r3, exactement
+   la forme voulue par la cible -- preuve que la règle "pile avant
+   registres r0-r3" est bien le comportement PAR DÉFAUT d'agbcp pour un
+   appel à 5 arguments, et que seul un littéral-pool la contourne en se
+   faisant hisser en tête.
+4. Confirmation que le hissage touche N'IMPORTE QUEL argument-registre
+   pool (testé sur `r1`, pas seulement `r3`) : le pool-load est TOUJOURS
+   la toute première instruction de la séquence de montage d'arguments,
+   avant même `r0`=this.
+5. Tentative de contournement : écrire le littéral comme expression
+   pliable (`0x300 | 0x79`) pour voir si l'évaluation différée change
+   quelque chose -- non, agbcp plie la constante à la même valeur unique
+   au même endroit (front-end constant folding), même résultat que (1).
+
+### Conclusion : mécanisme caractérisé, PAS de contournement possible
+en C pour CE cas précis
+
+**Règle nouvelle (mécanisme, pas juste symptôme) : dans un appel à agbcp
+comportant un argument littéral nécessitant le pool de constantes
+(`ldr rX,=VAL`, valeur non shift-décomposable), ce chargement est TOUJOURS
+hissé en tête de la séquence de montage des arguments d'appel -- avant le
+montage des arguments-pile ET avant `r0`/`this` -- indépendamment de la
+position déclarée de l'argument dans l'appel C, de son rôle ABI final
+(registre `r0`-`r3` ou pile), et de toute reformulation via variable
+nommée/expression pliable.** Puisque `0x379`/`0x207` (les "kind" de
+`func_08037B48`/`func_08037B80`) ne sont PAS shift-décomposables (impairs,
+> 0xFF), ils DOIVENT passer par le pool -- ce qui les force
+structurellement à être calculés avant l'argument-pile, alors que la
+cible (`baserom.gba`) fait l'inverse. **Ce near-miss est donc fermé pour
+de bon sur ces 2 sites précis, pas seulement "résiste encore" : aucune
+forme C ne peut produire l'ordre cible tant que le 4e argument reste un
+littéral pool.** Seule porte de sortie théorique, non explorée par
+manque de piste concrète : si le VRAI 4e argument n'est PAS un littéral
+`u32` nu dans la source d'origine mais une expression qui n'exigerait pas
+le pool (ex. un champ déjà chargé en registre ailleurs) -- aucun signal
+dans le désassemblage ne suggère ça (le littéral `0x379` apparaît bien
+comme entrée `.4byte` dans le pool de la fonction cible elle-même, donc
+la cible AUSSI matérialise cette valeur via un pool -- la vraie question
+n'est même plus "pool ou pas", elle est déjà tranchée par le binaire
+lui-même). **`func_08037A5C`/`func_08037AD0` (2e instance présumée de la
+même famille) non tentés** -- la caractérisation ci-dessus s'applique
+déjà mécaniquement (même schéma d'appel à `func_08037008`), pas la peine
+de reproduire l'expérience une 7e fois.
+
+À ajouter à `DECOMP_RULES.md` (anti-pattern) au prochain round qui
+touche cette famille : "littéral-pool dans un appel à 5+ arguments ->
+toujours hissé avant l'argument-pile, aucune reformulation C ne change
+ça."
+
+### Découverte secondaire : `func_0803A798` (candidate fraîche déjà
+listée w43) -- layout de bitfield `Location` élucidé, PAS encore porté
+
+En examinant `func_0803A798` (`asm/code_08039A5C.s:1683`, taille
+`0x6C`=108 octets jusqu'à `func_0803A804`) comme cible potentielle de
+repli : le local `Location` de 6 octets (alloué via `sub sp,#8`) subit 5
+opérations `ldrh`/`ldrb`+`ands`+`strh`/`strb` qui SE CHEVAUCHENT --
+exactement le motif prédit par `include/actor.hh` (`Location` :
+`map:10` à l'offset 0, `x:16` à l'offset **1** (pas 2 -- démarre à
+mi-mot), `y:16` à l'offset **3**, `PACKED ALIGN(2)`). **Hypothèse forte,
+pas encore testée en harnais** : ce motif de 5 masques correspond très
+probablement à `Location loc; loc.map = 0; loc.x = 0; loc.y = 0;` (3
+affectations de bitfield à zéro qui, à cause du chevauchement des champs
+sur des limites non-octet, compilent chacune en un read-modify-write sur
+CHAQUE octet/demi-mot touché -- 5 RMW physiques pour 3 affectations
+logiques). Ensuite : `bl __7AEntityP10GameObjectRC8Location` (déjà
+porté, `AEntity::AEntity(GameObject*, Location const&)`,
+`include/entity.hh:12`), stamp d'une SECONDE vtable
+(`vtable_unk_080E7568`, aussi référencée dans `asm/code_linkonce.s` --
+donc une classe avec instanciation gabarit/linkonce quelque part) à
+`self+0x14`, store du 2e paramètre à `self+0x18`, flag octet `1` à
+`self+0x1c`. **Pas testé en harnais ni codé ce round** -- la classe
+dérivée exacte (héritage multiple, 2e base au vtable `080E7568`) n'est
+pas identifiée avec assez de certitude pour nommer un symbole
+vanilla-only sans deviner ; nécessite d'abord de retrouver d'autres sites
+utilisant `vtable_unk_080E7568` (le hit dans `code_linkonce.s`) pour
+corroborer la classe avant d'écrire du C. Bon candidat pour un prochain
+round avec plus de budget dédié à cette recherche de classe.
+
+### État du worktree en fin de round
+
+- **Aucun commit** -- zéro match vérifié bit-exact ce round.
+- Tout le tâtonnement est resté dans `/tmp/w47scratch/` (harnais rapide
+  uniquement, jamais appliqué au dépôt) -- `git status --short` vide,
+  `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
 ## 2026-08-20 -- toolchain bring-up + first matched function
 
 ### Build environment
@@ -6627,3 +6830,1640 @@ aucun résidu.
   utilisés tout du long -- signal "pression de registres", pas attaqué).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `git status --short` vide après commit.
+
+## Round (worktree `w43`, branche `parallel-43`) -- ZÉRO match commité,
+mais 4 découvertes actionnables pour un futur round (dont une piste de
+sécurité importante) + nouvelle classe de near-miss caractérisée
+
+Consigne : choisir une cible fraîche en évitant le recoupement avec `w42`
+(qui couvre les 3 sites restants de `func_080324BC`). Après lecture de
+`DECOMP_RULES.md`/`DECOMP_ARCHIVE.md` en entier, ce round a exploré 3
+pistes distinctes -- aucune n'a abouti à un match committable, mais
+chacune a produit un résultat utile documenté ci-dessous. Rebuild propre
+initial (`rm -rf build ... && make compare`) confirmé sain avant de
+commencer (LD réussit, `sha1sum` échoue comme attendu depuis `cb06198`).
+
+### Découverte 1 (importante) : `func_08050E68` n'est PAS une cible de
+décompilation valide -- son literal cible pointe dans le PAYLOAD FRANGLAIS,
+pas dans la ROM vanilla
+
+`func_08050E68` (`asm/code_08050E68.s`, laissé non tenté par w39 : "thunk
+d'un genre différent, `ldr r3,=ADDR; bx r3`") a de nombreux appelants
+symboliques (`asm/code_08012028.s`, `asm/code_0805E760.s` x21,
+`asm/code_08093220.s`). Désassemblage : `ldr r3,=0x08801C25; bx r3` (tail
+jump direct sans `push`/`pop`/`mov lr,pc` -- pas un simple thunk
+forward). **Le literal `0x08801C25` (bit thumb mis, cible réelle
+`0x08801C24`) tombe dans `franglais_payload_start`-`franglais_payload_end`
+(`0x08800000`-`0x08801000`, vérifié dans `fomt.map` après rebuild) : la
+région de 4 Ko que CE dépôt lui-même réserve pour le payload du patch
+franglais, PAS une adresse de la ROM vanilla (`baserom.gba` ne fait que
+8 Mo = `0x08000000`-`0x087FFFFF`, confirmé `stat` -- `0x08800000` est
+au-delà).** Autrement dit : ce "thunk" est déjà un point d'accroche du
+patch franglais (hook injecté dans le désassemblage vanilla, tail-jump
+vers le payload custom), pas du code de jeu original à décompiler.
+**Retirer `func_08050E68` de toute liste de cibles futures** -- toute
+tentative de le "porter en C" comme thunk vanilla serait une erreur de
+méthode (on documenterait involontairement le mécanisme du patch, pas le
+jeu original). Aucun fichier modifié pour cette découverte (juste lecture
++ un rebuild jetable, `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés
+après).
+
+### Découverte 2 : nouvelle classe de near-miss caractérisée -- ordre
+d'évaluation des arguments d'appel (littéral registre vs littéral pile)
+
+Méthode sœur (scan double-critère vtable+`__builtin_new`, déjà utilisé
+w40/w41) élargi aux blocs non encore portés, en excluant `func_080324BC`
+(scope w42) : 11 candidats trouvés, 2 déjà connus dead-end
+(`func_080DB320`/`658`, famille "assignation de champ"). Parmi les
+nouveaux, `func_08037B48`/`func_08037B80` (`asm/code_08037A04.s`, ~46
+octets chacun) : ctor trivial (`vtable + operator new(0x44) + bl
+func_08037008(obj,a1,a2,LITERAL_r3,LITERAL_pile) + store vtable @+0x14 +
+return obj`), callee `func_08037008` traité en boîte noire (asm non
+porté, pas de signal pression de registres visible dans ce callee lui-
+même au premier coup d'œil -- pas vérifié en détail).
+
+**Near-miss caractérisé, taille identique (0/46 octets d'écart), un seul
+défaut d'ORDRE** : la cible calcule d'abord l'argument 5 (pile, un
+littéral entier stocké via `movs r0,#N; str r0,[sp]`, DEUX instructions
+consécutives sans rien entre les deux), PUIS charge l'argument 4
+(registre `r3`, un littéral `u32`) juste avant le `bl`. **Toute
+formulation C testée (6 variantes)** -- littéral pile inline + littéral
+r3 inline ; variable nommée pour la pile seule ; variable nommée pour le
+registre seule ; les deux en variables nommées (dans les deux ordres de
+déclaration) ; argument pile passé comme petit struct POD par valeur au
+lieu d'un `int` nu -- **produit systématiquement l'ordre INVERSE** :
+`ldr r3,=LITERAL` D'ABORD, PUIS `movs r0,#N; str r0,[sp]`. agbcp semble
+toujours matérialiser le littéral du 4e argument (registre `r3`, libre,
+aucun conflit) avant de traiter le 5e (pile), quelle que soit la
+structuration du C source -- comportement stable et reproductible sur
+les 6 variantes, jamais contredit. **Hypothèse non testée** (budget
+épuisé ce round) : peut-être que le VRAI argument 4 n'est pas un littéral
+`u32` nu mais une expression dépendant d'un REGISTRE déjà occupé (pas
+juste `movs`), ce qui forcerait un ordre de calcul différent -- ou alors
+la vraie signature de `func_08037008` a un NOMBRE d'arguments différent
+de 5 (ex. un struct passé par référence plutôt que 2 scalaires séparés).
+**Pas commité** (aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` --
+tout le tâtonnement est resté dans un harnais scratch hors dépôt,
+`/tmp/w43scratch/`, jamais appliqué au dépôt). À ajouter comme classe de
+difficulté nommée si un 2e cas apparaît ailleurs (candidat probable :
+`func_08037A5C`/`func_08037AD0`, mêmes fichier/famille, mêmes callees
+`func_08037008`+`func_08037244`, PLUS un near-miss masque-par-négation
+déjà connu sur un champ bitfield `& ~3` à `self+0x44` -- pas testés ce
+round faute de temps, mais very probablement affectés par LES DEUX
+classes de near-miss à la fois).
+
+### Découverte 3 : 2 nouvelles fonctions "pression de registres" à éviter
+
+`func_0803BDFC` (`asm/code_0803A8A4.s`) et `func_08083A7C`
+(`asm/code_08082184.s`) : les deux utilisent `r8`/`sb`(/`sl` pour la
+première) comme valeurs vivantes À TRAVERS un `bl __builtin_new` PUIS un
+second `bl` vers un helper à 7-8 arguments -- signal d'alerte explicite
+de `DECOMP_RULES.md`. **Ne pas tenter sans budget dédié.** Utile à
+savoir : ces deux fonctions sont elles-mêmes appelées comme boîte noire
+par des ctors DÉRIVÉS plus simples (`func_0803BF78` appelle
+`func_0803BDFC` ; un ctor non identifié appelle probablement
+`func_08083A7C` de la même façon) -- exactement le même schéma que
+`func_08007EE14`/`func_08008980` dans la saga `func_08004C68` : le
+wrapper dérivé peut rester une cible valide même si le callee de base est
+hors de portée.
+
+### Découverte 4 : `func_0803A798` et `func_0803BF78`, 2 cibles fraîches
+caractérisées mais NON portées (candidates sérieuses pour un prochain
+round)
+
+- **`func_0803A798`** (`asm/code_08039A5C.s`, juste avant le groupe déjà
+  matché `func_0803A804`/round 10-w23) : alloue 0x20 octets, construit un
+  `Location` local partiellement initialisé (motif déjà connu, cf.
+  `func_08011ED8`) puis appelle **`__7AEntityP10GameObjectRC8Location`
+  == `AEntity::AEntity(GameObject*, Location const&)`, DÉJÀ implémentée
+  dans `src/entity.cc`** (pas une boîte noire asm -- un vrai symbole C++
+  déjà porté, directement appelable) via placement-new sur l'objet neuf,
+  puis stampe une SECONDE vtable (`vtable_unk_080E7568`) à l'offset
+  +0x14 (base MI secondaire), stocke un paramètre à +0x18, un flag octet
+  à +0x1c=1. Le détail exact du layout de bits du `Location` local (3
+  paires `ldrh`/`ldrb` avec masques `0xFC00`/`3` qui SE CHEVAUCHENT sur
+  les octets 0-4, pas 3 champs indépendants) reste à élucider précisément
+  avant de coder -- probablement un bitfield packé différent de la
+  `Location` 3-champs déjà connue dans `include/actor.hh`, à vérifier
+  champ par champ avant d'écrire le C.
+- **`func_0803BF78`** (`asm/code_0803A8A4.s`, juste après le groupe
+  register-pressure `func_0803BDFC`) : NE VIT PAS lui-même dans la classe
+  "pression de registres" (aucun `r8`/`sb`/`sl` dans son propre corps),
+  bien qu'il appelle `func_0803BDFC` (qui l'est) en boîte noire avec 6
+  arguments (3 registres littéraux + 3 arguments pile, dont 5 poussés
+  sur SA PROPRE pile mais SEULEMENT 3 relus côté callee -- à vérifier si
+  les 2 "en trop" sont bien des locales réutilisées plus loin ou un
+  artefact de lecture imprécise de ce round, pas confirmé avec
+  certitude). Stampe ensuite une SECONDE vtable (`vtable_unk_080E77A4`,
+  écrasant celle posée par `func_0803BDFC`), alloue 0x41C octets, appelle
+  un helper opaque `func_080E0A94`, puis initialise 4 champs octet
+  (`self+0xc..0xf`). Shape prometteur (chaîne de construction C++
+  classique base->dérivé) mais nécessite de reconfirmer précisément
+  quelles valeurs vont sur la pile de l'appel à `func_0803BDFC` avant de
+  coder -- pas fait ce round faute de temps.
+
+### État du worktree en fin de round
+
+- **Aucun commit** -- zéro match vérifié bit-exact ce round malgré 3
+  pistes creusées en profondeur (l'ordre d'arguments de la découverte 2
+  a résisté à 6 reformulations C systématiques).
+- Tout le tâtonnement (harnais rapide) est resté dans `/tmp/w43scratch/`,
+  jamais appliqué au dépôt.
+- `git status --short` vide après nettoyage (`rm -rf build fomt.gba
+  fomt.elf fomt.map` + suppression d'un fichier stub jetable créé pour le
+  rebuild de vérification de la découverte 1).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
+## Round (worktree w42, branche `parallel-42`) -- follow-up sur les 3 sites
+restants de la famille "entity factory" `func_080324BC`
+
+Mission : continuer le scan sur les 3 sites de call `func_080324BC` restants
+identifiés round w40 (`asm/code_080E41E8.s`, `asm/code_entities_080320DC.s`
+x2, `asm/code_entities.s`), pour vérifier s'il existe d'autres wrappers
+"entity factory" NON catalogués de la même forme exacte (`bl __builtin_new`
+0x8c octets + délégation à `func_080324BC` + AUCUN littéral `vtable_unk_ADDR`
+dans le bloc).
+
+### Méthode
+
+Script Python (scratch, non commité) parcourant les blocs `thumb_func_start`
+des 3 fichiers concernés, cherchant `bl __builtin_new` ET `bl func_080324BC`
+(ou le nom mangle `__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi` que
+l'assembleur original résout parfois au même symbole -- vérifié sans
+incidence, une fausse piste initiale : `asm/code_08035B64.s`/
+`asm/code_08036048.s` sont en fait les fragments RESTANTS après le
+découpage round w40, contenant une fonction NPC ctor sans rapport qui
+partage juste un nom mangle proche).
+
+### Constat : 1 seul vrai match sur les 4 sites `bl func_080324BC` recensés
+
+- **`func_080E44E4`** (`asm/code_080E41E8.s`, ligne 420) : instance EXACTE
+  du shape des 38 déjà matchés -- `movs r0,#0x8c; bl __builtin_new`, puis
+  4 stores sur pile (f0=1,f4=0,f8=0,fc=false via add+strb), puis
+  `func_080324BC(obj, ctx, 5, 27, 1, 0, 0, false)`, AUCUN littéral vtable.
+  **Matché.** Vérifié :
+  1. taille `.text` du `.o` compilé (`readelf -S`) = 0x2c = 44 octets =
+     `next_addr(0x080E4510) - this_addr(0x080E44E4)` exact.
+  2. harnais rapide : désassemblage du C compilé identique octet-à-octet
+     au désassemblage du bloc ORIGINAL réextrait de `git show HEAD:...`
+     et réassemblé avec les MÊMES outils (`arm-none-eabi-as` même flags) --
+     `diff` des deux désassemblages : aucune différence.
+  3. rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map` +
+     stub `franglais_stub.bin` factice) : lien réussi, aucune référence non
+     définie, `arm-none-eabi-nm fomt.elf | grep func_080E44E4` : 1 seule
+     occurrence. `sha1sum -c fomt.sha1` échoue comme attendu (payload
+     franglais non-vanilla, confirmé aussi que la comparaison OCTET À OCTET
+     `baserom.gba` vs `fomt.gba` linéaire n'est PAS utilisable pour
+     vérifier une fonction isolée : ~220k octets diffèrent sur toute la ROM
+     à cause du payload franglais qui réécrit des pointeurs/adresses très
+     largement -- seul le harnais isolé (readelf + désassemblage borné)
+     fait foi, conforme à la discipline `DECOMP_RULES.md`).
+  Découpage : `asm/code_080E41E8.s` tronqué avant la fonction (419 lignes
+  restantes), reste réinjecté dans un nouveau fragment
+  `asm/code_080E4510.s` (header standard + corps depuis
+  `thumb_func_start func_080E4510`, pas de `.align` de frontière à migrer
+  ici -- le bloc cible ne se termine pas par un `.align` explicite, règle
+  #14 non applicable ce site). `fomt.lds` : 1 ancienne ligne
+  (`asm/code_080E41E8.o(.text);`) remplacée par 3
+  (`asm/code_080E41E8.o` ; `src/code_080E44E4.o` ; `asm/code_080E4510.o`).
+
+- **`func_08032A00`** (`asm/code_entities_080320DC.s`, ligne 796) : PAS le
+  même shape. `self` est déjà passé en paramètre (r0, pas de
+  `bl __builtin_new` dans le bloc), le bloc construit les 4 arguments-pile
+  (tous nuls sauf kind=6/subkind=0x20 en r2/r3), appelle `func_080324BC`,
+  PUIS stampe SA PROPRE vtable (`vtable_unk_080E6864`) à `[r4+4]` avant de
+  retourner `self`. Forme "constructeur qui délègue à func_080324BC",
+  sous-variante distincte, pas catalogué ce round (hors scope strict de la
+  mission -- shape différent, mérite son propre round).
+
+- **`func_080222A8`** (`asm/code_entities.s`, ligne 3271) : même
+  sous-variante que `func_08032A00` (self déjà passé, délégation puis
+  stamp vtable `vtable_unk_080E64B4` propre), mais en plus complexe :
+  utilise `r8` (push/pop dédié) et appelle 2 helpers opaques
+  (`func_08022320`, `func_08022334`) pour construire les 2 premiers
+  arguments-pile avant l'appel à `func_080324BC`. Pas catalogué ce round.
+
+- **`func_08034A14`** (`asm/code_entities_080320DC.s`, ligne 4219, 91
+  lignes) : fonction bien plus grosse, `r8`/`sb` vivants tout du long,
+  plusieurs `bl` vers des callees distincts (`_call_via_r1`,
+  `func_080A4A00`) en plus de `func_080324BC` -- signal "pression de
+  registres" au sens de la classe déjà documentée, PAS un simple wrapper.
+  Confirme que ce site n'est structurellement pas de la même famille.
+
+Scan exhaustif confirmé (avant ET après le port de `func_080E44E4`, sur le
+contenu `HEAD` d'origine des 3 fichiers) : aucun AUTRE bloc combinant
+`bl __builtin_new` + absence de littéral `vtable_unk_` + allocation 0x8c
+octets n'existe dans ces 3 fichiers au-delà de `func_080E44E4`.
+
+### État du worktree en fin de round
+
+- 1 fonction matchée (`func_080E44E4`), 1 commit (découpage +
+  `fomt.lds` + `src/code_080E44E4.cc`).
+- `func_08032A00`/`func_080222A8` : sous-variante "self déjà alloué +
+  stamp vtable propre après délégation" identifiée mais NON portée --
+  candidat pour un futur round dédié à cette forme précise, documenté
+  dans `DECOMP_ARCHIVE.md`.
+- `func_08034A14` : confirmé "pression de registres", pas un wrapper --
+  ne pas retenter sans budget dédié.
+- `func_080324BC` lui-même reste non porté (callee opaque, `r8`/`sb`
+  utilisés tout du long).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Sweep anti-doublon : `grep thumb_func_start` sur `func_080E44E4` dans
+  `asm/*.s` -- aucun résidu ; `nm fomt.elf` -- 1 seule occurrence.
+- `git status --short` vide après commit.
+
+## Round w44 (worktree `parallel-44`, branche `parallel-44`) -- extension du
+scanner de blobs cachés à TOUTE taille, sweep complet : 0 nouveau candidat
+
+Consigne : `scan_hidden_code_blobs.py` ne couvre que les blobs `.byte` de
+4-40 octets (angle mort documenté -- w39 avait trouvé le blob de 1084
+octets juste après cette limite, exploré par w41). Mission : écrire une
+variante qui cherche des blobs cachés de TOUTE taille sur l'ensemble
+d'`asm/*.s`, au cas où il en resterait d'autres, de taille intermédiaire ou
+plus grande, jamais catalogués.
+
+### Nouveau script : `tools/scripts/scan_hidden_code_blobs_v2.py`
+
+Généralise la détection de `scan_hidden_code_blobs.py` sur deux axes :
+- **Pas de plafond de taille** (`MAX_BLOB_BYTES=40` supprimé) : chaque bloc
+  `.byte` pur candidat est désassemblé/évalué par l'heuristique Thumb,
+  quelle que soit sa taille (le script v1 se contentait de LISTER les
+  blobs > 40 octets dans un worklist "medium_blocks" non vérifié, sans
+  jamais tenter le décodage dessus).
+- **Fusion des runs multi-blocs** : v1 exige que le bloc `.byte` candidat
+  soit immédiatement suivi d'un vrai `thumb_func_start` (ou de la fin de
+  fichier) -- si DEUX blocs `.byte` purs se suivent consécutivement entre
+  deux fonctions réelles, seul le DERNIER du groupe peut satisfaire ce test
+  et les précédents étaient silencieusement ignorés, à n'importe quelle
+  taille. v2 fusionne tout run maximal de blocs `.byte` purs consécutifs
+  entre deux fonctions (ou entre la dernière fonction et l'EOF) en un seul
+  candidat, peu importe le nombre de sous-blocs.
+
+Le reste de la méthode (parsing par blocs top-level, décodeur Thumb partiel
+maison, heuristique de plausibilité) est repris à l'identique de v1 --
+seule la sélection des candidats change. `v2` ne remplace pas `v1` (les
+deux se lancent), c'est un filet plus large jeté par-dessus.
+
+### Résultat du sweep complet (128 fichiers `asm/*.s`)
+
+`v2` trouve exactement les 2 mêmes candidats que la section "medium
+blocks, not auto-verified" de `v1` -- confirmant qu'il n'existe **aucun**
+run multi-blocs caché par la limitation de v1 dans l'état actuel du dépôt,
+et qu'aucun blob de taille intermédiaire/plus grande n'a été manqué :
+
+1. `asm/code_08050E98.s` `.L08050EE4`, 124 octets, `prev=func_08050EBC`,
+   `next=<EOF>`.
+2. `asm/code_actor_0809BFE8.s` `.L0809E1B4`, 288 octets, `prev=func_0809E1A4`,
+   `next=<EOF>`.
+
+Les deux étaient **déjà connus et déjà documentés** :
+
+- `.L08050EE4` (124 octets) = les 2 premiers fragments du blob de 1084
+  octets cartographié par w41 (`SESSION_NOTES.md`, section "Round w41"),
+  jamais matchés : `func_08050EE4` (88 octets, ctor vtable + bitfield,
+  near-miss "masque construit par négation") + pool littéral 16 octets +
+  `func_08050F4C` (18 octets, normalisation booléenne `v?1:v`, near-miss
+  "copie explicite élidée par notre compilateur"). Désassemblé à la main
+  ce round pour confirmer que le contenu est bien identique à la
+  cartographie w41 (`arm-none-eabi-objdump -D -bbinary -marmv4t
+  -Mforce-thumb --adjust-vma=0x08050EE4` sur les 124 octets bruts,
+  resynchronisé à la main après le pool littéral de 16 octets) --
+  confirmé octet pour octet, aucune nouvelle piste tentée n'a débloqué
+  `func_08050F4C` (essai `!!(v)` façon anti-pattern #12 : toujours 16
+  octets au lieu de 18, notre compilateur élide quand même la copie
+  explicite). Toujours en `.byte`, non commité.
+- `.L0809E1B4` (288 octets) = dead-end confirmé DEUX fois déjà (round
+  w23 puis un round ultérieur, voir `DECOMP_ARCHIVE.md` ligne ~474) --
+  aucun appelant symbolique trouvable, pas de nouvelle piste ce round.
+
+Aucun match commité ce round : les deux seuls candidats "medium" visibles
+sont des near-miss/dead-end déjà exploités à fond par des rounds
+précédents, pas de nouvelle cible. Le scan à 4-40 octets (`v1`) confirme
+aussi 0 candidat court, comme attendu (dernier scan exhaustif au round 9).
+
+### État du worktree en fin de round
+
+- Aucun match, aucun commit de code porté.
+- 1 fichier ajouté et NON commité : `tools/scripts/scan_hidden_code_blobs_v2.py`
+  (outil réutilisable pour les prochains rounds -- à commiter séparément
+  si Mathias le valide, laissé en `git status --short` pour inspection).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Pas de `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` générés ce round (aucune
+  tentative de compilation appliquée au dépôt, seulement un harnais
+  scratch `/tmp` déjà nettoyé).
+
+## Round w46 (worktree `w46`, branche `parallel-46`) : match `func_08032A00`,
+1re instance de la sous-variante "self déjà alloué" de la famille
+"entity factory"
+
+Cible choisie depuis `DECOMP_ARCHIVE.md` section "Autres cibles ouvertes"
+(sous-variante documentée round w42, jamais tentée) : contrairement aux 39
+sites déjà matchés `func_080324BC` (qui allouent eux-mêmes `self` via
+`__builtin_new(0x8c)` avant de déléguer), `func_08032A00`
+(`asm/code_entities_080320DC.s`) reçoit `self` DÉJÀ ALLOUÉ par l'appelant
+(r0), délègue directement à `func_080324BC(self, ctx, 6, 0x20, 1, 0, 0,
+false)` (callee toujours traité en boîte noire, non porté -- pression de
+registres documentée), puis stampe sa PROPRE vtable
+(`vtable_unk_080E6864`) à `self+4`. Prototype/piège `bool` (anti-pattern
+#13) réutilisé tel quel depuis la famille déjà matchée -- convergé du
+premier coup, aucun near-miss.
+
+Découpage standard (`asm/code_entities_080320DC.s` -> corps supprimé +
+nouveau `asm/code_08032A30.s` pour `func_08032A30` et la suite, header
+`.INCLUDE`/`.SYNTAX UNIFIED` standard prependé) ; port dans
+`src/code_08032A00.cc` avec commentaire d'en-tête pointant vers
+`DECOMP_ARCHIVE.md` ; 2 entrées insérées dans `fomt.lds` à l'emplacement
+exact de l'ancienne entrée unique.
+
+**Vérification appliquée (standard `DECOMP_RULES.md`, isolé par
+fonction)** :
+1. Taille `.text` de `build/src/code_08032A00.o` = `0x30` (48 octets),
+   égale à `next_addr - this_addr` (`0x08032A30 - 0x08032A00`).
+2. Comparaison OCTET À OCTET directe (pas juste désassemblage) : bloc
+   original reconstitué depuis `git show HEAD:asm/code_entities_080320DC.s`
+   (lignes `thumb_func_start func_08032A00` à `thumb_func_start
+   func_08032A30` exclu), réassemblé isolément (`arm-none-eabi-as`), puis
+   `arm-none-eabi-objcopy -O binary --only-section=.text` sur CE `.o` ET
+   sur `build/src/code_08032A00.o` fraîchement compilé, `cmp` des deux
+   binaires bruts -> **identique**.
+3. Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map && make
+   compare`) après création du `build/franglais_stub.bin` factice
+   (`head -c 4096 /dev/zero`, requis pour que `src/franglais_payload.s`
+   s'assemble -- documenté dans `DECOMP_RULES.md`, n'affecte pas la
+   vérification isolée ci-dessus) : link complet SANS erreur (le
+   `sha1sum -c fomt.sha1` final échoue toujours, attendu et documenté
+   depuis `cb06198`, payload franglais intentionnellement non-vanilla).
+4. Sweep anti-doublon : `grep -rl ".L08032A00" asm/` -- 0 résultat, aucune
+   référence résiduelle à l'ancien label après découpage.
+
+Commit `ff4fa30` (`decomp: match func_08032A00, entity-factory
+sub-variant (self pre-allocated by caller)`), local à `parallel-46`.
+
+### Cible sœur restante
+
+`func_080222A8` (`asm/code_entities.s`) : même sous-variante mais plus
+dur -- utilise `r8` EN PLUS et appelle 2 helpers (`func_08022320`/
+`func_08022334`) pour construire ses 2 premiers arguments-pile avant
+l'appel à `func_080324BC`, avant de stamper `vtable_unk_080E64B4`. Pas
+tenté ce round (budget), candidat direct pour un prochain round --
+caractériser d'abord les 2 helpers en boîte noire avant de coder.
+
+### État du worktree en fin de round
+
+- 1 match commité (`func_08032A00`, commit `ff4fa30`), vérifié octet à
+  octet selon le nouveau standard.
+- `git status --short` propre après commit (seul `build/franglais_stub.bin`
+  généré localement pour la vérification de lien, non trackable -- sous
+  `build/`, ignoré).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Aucun recoupement avec w45 (`func_0803A798`/`func_0803BF78`/classe
+  "ordre d'évaluation des arguments") ni avec les cibles en pause
+  (`func_0803BDFC`, `func_08083A7C`, `func_08075334`, `DrawGlyphAt`
+  recolor).
+
+## Round w46 (suite) : match `func_080222A8`, cible sœur plus dure (`r8`
++ 2 helpers)
+
+Enchaîné dans la foulée sur la cible sœur restante identifiée ci-dessus.
+`func_080222A8` (`asm/code_entities.s`) est la même sous-variante
+("self" déjà alloué par l'appelant, propre vtable stampée à `self+4`
+après délégation à `func_080324BC`), mais garde `ctx` vivant dans `r8` à
+travers 2 appels supplémentaires à des helpers feuille triviaux
+(`func_08022320`/`func_08022334`, tous deux un simple dispatch par
+valeur sur leur unique argument -- `0`/`1` -> une valeur, tout le reste
+-> une autre -- caractérisés en boîte noire, pas portés) qui calculent
+les arguments-pile `a`/`b` de l'appel délégué à partir du 3e argument
+`x` :
+
+```c
+int a = func_08022320(x);
+int b = func_08022334(x);
+func_080324BC(self, ctx, 5, 13, a, b, 0, false);
+*(void**)(self+4) = vtable_unk_080E64B4;
+```
+
+Convergé du PREMIER coup en harnais rapide, aucun near-miss malgré
+l'usage de `r8` -- la crainte "pression de registres" annoncée dans
+`DECOMP_ARCHIVE.md` ne s'est pas matérialisée ici (seulement 2 valeurs
+vivantes simultanées via `r8`/pile, pas la accumulation `r8`+`sb`+`sl`
+qui caractérise les vraies cibles bloquées).
+
+Découpage : `asm/code_entities.s` coupé juste avant
+`thumb_func_start func_080222A8` (ligne 3271 d'origine) ; nouveau
+fragment `asm/code_08022320.s` recommence AVANT le blob `.byte` orphelin
+`.L080222F4` (44 octets, entre la fin du bloc cible -- qui inclut son
+propre littéral PC-relatif `vtable_unk_080E64B4`, taille totale `0x4c`
+-- et `thumb_func_start func_08022320`) : ce blob n'appartient pas à la
+fonction portée, il migre tel quel en tête du nouveau fichier, comme la
+suite naturelle du fichier d'origine à cet endroit -- pas un cas de
+l'anti-pattern #14 (`.align` de padding), le blob est du contenu réel
+(vraisemblablement un fragment de scan de blobs cachés déjà catalogué
+ailleurs, non retouché ici).
+
+**Vérification** (même standard qu'au round précédent) :
+1. Taille `.text` de `build/src/code_080222A8.o` = `0x4c`, égale à
+   `next_addr - this_addr` (`0x080222F4 - 0x080222A8`), littéral de
+   vtable inclus.
+2. Désassemblage du `.o` fraîchement compilé comparé instruction par
+   instruction à `baserom.gba` borné à `[0x080222A8, 0x080222F4)` --
+   identique (seules les cibles de `bl`/le littéral de vtable diffèrent,
+   relocations non résolues dans un `.o` isolé, normal).
+3. Désassemblage de `fomt.gba` (lien complet, ROM décalée par le payload
+   franglais) à l'adresse RÉELLEMENT liée `0x080221b4` (cf. `fomt.map`)
+   -- identique aussi, relocations cette fois résolues correctement
+   (cibles de `bl` décalées de manière cohérente, littéral de vtable
+   résolu vers la vraie adresse de `vtable_unk_080E64B4`).
+4. Rebuild propre + lien complet sans erreur ; `sha1sum -c fomt.sha1`
+   échoue toujours (attendu, documenté depuis `cb06198`).
+5. Sweep : `grep -rl ".L080222A8\|.L080222F0\|.L080222F4" asm/*.s` ->
+   seul `asm/code_08022320.s` (nouvelle maison légitime du label du
+   blob), aucune duplication.
+
+Commit `6709750` (`decomp: match func_080222A8, harder "self
+pre-allocated" entity-factory sibling`), local à `parallel-46`.
+
+### État du worktree en fin de round (après les 2 matchs)
+
+- 2 matchs commités ce round (`func_08032A00` commit `ff4fa30`,
+  `func_080222A8` commit `6709750`), tous deux vérifiés octet à octet
+  selon le nouveau standard isolé.
+- La sous-variante "self déjà alloué + stamp vtable propre après
+  délégation" documentée dans `DECOMP_ARCHIVE.md` est maintenant
+  ENTIÈREMENT close : ses 2 seuls sites connus sont matchés.
+- `git status --short` propre après commit.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Aucun recoupement avec w45 ni avec les cibles en pause (inchangé
+  depuis l'entrée précédente).
+
+## Round (worktree w45, branche `parallel-45`) -- les 2 cibles fraîches de w43
+
+Mission : porter `func_0803A798` et `func_0803BF78` (2 cibles caractérisées
+mais non portées par w43), puis vérifier si `func_08037A5C`/`func_08037AD0`
+partagent bien la classe de near-miss "ordre d'évaluation des arguments"
+déjà confirmée sur `func_08037B48`/`func_08037B80`.
+
+### Match 1 : `func_0803A798` -- constructeur d'une classe dérivée de
+`AEntity` non identifiée, avec `Location` zéro
+
+Alloue 0x20 octets, construit le sous-objet `AEntity` via
+`Location(0, 0, 0)`, puis restampe le vtable de la classe dérivée
+(`vtable_unk_080E7568`) à +0x14 (même offset où `AEntity` place son propre
+vtable -- simple restamp d'héritage simple, pas une 2e base MI), stocke un
+paramètre à +0x18 et un flag fixe (1) à +0x1c.
+
+`AEntity` est abstraite dans ce dépôt (`vfunc_30` pur virtuel, cf.
+`include/entity.hh`) car la vraie sous-classe concrète (et son override de
+`vfunc_30`) n'est pas portée. Plutôt que d'inventer une hiérarchie de
+classe dérivée non vérifiée (ce qui ferait aussi générer par le compilateur
+SON PROPRE vtable au lieu de référencer le blob `vtable_unk_080E7568`
+existant), le constructeur de base est appelé directement via son symbole
+mangle déjà compilé (`__7AEntityP10GameObjectRC8Location`, confirmé via
+`arm-none-eabi-nm build/src/entity.o` -- correspond exactement à la cible
+du `bl` dans le désassemblage d'origine) -- même idée que le précédent
+"appel qualifié de destructeur" de `DECOMP_RULES.md` (anti-pattern #8),
+appliqué à un constructeur. `AEntity::AEntity` est déjà pleinement
+implémentée dans `src/entity.cc` ; ce match la réutilise plutôt que de la
+dupliquer.
+
+Le bitfield packé `Location` (map:10, x:16, y:16, PACKED) qui restait à
+élucider depuis w43 ("3 paires ldrh/ldrb qui SE CHEVAUCHENT") s'est révélé
+être une construction `Location(0, 0, 0)` triviale (3-arg ctor) -- pas une
+assignation champ par champ manuelle. Le compilateur matérialise lui-même
+les 5 opérations load/mask/store qui semblaient mystérieuses.
+
+Vérifié bit-exact : `build/src/code_0803A798.o` `.text` = 0x6c octets
+(= `func_0803A804` - `func_0803A798`) ; une réassemblage autonome du bloc
+asm d'origine matche octet à octet le candidat compilé (`cmp` identique,
+108 octets). Commit local (voir `git log`).
+
+### Match 2 : `func_0803BF78` -- wrapper simple autour de `func_0803BDFC`
+
+Confirme le diagnostic w43 : ce wrapper ne vit PAS lui-même dans la classe
+"pression de registres" (aucun `r8`/`sb`/`sl` dans son propre corps),
+malgré son appel à `func_0803BDFC` (qui lui est dans cette classe, laissé
+intact/boîte noire). Transmet 4 arguments registre + 5 arguments pile
+(literal `0x18` + 4 arguments transférés) à `func_0803BDFC`, dont le
+prologue confirme la forme à 9 arguments (self + 3 registre + 5 pile).
+Restampe ensuite `vtable_unk_080E77A4` à self+4, alloue 0x41c octets via
+un helper opaque (`func_080E0A94`), et pose 4 champs octet.
+
+**Near-miss résolu (nouvelle variante de la règle #5/statement order)** :
+le désassemblage calcule le littéral 0 de self+0xd AVANT de stocker
+self+0xc (pourtant stocké en premier), alors que self+0xc vient d'un
+registre déjà vivant (pas de calcul nécessaire). Réordonner les DEUX
+statements d'assignation seul ne suffit pas (ça inverse aussi l'ordre des
+STORES, alors que target garde le store de self+0xc en premier). Donner
+au littéral 0 sa PROPRE variable locale nommée, déclarée avant les deux
+stores, reproduit l'ordre exact instruction par instruction. Signal
+pratique pour un futur near-miss similaire : quand un store utilisant une
+valeur DÉJÀ vivante doit rester avant un store utilisant un littéral qui
+se retrouve calculé plus tôt dans le désassemblage, essayer un temporaire
+nommé pour le littéral plutôt que de réordonner les statements.
+
+Vérifié bit-exact : `build/src/code_0803BF78.o` `.text` = 0x50 octets
+(= `func_0803BFC8` - `func_0803BF78`) ; réassemblage autonome identique
+octet à octet (80 octets). Fichier `asm/code_0803A8A4.s` découpé à la
+frontière de fonction (méthode standard, queue déplacée dans le nouveau
+`asm/code_0803BFC8.s`) ; link complet propre (exit 0), les deux symboles
+présents une seule fois chacun. Commit local (voir `git log`).
+
+### Découverte : dérive d'adresse préexistante dans ce worktree, sans
+rapport avec ce round -- la vérification par adresse ROM absolue contre
+`baserom.gba` n'est PAS fiable ici en ce moment
+
+En tentant de vérifier `func_0803A798` par diff borné de `fomt.gba` lié
+contre `baserom.gba` à l'adresse absolue (méthode recommandée en tête de
+liste par `DECOMP_RULES.md`), le désassemblage à 0x0803A798 dans le ROM
+linké ne correspondait PAS du tout au contenu attendu -- une fonction sans
+rapport y apparaissait. Investigation : `func_08039A30` (fonction déjà
+matchée, commitée depuis un round antérieur, PAS touchée par ce round)
+atterrit déjà à 0x0803993C dans le lien actuel de ce worktree, soit
+**0xF4 octets (244) en avance** sur son adresse vanille attendue --
+confirmant que la dérive est PRÉEXISTANTE à ce round, pas causée par mon
+changement. Cause probable : ce worktree n'est pas synchronisé avec l'état
+`main` le plus récent (commits d'autres rounds parallèles pas encore
+mergés ici), ou un effet de bord du hook franglais déjà lié. **Pour toute
+vérification future dans CE worktree précis, ne pas faire confiance à un
+diff par adresse absolue contre `baserom.gba` sans avoir d'abord confirmé
+qu'une fonction déjà matchée et non touchée atterrit à la bonne adresse.**
+La méthode de repli utilisée ici (fiable, indépendante de l'adresse) :
+réassembler le bloc asm ORIGINAL de façon autonome (`arm-none-eabi-as` sur
+un fichier `.s` scratch contenant juste le bloc `thumb_func_start`
+original + son en-tête standard), extraire les octets `.text` bruts via
+`objcopy -O binary --only-section=.text`, et comparer directement (`cmp`)
+contre les octets `.text` du `.o` fraîchement compilé du candidat --
+prouve le contenu octet à octet sans dépendre du lien final ni de
+l'adresse ROM. À signaler aux autres agents parallèles (w44/w46 etc.) si
+la même dérive apparaît chez eux -- possible symptôme d'un merge en retard
+sur `main`, à vérifier via `git log --oneline -5` / `git merge-base`.
+
+### Découverte : `func_08037A5C`/`func_08037AD0` partagent bien les DEUX
+classes de near-miss déjà documentées, PLUS une 3e variante -- non porté,
+comme demandé
+
+Désassemblage manuel confirmé : les deux fonctions appellent
+`func_08037008(obj, a1, a2, LITERAL_r3, LITERAL_pile)` avec exactement le
+même motif que `func_08037B48`/`func_08037B80` -- le désassemblage calcule
+l'argument 5 (pile, un littéral entier stocké via `movs r0,#N; str
+r0,[sp]`) AVANT de charger l'argument 4 (registre r3), juste avant le
+`bl`. Un test rapide (harnais scratch, une seule tentative "C naturel",
+PAS committé) confirme que toute formulation directe produit l'ordre
+INVERSE (r3 chargé en premier), exactement le symptôme déjà documenté --
+**confirmé, 2e instance de cette classe, comme prévu, pas de tentative de
+forcer un match.**
+
+Ces 2 fonctions partagent AUSSI le near-miss "masque-par-négation" déjà
+repéré par w43 sur le champ bitfield à `self+0x44` : `movs r0,#4; rsbs
+r0,r0,#0` (donnant `-4 = ~3`) plutôt qu'un littéral direct -- mon essai
+naturel (`*field = (*field & ~3) | (a3 & 3);` en `u8*`) a produit
+`movs r0,#0xfc` (littéral 8 bits direct), PAS la négation. Signal
+pratique à creuser un jour : la négation suggère un calcul en LARGEUR u32
+(`~3` sur 32 bits = `0xFFFFFFFC`, qui ne tient pas dans un littéral 8 bits
+`movs`, forçant `rsbs`) plutôt qu'un masque déjà réduit à 8 bits -- pas
+testé plus loin (budget dédié à la confirmation de classe, pas à la
+résolution).
+
+**3e near-miss inédit repéré au passage** (pas dans les notes w43,
+propre à `func_08037A5C`/`func_08037AD0` uniquement, absent de
+`func_08037B48`/`func_08037B80`) : les 4 champs `u16` de configuration
+passés à `func_08037244` (bloc de 8 octets sur la pile) sont écrits par
+l'original via 4 `strh` SÉPARÉS avec des valeurs scalaires calculées une
+à une (`movs r1,#0xb0; lsls r1,r1,#1; movs r3,#0xd8; strh r1,[r0]; strh
+r3,[r2,#2]; adds r1,#0x38; strh r1,[r2,#4]; movs r0,#0xe8; strh
+r0,[r2,#6]`) -- une tentative naïve via une struct locale à 4 champs
+`u16` (`SomeArgs4{a,b,c,d}`) compile en un motif COMPLÈTEMENT différent
+(paires de `ands`/`orrs` 32 bits pour empaqueter 2 halfwords à la fois,
+beaucoup plus gros). **Ne pas utiliser de struct locale ici -- écrire 4
+variables scalaires `u16` séparées** (ou les 4 littéraux inline
+directement dans les appels `strh` si le call site le permet) est
+probablement la bonne piste pour un futur round qui s'attaquerait à ces 2
+fonctions en profondeur.
+
+Pas commité (aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` -- tout
+le tâtonnement est resté dans `/tmp/w45scratch/`, jamais appliqué au
+dépôt).
+
+### État du worktree en fin de round
+
+- **2 commits locaux** : `func_0803A798` et `func_0803BF78`, tous deux
+  vérifiés bit-exact (taille `.o` + réassemblage autonome, cf. ci-dessus).
+- `func_08037A5C`/`func_08037AD0` : classe de near-miss confirmée (2e
+  instance), PAS portées, PAS commitées -- conforme à la consigne "ne pas
+  forcer un match".
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map`/`build/franglais_stub.bin`
+  nettoyés après chaque vérification.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `git status --short` vide (hors les 2 commits déjà réalisés).
+
+## Round w49 (worktree `parallel-49`) -- déblocage de la classe "masque par négation", 2 matchs
+
+Consigne : choisir une cible fraîche, éviter le recoupement avec w45/w48
+(`func_0803A798`/`func_0803BF78`) et les cibles fermées (`func_0803BDFC`,
+`func_08083A7C`, `func_08075334`, variante recolor `DrawGlyphAt`).
+
+### Idée neuve testée : bitfield struct réel + `return self` implicite
+
+Choix : reprendre la classe "masque construit par négation" documentée sans
+succès rounds w39/w41/w44 (`func_08050EE4`/`func_080512D8`, ctors de la
+famille `vtable_unk_080E7878/78A8/78C0/78E0`) -- 2 hypothèses déjà réfutées
+(masque `& ~N` sur `u8`/`u32` local, avec ou sans variable intermédiaire),
+1 piste explicitement non tentée notée par w39 ("construire le masque comme
+variable ELLE-MÊME calculée à runtime").
+
+Désassemblage manuel complet de `func_08050EE4` (88 octets) : les 4 blocs
+de bits écrits à `self+0xc` (largeurs 5/10/4/4, via `strb`/`strh`/`str`
+selon la largeur d'accès la plus étroite couvrant chaque champ) collent
+exactement au style déjà utilisé PAR CE DÉPÔT pour documenter des bitfields
+réels (`barn.hh`, `coop.hh`, `bachelorette.hh` : plusieurs `u32 champ : N;`
+consécutifs partageant un mot). Hypothèse testée : le masque par négation
+n'est PAS un artefact d'une expression manuelle `v & ~mask` -- c'est le
+codegen PROPRE d'agbcp pour une vraie AFFECTATION DE BITFIELD STRUCT
+(chaque écriture choisit l'unité d'accès -- octet/demi-mot/mot -- la plus
+étroite qui couvre entièrement le champ visé). Modélisé comme un vrai
+`struct` avec bitfields C, testé au harnais rapide : **taille et
+désassemblage identiques SAUF l'épilogue** (`pop {r0}; bx r0` chez nous vs
+`pop {r1}; bx r1` dans la cible). Résolu par une 2e idée neuve : ce
+constructeur retourne `self` (convention ARM/CFront pour les ctors, déjà
+documentée règle 9/`SmartPtr`) -- une fois `r0` occupé par la valeur de
+retour vivante, agbcp restaure `lr` dans `r1` au lieu de `r0`. Avec
+`return self_;` explicite : **byte-exact au premier essai après correction**.
+
+Même méthode appliquée à `func_080512D8` (60 octets, sibling
+`vtable_unk_080E78E0`) : structure similaire (2 champs `u32` PLEINS +
+1 bitfield 14 bits + 2 bitfields 1 bit partageant le MÊME octet, ce qui
+explique pourquoi un seul `ldrb`/`strb` couvre les 2 micro-champs -- même
+octet, même unité d'accès). Écart résiduel supplémentaire : le dernier
+argument (pile, 5e) est chargé via `add r4,sp,#12; ldrb r5,[r4,#0]` (accès
+octet calculé), pas un `ldr` mot -- typé `bool` (règle 13 déjà connue,
+version LECTURE plutôt qu'écriture) au lieu de `u32` : byte-exact au
+2e essai.
+
+### Vérification (standard `DECOMP_RULES.md`, objet isolé)
+
+1. `arm-none-eabi-readelf -S build/src/code_ADDR.o` : `.text` = `0x68`
+   (`func_08050EE4`, == `0x08050F4C - 0x08050EE4`) et `0x48`
+   (`func_080512D8`, == `0x08051320 - 0x080512D8`) -- tailles exactes.
+2. Diff **octet à octet réel** (`dd` sur `fomt.gba` lié vs `baserom.gba`,
+   même plage d'adresses/tailles) -- identique pour les 2 fonctions.
+   (`objdump` seul aurait signalé un faux écart : formatage différent des
+   pools littéraux entre un binaire lié -- mots 32 bits résolus -- et le
+   désassemblage brut de `baserom.gba` -- pseudo-instructions mal
+   synchronisées -- piège de present affichage, pas de contenu réel;
+   confirmé par la comparaison `dd`/`cmp` directe.)
+3. Rebuild complet (`rm -rf build ... && make compare`) : lien réussi sans
+   référence non définie ni définition multiple, seul `sha1sum` échoue
+   (attendu depuis `cb06198`).
+4. Sweep anti-doublon (`grep -rl -- ".L08050EE4\|.L080512D8" asm/*.s
+   src/*.cc`) : vide.
+
+### Découpage
+
+- `asm/code_08050E98.s` tronqué juste après `func_08050EBC` (le blob
+  `.L08050EE4` en sortait entièrement).
+- Nouveau `asm/code_08050F4C.s` : reste du blob (fonction `func_08050F4C`,
+  18 octets, near-miss "copie explicite élidée" déjà documenté w44 --
+  PAS retenté ce round, laissé en `.byte`) + 2 octets de padding avant
+  `func_08050F60` déjà porté.
+- `asm/code_080512D8.s` : le blob de tête (`.L080512D8`, 72 octets =
+  fonction + pool en entier, RIEN ne restait avant `func_08051320`) a été
+  retiré intégralement ; fichier renommé `asm/code_08051320.s` (règle de
+  découpage #6 -- la fonction suivante devient la nouvelle tête du fichier).
+- `fomt.lds` : 2 nouvelles entrées insérées à chaque emplacement.
+
+### Commit
+
+`decomp: match func_08050EE4/func_080512D8, packed-bitfield ctor family`
+(1 commit, les 2 fonctions partagent exactement la même cause racine et
+ont été vérifiées ensemble).
+
+### Cibles NON tentées ce round, laissées en l'état
+
+- `func_08050F4C` (18o, near-miss "copie explicite élidée", w44) --
+  reste en `.byte` dans le nouveau `asm/code_08050F4C.s`.
+- `func_08050F74` (44o, near-miss registre r4/r5 + `__umodsi3`) -- inchangé.
+- `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o, "pression de
+  registres", jamais tentées) -- candidates pour escalade `fable`,
+  inchangées.
+- `func_08050E98`/`func_08050EBC` (les 2 setters voisins, MÊME champ
+  `self+0x550` mais PAS ce round) : réexaminés avec la nouvelle idée
+  "bitfield struct" -- **ne s'applique PAS directement** : contrairement
+  aux ctors, le masque de ces 2 setters est construit à partir d'un
+  PARAMÈTRE d'appel dynamique (`bics r2,r1` -- `r1` est un masque fourni
+  par l'appelant, pas une largeur de champ fixée à la compilation), donc
+  ce n'est pas une simple affectation de bitfield à largeur constante.
+  Root-cause potentiellement différente, PAS résolu ce round -- laissé
+  en l'état, aucun fichier modifié pour cette paire. À noter dans
+  `DECOMP_ARCHIVE.md` comme sous-cas distinct de la famille pour éviter
+  de re-tenter la même idée dessus sans nuance.
+
+### État du worktree en fin de round
+
+- 1 commit de matchs (2 fonctions), déjà listé ci-dessus.
+- `git status --short` propre après commit, `build/`/`fomt.gba`/
+  `fomt.elf`/`fomt.map` nettoyés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Aucun recoupement avec w45/w48 (cibles `func_0803A798`/`func_0803BF78`
+  jamais touchées ce round).
+
+## Round w50 -- symbolisation du premier tiers de `asm/vtables.s` (mission cross-cutting, portion `vtable_unk_080E59EC` à `vtable_unk_080E6A98`)
+
+Mission différente du matching habituel, lancée après le bug crash vécu
+(un trampoline de hook mal dimensionné a décalé une fonction, rendant
+faux un pointeur de vtable codé en dur -- crash direct au milieu d'une
+fonction au lieu de son début). Objectif : remplacer les blobs `.incbin`
+bruts des vtables C++ par des `.4byte` symboliques référençant les labels
+déjà existants dans le dépôt, pour que le linker recalcule automatiquement
+en cas de futur décalage -- élimine la classe de bug pour de bon, pour la
+portion traitée.
+
+### Méthode
+
+- Baseline : rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map &&
+  make` avec `build/franglais_stub.bin` factice) -> `sha1sum fomt.gba` =
+  `edc0b545851bf6b921d979a5de0e8e9c20611b9a`.
+- Résolution des labels faite depuis la table de symboles de l'ELF LIÉ
+  (`arm-none-eabi-nm fomt.elf`), PAS depuis un grep statique sur
+  `asm/*.s`/`src/*.cc` -- découverte en cours de route : un grep statique
+  (thumb_func_start + `ALIAS()`) sur-résout, car il suppose que le nom
+  `func_ADDR` désigne encore l'adresse ADDR dans le lien ACTUEL, ce qui
+  n'est plus garanti si un décalage préexistant traîne déjà dans l'arbre
+  (le check `sha1sum -c fomt.sha1` global est désactivé depuis `cb06198`,
+  donc plus aucun garde-fou global ne détecterait un tel décalage résiduel
+  avant cette mission). Exemple concret trouvé : `func_08010158` (nom
+  canonique, adresse vanilla censée être `0x08010158`) est actuellement lié
+  à `0x0801006C` dans CE build (`-0xEC` de décalage) -- un octet brut de
+  vtable référençant littéralement `0x08010159` (bit thumb inclus) NE DOIT
+  PAS être réécrit `.4byte func_08010158`, sous peine de changer le
+  contenu binaire (le linker recalculerait la VRAIE adresse actuelle,
+  différente de l'octet brut déjà en place). Règle appliquée : un mot n'est
+  symbolisé QUE si l'adresse qu'il encode correspond EXACTEMENT à l'adresse
+  ACTUELLE (post-lien) d'un symbole existant -- pas juste "un symbole du
+  même nom existe quelque part".
+- Pour chaque mot de 4 octets de chaque blob de ma portion (107 vtables,
+  lignes 3-524 de `asm/vtables.s`) : si nul -> `.4byte 0` inchangé (mots de
+  préfixe MI/RTTI, cf. `DECOMP_ARCHIVE.md` "2 mots nuls de préfixe") ; si
+  bit thumb posé (`val & 1`) ET qu'un symbole `T`/`t`/`W`/`w` de `nm`
+  atterrit EXACTEMENT à `val & ~1` -> `.4byte NOM` (nom sémantique préféré
+  si déjà porté, sinon `func_ADDR`, sinon `vtable_unk_ADDR`) ; sinon ->
+  `.4byte 0xVALEUR @ no label yet` littéral inchangé, aucun label inventé.
+- Script Python jetable (`/tmp/w50_vtable_apply.py`, pas commité --
+  scratch de session) a fait la substitution mécaniquement sur toute la
+  portion en une passe, à partir de la table nm dumpée dans
+  `/tmp/w50_syms.txt`.
+
+### Résultat
+
+- 107 vtables touchées, 980 mots au total.
+- **214 mots symbolisés** : 173 vers `__pure_virtual` (stub partagé de
+  méthode virtuelle non implémentée, symbole réel de `src/pure_virtual.o`,
+  PAS inventé -- trouvé dans la table `nm`, pas dans un grep statique) +
+  ~41 vers des fonctions réellement portées/connues (`func_0800371C`,
+  `func_0800374C`, etc.).
+- **213 mots laissés `.4byte 0`** (préfixes offset-to-top/RTTI nuls,
+  layout `-fvtable-thunks` standard, pas des pointeurs manquants).
+- **553 mots laissés littéraux `@ no label yet`** : soit valeurs non-code
+  (offsets de this-adjustment MI, ex. `0xFFFFFFE4`, bit thumb absent),
+  soit adresses de code dont AUCUN symbole n'atterrit exactement à cette
+  adresse dans le lien actuel -- inclut potentiellement des fonctions déjà
+  connues mais actuellement décalées (cf. `func_08010158` ci-dessus) : ne
+  pas retenter de les résoudre par nom sans revérifier individuellement
+  contre `nm`, le décalage peut avoir changé entre deux rounds.
+
+### Vérification
+
+- Rebuild complet après édition (mêmes commandes que la baseline) ->
+  `sha1sum fomt.gba` = `edc0b545851bf6b921d979a5de0e8e9c20611b9a`, **identique
+  bit à bit** à la baseline. Aucune erreur de lien (aucune référence non
+  définie, aucune définition multiple) -- `pure_virtual.o`/tous les objets
+  `func_ADDR`/`.cc` référencés étaient déjà dans le lien avant cette
+  mission.
+- `git status --short` : seul `asm/vtables.s` modifié.
+
+### État du worktree en fin de round
+
+- 1 commit (voir message ci-dessous), seul `asm/vtables.s` modifié +
+  `SESSION_NOTES.md`.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant commit.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Portion traitée : `vtable_unk_080E59EC` à `vtable_unk_080E6A98` (premier
+  tiers de `asm/vtables.s`, lignes 3-524) uniquement -- les 2/3 restants
+  (jusqu'à la fin du fichier) sont hors scope de ce round, traités par
+  d'autres agents en parallèle sur d'autres worktrees.
+
+## Round (worktree w51, branche `parallel-51`) -- symbolisation de vtables
+`.incbin` -> `.4byte`/`.word` sur le 2e tiers (`vtable_unk_080E6AD8` à
+`vtable_unk_080E7A28`)
+
+Mission différente du matching habituel : convertir les 320 vtables C++
+de `asm/vtables.s`, qui sont aujourd'hui des blobs `.incbin` bruts (donc
+des pointeurs de fonction codés en dur, jamais recalculés par le
+linker), en forme symbolique (`.4byte func_ADDR`). Motivation directe :
+un hook franglais mal dimensionné a récemment décalé des adresses
+downstream et cassé ces pointeurs bruts (corrigé entretemps par
+`f718114`/`4f55c43`, déjà présents sur cette branche) -- symboliser
+élimine cette classe de bug pour toujours puisque le linker recalcule
+alors chaque slot automatiquement, quel que soit un futur décalage.
+
+Portion prise : les 105 vtables de `vtable_unk_080E6AD8` à
+`vtable_unk_080E7A28` (lignes ~526-958 avant édition), 958 mots (3832
+octets) au total.
+
+### Méthode
+
+1. Convention de slot vérifiée sur un exemple déjà symbolisé dans ce
+   dépôt (`__vt_12ScriptEngine`, ligne ~830) : `.4byte func_ADDR` nu,
+   sans `+1` manuel -- le bit thumb est ajouté automatiquement par le
+   linker via la relocation, puisque `func_ADDR` porte déjà `.thumb_func`
+   (macro `thumb_func_start`). Confirmé bit-exact par les rounds
+   précédents qui ont produit cet exemple.
+2. Table adresse -> label construite par script (`thumb_func_start
+   func_ADDR`/`sub_ADDR` dans tout `asm/*.s`, + définitions `func_ADDR(`
+   dans tout `src/*.cc` pour couvrir les fonctions déjà portées sous
+   ALIAS) : 2744 adresses connues au total.
+3. Chaque mot de 4 octets des 105 vtables lu directement dans
+   `baserom.gba` (pas de recalcul d'offset : les valeurs stockées dans
+   la ROM sont déjà des adresses ROM absolues `0x08xxxxxx`, bit thumb
+   inclus -- vérifié en lisant les octets bruts avant/après un slot déjà
+   converti).
+4. Par mot : `0x0` -> `.word 0` nu (mots nuls de préfixe MI/RTTI, cf.
+   convention déjà documentée plus haut dans ce fichier) ; adresse
+   trouvée dans la table -> `.4byte func_ADDR` (ou `sub_ADDR`) ; sinon
+   -> `.4byte 0xVALEUR @ no label yet` littéral, SANS deviner de nouveau
+   label.
+
+### Résultat du scan
+
+- **527 slots symbolisés** (`.4byte func_ADDR`/`sub_ADDR`), 280 labels
+  distincts référencés.
+- **208 mots nuls** (`.word 0`), préfixe MI/RTTI standard.
+- **223 slots laissés littéraux** (`@ no label yet`), 44 valeurs
+  distinctes. Spot-check sur 2 cas pour confirmer que ce ne sont pas des
+  labels ratés par le script :
+  - `0x08000639` (8 occurrences, `vtable_unk_080E7328`) : bytes bruts
+    `70 47` (`bx lr`) à l'offset fichier `0x638`, entre la fin de
+    `func_08000568` (`asm/interrupt.s`) et le début de
+    `func_0800063C` (`asm/sram_proxy_2.s`) -- un stub "ne rien faire" de
+    2 octets jamais isolé en fonction propre, donc jamais labellisé.
+  - `0x0801FDC1` (34 occurrences, la valeur la plus fréquente du lot) :
+    bytes bruts `70 b5 04 1c ...` (`push {r4,r5,r6,lr}`, vrai prologue de
+    fonction) à l'offset `0x1FDC0`, en PLEIN MILIEU du bloc monolithique
+    `asm/code_08012028.s` (entre `func_0801FD6C` et `func_08020060`,
+    jamais découpé) -- exactement le cas "fonction non isolée" anticipé
+    par la consigne, pas une erreur de la table.
+  - Les 44 valeurs restantes n'ont pas été investiguées une par une
+    (hors budget de ce round) -- laissées littérales par construction,
+    conformément à la consigne ("ne pas deviner").
+
+### Vérification -- découverte importante : le hash sha1 global NE PEUT PAS
+servir de critère bit-exact ici, et ce n'est pas un bug de transcription
+
+Protocole initial (rebuild propre AVANT édition, rebuild propre APRÈS,
+comparer `sha1sum fomt.gba`) exécuté correctement (`git stash`/`git stash
+pop` pour isoler les 2 builds sur l'état de commit identique, seul
+`asm/vtables.s` diffère) :
+- AVANT (incbin brut) : `edc0b545851bf6b921d979a5de0e8e9c20611b9a`
+- APRÈS (symbolisé)   : `c36f95b975cda85366ccd4de43b54d4ed0d85ccc`
+- **Les deux diffèrent**, mais la diffusion est bornée EXACTEMENT à la
+  plage `0xE6AE8`-`0xE7A3C` (ma portion, aucun octet ailleurs, taille de
+  fichier identique aux deux builds : 8392704 octets) -- pas une
+  cascade de décalage globale, pas une taille de vtable qui a changé.
+
+Root cause identifiée (`arm-none-eabi-nm fomt.elf`) : les adresses
+NOMINALES des fonctions (`func_08034E8C`, `func_080DC9FC`, ...) ne
+correspondent PLUS à leurs adresses RÉELLEMENT liées dans CE build --
+ex. `func_08034E8C` (nom = adresse vanilla) est en fait linké à
+`0x08034da0` (décalage de `-0xEC`), `func_080DC9FC` à `0x080dca04`
+(décalage de `+0x08`). Autrement dit, **les octets bruts `.incbin`
+encodent des adresses VANILLA/PRÉ-DÉCALAGE, déjà stales par rapport au
+layout RÉEL de ce build** -- exactement la classe de bug que cette
+mission existe pour éliminer. `DECOMP_RULES.md` documente déjà que ce
+dépôt a abandonné la vérification sha1 globale (`cb06198`) au profit
+d'une vérification PAR FONCTION isolée -- ce round en est la confirmation
+empirique côté vtables : le layout global a dérivé, et les vtables
+brutes qui n'ont pas encore été symbolisées sont donc **déjà cassées en
+silence** pour toute fonction dont l'adresse a dérivé, dans TOUT le
+fichier `asm/vtables.s`, pas seulement dans ma portion.
+
+Vérification de substitution utilisée à la place du hash global (rigueur
+équivalente, adaptée à un contenu qui doit maintenant suivre le linker
+plutôt que rester figé) :
+1. Aucune dérive de taille : fichier de sortie identique en taille aux
+   deux builds (958 mots = 3832 octets avant/après, `.incbin` remplacé
+   mot pour mot).
+2. `arm-none-eabi-nm fomt.elf` : les 280 symboles distincts référencés
+   dans ma portion sont TOUS définis (aucun `U`, aucune référence
+   pendante) -- lien propre, aucune référence non résolue.
+3. Rebuild répété (2x) : hash APRÈS reproductible à l'identique
+   (`c36f95b9...`) -- pas un artefact d'un unique build foireux.
+4. Spot-check manuel : le mot d'origine `0x080DC9FD` (`func_080DC9FC`
+   vanilla+1) correspond EXACTEMENT à l'adresse vanilla du symbole
+   `func_080DC9FC` (le nom du label), et le mot APRÈS symbolisation
+   (`0x080dca05`) correspond EXACTEMENT à `nm` (`080dca04` + bit thumb)
+   -- le linker résout bien la BONNE fonction, juste à sa vraie adresse
+   courante au lieu de l'adresse stale gravée dans la ROM vanilla.
+
+**Conclusion : la transformation est correcte** (pas d'erreur de
+transcription, pas de label inventé, pas de dérive de taille) ; la
+non-identité avec le hash `.incbin` d'origine est la PREUVE que le fix
+fonctionne, pas un signal d'échec. Le rebuild complet (avec
+`franglais_stub.bin` factice) ne montre aucune erreur de lien
+(référence non définie / définition multiple) -- seul `sha1sum -c
+fomt.sha1` échoue, attendu depuis `cb06198`.
+
+### État du worktree en fin de round
+
+- 1 fichier modifié : `asm/vtables.s` (105 `.incbin` -> séries de
+  `.4byte`/`.word`), aucun autre fichier touché, aucun label inventé.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Signal pour les rounds suivants (à remonter à `main`/`DECOMP_ARCHIVE.md`) :
+  **le layout global du binaire a dérivé de vanilla** pour au moins 2
+  fonctions vérifiées (`func_08034E8C`, `func_080DC9FC`) -- toute vtable
+  encore en `.incbin` brut ailleurs dans le fichier (les 2 autres tiers)
+  est potentiellement dans le même état "silencieusement cassée" tant
+  qu'elle n'est pas symbolisée à son tour.
+
+## Round w52 (worktree `parallel-52`) -- symbolisation du 3e tiers des vtables `.incbin` brutes
+
+### Mission
+
+Mission différente du matching habituel : `asm/vtables.s` contenait 320
+vtables C++ jamais décompilées, chacune sous forme `.incbin "baserom.gba",
+OFFSET, TAILLE` -- copie brute des octets ROM, slots de pointeurs de
+fonction codés en dur (pas de référence symbolique). Portion assignée :
+les 107 vtables de `vtable_unk_080E7A38` à `vtable_unk_080E85E8` (3e tiers,
+fin du fichier, lignes ~959-1385 avant édition).
+
+### Méthode
+
+1. Convention d'encodage vérifiée AVANT toute conversion : `__vt_12ScriptEngine`
+   (`asm/vtables.s`, déjà écrit en `.4byte func_ADDR`/`.4byte
+   method_MANGLED` depuis un round antérieur) confirme que le bit thumb
+   (+1) est géré automatiquement par l'assembleur/linker via
+   `.thumb_func` -- écrire `.4byte func_ADDR` nu suffit, jamais `+1` à la
+   main. Vérifié aussi qu'un slot déjà connu (`vtable_unk_080E5A88`,
+   `func_08004C54`/`func_08004C68`, cf. `DECOMP_ARCHIVE.md` "2 mots nuls
+   de préfixe") décode EXACTEMENT pareil avec ma logique
+   (`valeur_brute - 1` == adresse du label) avant de l'appliquer à ma
+   portion.
+2. Index de tous les labels `func_ADDR` connus construit par grep
+   (`thumb_func_start` dans `asm/*.s` + occurrences `func_ADDR` dans
+   `src/*.cc`/`include/*.hh` pour les fonctions déjà portées, dont le
+   label `func_ADDR` ne vit plus que comme alias `ALIAS(...)` texte, pas
+   comme `thumb_func_start`) : 2697 adresses connues au total.
+3. Pour chacun des 758 mots de 4 octets de ma portion : lu depuis
+   `baserom.gba` à l'offset exact de chaque `.incbin`, comparé
+   `valeur - 1` (bit thumb) puis `valeur` nue contre l'index. Remplacé
+   par `.4byte func_ADDR` si trouvé, sinon gardé `.4byte 0xVALEUR @ no
+   label yet` (littéral, aucun label inventé). Les 2 premiers mots de
+   chaque vtable (préfixe `-fvtable-thunks`, cf. `DECOMP_ARCHIVE.md`) ont
+   un commentaire dédié (`offset-to-top`/`RTTI slot`) au lieu de `@ no
+   label yet` quand ils valent 0 -- un seul cas où le mot 0 (offset-to-top)
+   est non-nul (`vtable_unk_080E7DF4`, `0xFFFFFFF8` = -8, vrai ajustement
+   MI thunk, laissé littéral avec le même commentaire structurel).
+
+### Résultat du comptage
+
+- **327 slots symbolisés** (`.4byte func_ADDR`) sur 758 slots totaux
+  (107 vtables).
+- **431 slots laissés littéraux** : 215 valent `0x0` (préfixe structurel
+  `-fvtable-thunks`, 2 par vtable) + 216 sont des adresses ROM plausibles
+  (bit thumb posé) qui ne correspondent à AUCUN label existant --
+  vérifié sur plusieurs échantillons (ex. `0x08075E00`) qu'elles tombent
+  bien AU MILIEU d'un bloc `asm/*.s` jamais découpé (entre
+  `func_08075DEC` et `func_08075E24`), pas une adresse invalide -- exactement
+  le cas "fonction jamais isolée" décrit dans la mission. Aucun nouveau
+  label inventé, conformément à la règle.
+
+### Découverte importante -- le check "binaire rigoureusement identique"
+NE PASSE PAS, et c'est ATTENDU (pas une erreur de transcription)
+
+Le protocole de vérification demandé (sha1 avant/après strictement égal,
+puisque la transformation ne devrait rien changer sémantiquement) a
+échoué : 336 octets diffèrent, tous confinés exactement à la plage
+octets de ma portion (`0xE7A38`-`0xE8614`, vérifié par `cmp -l` complet --
+AUCUN octet ailleurs dans les 8 Mo de ROM n'a bougé, donc pas de dérive
+de taille globale, la taille du fichier est identique avant/après).
+
+Root-cause investiguée à fond (pas supposée) : `arm-none-eabi-nm
+fomt.elf` sur TOUS les symboles `func_ADDR` du binaire montre qu'à partir
+de `func_0803F8DC` (adresse RÉELLE liée = `0x0803F8E4`, soit +8 par
+rapport à l'adresse encodée dans son propre nom) et JUSQU'À LA FIN DU
+BINAIRE (1620 symboles vérifiés, delta == +8 pour TOUS sans exception),
+le binaire actuellement compilé par ce dépôt est **déjà décalé de +8
+octets par rapport à l'adresse vanilla** que chaque nom `func_ADDR`
+encode. Cause probable : le payload franglais réellement lié dans la ROM
+(cf. `DECOMP_RULES.md`, commit `cb06198`) fait déjà échouer
+`sha1sum -c fomt.sha1` pour la même raison structurelle -- la ROM de ce
+dépôt est INTENTIONNELLEMENT non-vanilla, et ce +8 est une conséquence
+déjà présente AVANT que je touche à quoi que ce soit (confirmé : le delta
++8 existe pour `func_08063E58`/`func_080E1D8C` qui n'ont RIEN à voir avec
+ma modification, juste en inspectant `nm` sur le binaire).
+
+Conséquence directe et IMPORTANTE pour la mission entière (pas juste ma
+portion) : **les 320 vtables `.incbin` brutes de tout `asm/vtables.s`
+contiennent, dès aujourd'hui, des pointeurs de fonction FIGÉS sur
+l'adresse vanilla (correcte à l'origine) qui ne correspond PLUS à la
+position réelle où le linker place ces fonctions dans CE build précis**
+-- exactement la classe de bug que cette mission de symbolisation est
+censée éliminer, sauf que le bug est déjà actif MAINTENANT pour toute
+vtable encore en `.incbin`, pas seulement dans un scénario hypothétique
+futur. Ma conversion en `.4byte func_ADDR` corrige donc RÉELLEMENT et
+DÈS MAINTENANT les 327 slots symbolisés de ma portion (le linker recalcule
+la vraie adresse +8), alors que les 431 slots restés littéraux (pas de
+label existant) restent, eux, avec l'ancienne adresse vanilla fausse --
+un bug latent réel mais qu'il est hors de portée de corriger sans
+inventer un label (interdit par la règle).
+
+Vérification de non-régression effectuée malgré l'échec du check sha1
+littéral :
+1. Chaque slot symbolisé référence un symbole EXISTANT (vérifié par le
+   lien complet, aucune référence non définie).
+2. Les 336 octets qui diffèrent sont TOUS de la forme "même valeur +8"
+   (vérifié programmatiquement sur l'intégralité du diff), cohérent avec
+   le delta +8 confirmé par `nm` -- pas une valeur aléatoire, pas un
+   octet mal ordonné/mal transcrit.
+3. Aucun octet en dehors de la plage de ma portion n'a changé (`cmp -l`
+   complet sur les 8 Mo).
+4. Lien complet réussi sans nouvelle erreur structurelle.
+
+**Ce résultat doit être signalé aux 2 autres agents travaillant en
+parallèle sur les 2 autres tiers du même fichier `asm/vtables.s`** : ils
+vont probablement observer le même échec du check "sha1 identique" sur
+leur propre portion (si leur portion contient des adresses >=
+`0x0803F8DC`, ce qui est très probable puisque `0x0803F8DC` est tôt dans
+la ROM) -- ce n'est pas une erreur de transcription à corriger, c'est la
+dérive globale +8 déjà présente. Un message a été envoyé à l'agent
+`main` avec ce résumé.
+
+### Commit
+
+`decomp: symboliser le 3e tiers des vtables (vtable_unk_080E7A38 à
+vtable_unk_080E85E8)` -- 1 commit, 107 vtables, 327/758 slots symbolisés.
+
+### État du worktree en fin de round
+
+- 1 commit (symbolisation vtables, portion w52), `git status --short`
+  propre après commit.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
+
+## Round w54 (worktree `parallel-54`) -- conversion du hook `franglais_farmer_stamina` en trampoline à taille fixe
+
+### Mission
+
+Convertir le hook C++ qui remplace `func_0800E4F0` (`src/farmer.cc`,
+"stamina du fermier") d'un remplacement de corps à taille libre vers un
+trampoline à taille FIXE identique à la fonction vanilla, suivant le
+même pattern déjà validé pour `func_0800912C`
+(`asm/code_08008DE8.s`, commit `f718114`/`4f55c43`) : `ldr r3, =PAYLOAD;
+bx r3` + `nop` de padding jusqu'à la taille vanilla exacte.
+
+### Localisation et taille vanilla mesurée
+
+Le hook vit dans `src/farmer.cc` (fonction déjà "matchée", pas un
+`asm/*.s`) : `func_0800E4F0` appelait un pointeur de fonction brut vers
+`FRANGLAIS_franglais_farmer_stamina` (`0x08801074`, défini dans
+`include/franglais_poc.hh`), un corps C++ entier (pas de l'assembleur à
+la main), donc de taille non contrôlée directement.
+
+Taille vanilla mesurée par désassemblage direct de `baserom.gba` (repris
+depuis le checkout principal `~/dev/jeux-langues-assets/fomt-decomp`,
+absent -- gitignoré -- de ce worktree, copié dedans sans toucher à rien
+en dehors) :
+```
+arm-none-eabi-objdump -D -b binary -m arm -Mforce-thumb --adjust-vma=0x08000000 \
+  --start-address=0x0800E4F0 --stop-address=0x0800E500 -EL baserom.gba
+0800e4f0: adds r0, #0x44 ; ldrh r0,[r0,#0] ; lsls r0,r0,#17 ; lsrs r0,r0,#24 ; bx lr ; (pad 2 octets)
+```
+= **0xC octets (12) exactement**, cohérent avec `next_addr - this_addr`
+(`func_0800E4FC - func_0800E4F0 = 0xC`).
+
+### Fix appliqué
+
+Remplacé le corps C++ libre par une fonction `NAKED` (`EC NAKED unsigned
+int func_0800E4F0(...)`, macro déjà utilisée ailleurs dans le dépôt --
+précédent : `func_08034F00` dans `src/npc_entity.cc`) contenant de
+l'assembleur brut via `asm_unified(...)`, EXACTEMENT sur le modèle de
+`func_0800912C` : `ldr r3, =LITERAL; bx r3` (4 octets) + 2 `nop` (4
+octets) + `.align 2,0` + littéral `.4byte 0x08801075` (adresse payload
+avec bit thumb posé, 4 octets) = 12 octets pile. `r0` contient déjà
+`&self` à l'entrée (même convention d'appel que le vanilla, qui utilisait
+aussi `r0` comme pointeur `self`), donc passé tel quel au payload sans
+manipulation. Commentaire inline en ANGLAIS (règle non-négociable du
+dépôt), citant `func_0800912C`/`asm/code_08008DE8.s` comme précédent.
+Le littéral est codé en dur (pas de macro `FRANGLAIS_...` dans la chaîne
+asm -- le préprocesseur C n'expanse pas les macros à l'intérieur des
+littéraux de chaîne, donc impossible d'y référencer
+`FRANGLAIS_franglais_farmer_stamina` directement ; même limitation que le
+littéral hardcodé `0x08801871` déjà présent dans
+`asm/code_08008DE8.s` pour `franglais_read_keys`). L'`#include
+"franglais_poc.hh"` devenu inutile a été retiré de `src/farmer.cc`.
+
+### Vérification
+
+Environnement de build initialement cassé dans ce worktree (indépendant
+de ma modification) : `tools/agbcc/bin/` vide (agbcc/agbcp/old_agbcc
+absents), `tools/agbcc/lib/` absent (`libgcc.a`/`libc.a` manquants), et
+`baserom.gba` absent (gitignoré, spécifique à chaque worktree). Reconstruit
+depuis un répertoire de build agbcc déjà présent sur la machine
+(`/tmp/tmp.Cv88fZh1RY`, sources agbcc avec `agbcc`/`agbcp`/`old_agbcc`
+déjà compilés) : `make -C libgcc` / `make -C libc` pour produire les 2
+`.a` manquants, copie des binaires + includes + libs dans
+`tools/agbcc/{bin,include,lib}` de CE worktree uniquement (tous
+gitignorés, aucun impact sur `git status`), et copie de `baserom.gba`
+depuis le checkout principal. Rien touché en dehors de ce worktree.
+
+1. **Taille du `.o` fraîchement compilé** : `arm-none-eabi-objdump -d
+   build/src/farmer.o` -> `func_0800E4F0` à l'offset `0x19c`,
+   `func_0800E4FC` à `0x1a8` = **0xC octets**, identique à la taille
+   vanilla mesurée. Contenu exact : `4b01 4718 46c0 46c0 08801075`
+   (`ldr r3,[pc,#4] ; bx r3 ; nop ; nop ; .word 0x08801075`).
+2. **Lien complet propre** (`rm -rf build fomt.gba fomt.elf fomt.map` +
+   `head -c 4096 /dev/zero > build/franglais_stub.bin` + `make -j`) :
+   aucune erreur structurelle (référence non définie/définition
+   multiple). Seul `sha1sum -c fomt.sha1` échoue, ATTENDU (payload
+   franglais réel lié, cf. `DECOMP_RULES.md`/commit `cb06198`).
+3. **Delta avant/après mesuré précisément par `nm` sur l'ELF lié**, en
+   comparant à l'AMONT du hook (`func_0800E4E8`, hors de portée de ce
+   round, décalage `-208`/`-240` dû au hook `GetString` non corrigé dans
+   CE worktree) :
+   - **AVANT** ma correction (corps C++ libre, revert temporaire via
+     `git stash`) : `func_0800E4E8` lié à `0800e3f8` (delta amont
+     `-0xF0` = -240) ; `func_0800E4F0` (le hook) lié à `0800e400`
+     (même -240, point de départ) ; `func_0800E4FC` (juste après le
+     hook) lié à `0800e410` -- **delta `-0xEC` = -236**, soit le hook
+     ajoutait lui-même **+4 octets** de décalage local (taille compilée
+     16 octets au lieu des 12 vanilla).
+   - **APRÈS** ma correction : `func_0800E4E8` toujours à `0800e3f8`
+     (-240, inchangé, cause amont hors de portée) ; `func_0800E4F0` à
+     `0800e400` ; **`func_0800E4FC` à `0800e40c` -- delta `-0xF0` =
+     -240, IDENTIQUE à l'amont**. Le hook ne contribue plus AUCUN
+     décalage local (0 au lieu de +4). Vérifié aussi sur
+     `func_0800E504` (encore -240, aucune dérive supplémentaire en
+     aval).
+   - **Correction du chiffre annoncé dans la mission** : la consigne
+     initiale citait un décalage de -240 *supplémentaires* attribuables
+     à ce hook précis. La mesure réelle (avant/après isolé par `git
+     stash`) montre que la contribution locale RÉELLE du hook libre
+     était seulement de **+4 octets** (16 vs 12 vanilla), pas -240 --
+     le -240 global observé partout dans ce worktree est entièrement
+     dû au hook `GetString` en amont (traité par un autre agent en
+     parallèle), pas à `franglais_farmer_stamina`. Signalé ici pour que
+     `main` ajuste le décompte total attendu après fusion des deux
+     fixes : le hook `farmer_stamina` seul ne retire que 4 octets de
+     décalage cumulé, pas 240.
+4. **Vérification fonctionnelle en jeu (mGBA)** : NON EFFECTUÉE ce
+   round (hors budget) -- le comportement du payload lui-même
+   (`0x08801074`) n'est pas modifié par ce fix, seul le point
+   d'accroche change de forme (identique en taille et en effet : même
+   valeur de registre `r0`, même saut vers la même adresse `|1`), donc
+   risque fonctionnel jugé minimal, mais un test visuel mGBA reste à
+   faire pour confirmation complète (cf. mémoire projet "Toast visual
+   check pending" -- même type de vérification en attente).
+
+### Commit
+
+1 commit : conversion de `func_0800E4F0` en trampoline à taille fixe
+(`src/farmer.cc`), avec commentaire anglais citant le précédent
+`func_0800912C`.
+
+### État du worktree en fin de round
+
+- 1 fichier modifié dans git (`src/farmer.cc`), `git status --short`
+  propre après commit.
+- `baserom.gba` et `tools/agbcc/{bin,include,lib}` ajoutés dans ce
+  worktree pour permettre le build (gitignorés, n'apparaissent pas dans
+  `git status`) -- nécessaires pour tout futur round dans CE worktree
+  spécifique.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
+
+## Round (worktree `w55`, branche `parallel-55`) -- conversion des 3 paires `Tool`/`Food`/`Article::GetName`/`GetDesc` en trampolines à taille fixe
+
+### Mission
+
+Les 6 hooks franglais de `src/item.cc` (`Tool::GetName`/`GetDesc`,
+`Food::GetName`/`GetDesc`, `Article::GetName`/`GetDesc`) étaient depuis
+`cb06198` des remplacements de CORPS ENTIER à taille libre (un simple
+`return ((Fn)(FRANGLAIS_xxx | 1u))(this);` compilé par agbcp à une taille
+arbitraire), en violation de la règle standing (`DECOMP_RULES.md`,
+"Discipline non négociable") qui exige un trampoline à taille FIXE,
+identique au corps vanilla remplacé. Ces 6 fonctions ne sont PAS
+virtuelles (vérifié : noms mangle CFront `GetName__C4Tool` etc., aucun
+`virtual` dans `include/item.hh`, appelées par `bl` direct dans le
+désassemblage vanilla) -- pas de vtable à préserver ici, contrairement à
+ce que le contexte de départ laissait supposer.
+
+### Méthode
+
+1. **Tailles/adresses vanilla exactes** obtenues en buildant le commit
+   `b8471ae` (dernier état de `item.cc` avant le hook `cb06198`, encore
+   vanilla-matché) dans un worktree scratch dédié
+   (`/tmp/w55_vanilla_check`) -- `make compare` y passe bit-exact
+   (`sha1sum -c fomt.sha1` -> Réussi), donc les adresses `nm` de ce build
+   SONT les adresses vanilla. Sizes mesurées (`next_addr - this_addr`) :
+   - `GetName__C4Tool` @ `0800db34`, 0x2C (44)
+   - `GetDesc__C4Tool` @ `0800db8c`, 0x3C (60)
+   - `GetName__C4Food` @ `0800dcb8`, 0x28 (40)
+   - `GetDesc__C4Food` @ `0800ddd4`, 0x38 (56)
+   - `GetName__C7Article` @ `0800df58`, 0x2C (44)
+   - `GetDesc__C7Article` @ `0800dfd4`, 0x3C (60)
+   Toutes prennent uniquement `this` (r0) -- pas de r1/r2/r3 vivant en
+   entrée, donc r3 est un scratch sûr pour le saut (même convention que
+   `func_0800912C`/les hooks `scene_text`).
+
+2. **Problème structurel avec le worktree** : ni `baserom.gba` ni
+   `tools/agbcc/bin/{agbcc,old_agbcc,agbcp}` (gitignorés, cf. round
+   "toolchain bring-up") n'étaient présents dans CE worktree `w55` --
+   copiés depuis `fomt-decomp` (checkout principal) avant de pouvoir
+   builder quoi que ce soit ici.
+
+3. **item.cc reste un SEUL fichier / une seule entrée `fomt.lds`**
+   (`src/item.o(.text)`, ~15 fonctions dont Tool/Food/Article ctors,
+   GetIconId, ToolStack/FoodStack/ArticleStack, Product, ItemVariant) --
+   pas de découpage en plusieurs fragments `.cc`/`asm` (contrairement à
+   la méthode "Découpage" habituelle pour un fichier `asm/*.s`
+   monolithique) : un vrai trampoline TAILLE FIXE s'est avéré possible
+   **directement en C++ via `asm volatile(...)` inline**, qu'agbcp
+   accepte (`gcc 2.9-arm` supporte le mot-clé `asm` basique). Solution
+   plus légère que scinder `item.cc` en 7 fragments + 6 fichiers asm.
+
+4. **Piège découvert (et root-causé) : `ldr rX, =valeur` (pool implicite)
+   casse dans un GROS fichier .cc, marche dans un petit test isolé.**
+   Un premier essai (`ldr r3, =0x08801975` sans label explicite) compile
+   et assemble sans erreur en isolation (le pool littéral se retrouve
+   comme par chance juste après la fonction, seul contenu du fichier de
+   test), mais échoue à la compilation réelle de `item.cc`
+   (`Error: invalid offset, value too big`, décalages mesurés 0x794,
+   0x744, 0x620, 0x50C -- tous >> la portée ±1020 octets d'un
+   `ldr rD,[pc,#imm]` Thumb) : `as` ne flush le pool implicite qu'en fin
+   de fichier assembleur entier, beaucoup trop loin dès qu'il y a
+   plusieurs fonctions après. **Fix : littéral posé via un label explicite
+   local (`ldr r3, 1f` / ... / `1: .word VALEUR`)**, comme le fait déjà
+   la convention existante (`func_0800912C`, hooks `scene_text` de
+   `asm/code_0804E9C8.s`) -- jamais la pseudo-syntaxe `=valeur` dans un
+   fichier `.cc` de taille réelle.
+
+5. **Calcul du nombre de NOP exact** : agbcp ajoute TOUJOURS un `bx lr`
+   après le bloc `asm volatile` pour une fonction à valeur de retour sans
+   `return` explicite (comportement de compilateur non négociable, pas
+   contournable en C pur) -- budgété dans le compte de NOP plutôt que
+   combattu. Formule vérifiée empiriquement (compilation + mesure réelle,
+   pas déduite à l'aveugle) :
+   `total = (2 ldr + 2 bx + 2*N nop) + pad_align(mot) + 4 (word) + 2 (bx lr agbcp) + pad_align(fin fonction)`,
+   les deux paddings d'alignement dépendant de la parité de `N`. Résolu
+   par script Python essayant chaque `N` jusqu'à matcher la taille cible
+   exacte, PUIS validé par compilation réelle+`objdump` sur chacune des 6
+   fonctions (pas seulement calculé). Valeurs finales (`N` = nombre de
+   `nop`) : Tool::GetName 15, Tool::GetDesc 23, Food::GetName 13,
+   Food::GetDesc 21, Article::GetName 15, Article::GetDesc 23.
+
+6. Macro partagée `FRANGLAIS_TRAMPOLINE(addr_hex_plus_one, nop_count)`
+   ajoutée à `include/franglais_poc.hh` (commentaire anglais, comme
+   l'exige la convention du dépôt) pour éviter de dupliquer 6 fois le
+   même bloc `asm volatile`. `addr_hex_plus_one` est l'adresse payload
+   `FRANGLAIS_franglais_xxx` DÉJÀ additionnée de 1 (bit Thumb), donnée en
+   littéral hex nu (pas de suffixe `u` -- invalide en syntaxe `as`).
+
+### Vérification
+
+- Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map`,
+  `build/franglais_stub.bin` factice 4096 octets de zéros) : lien
+  complet réussi, aucune référence non définie, aucune définition
+  multiple. `sha1sum -c fomt.sha1` échoue (attendu, `cb06198`, payload
+  franglais réellement lié -- pas un signal d'échec pour ce round).
+- **Taille de `build/src/item.o` (`.text`) identique bit à bit
+  AVANT/APRÈS** entre ce worktree et le build vanilla de référence
+  (`b8471ae`) : `0x7b8` octets dans les deux cas.
+- `arm-none-eabi-nm fomt.elf` : les 6 fonctions atterrissent EXACTEMENT à
+  leur adresse vanilla (`0800db34`, `0800db8c`, `0800dcb8`, `0800ddd4`,
+  `0800df58`, `0800dfd4`) -- **et surtout `func_0800E2E4` (première
+  fonction du fichier SUIVANT `item.o` dans `fomt.lds`) atterrit
+  EXACTEMENT à `0800e2e4`**, sa propre adresse vanilla : preuve directe
+  que `item.o` occupe désormais very exactement sa plage d'octets
+  vanilla de bout en bout, donc les 6 trampolines ont chacun la bonne
+  taille (pas seulement en apparence, le décalage cumulé retombe
+  pile à zéro en sortie du fichier).
+- Diff de désassemblage borné à la taille exacte de chacune des 6
+  fonctions (`objdump --start-address=X --stop-address=X+size`) : chaque
+  bloc est `ldr r3, [pc,#N]` / `bx r3` / N `nop` / `.word ADRESSE_PAYLOAD`
+  / `bx lr` (l'épilogue mort agbcp), sans octet en trop ni en moins avant
+  le début de la fonction suivante -- vérifié visuellement fonction par
+  fonction.
+- Résidu de décalage HORS scope confirmé toujours présent ailleurs (pas
+  cassé par ce round, pas réparé non plus, hors mandat) : `func_08010158`
+  atterrit à `0801013c` (-0x1C vs vanilla, imputable au hook
+  `franglais_season_of`/`func_0800E324` juste après `item.o`, explicitement
+  HORS SCOPE de ce round -- traité par un autre agent) ; `func_08050EE4`
+  atterrit à `08050fbc` (+0xD8, imputable à `GetString`/`farmer_stamina`,
+  également hors scope, traités en parallèle sur d'autres worktrees).
+- **Vérification visuelle en jeu (mGBA) NON EFFECTUÉE** : `mgba-qt` est
+  disponible sur la machine, mais le `fomt.gba` de CE dépôt lie un
+  `build/franglais_stub.bin` factice (4096 octets de zéros, requis
+  seulement pour faire passer le LIEN) -- ce n'est pas le vrai payload
+  franglais (les vraies chaînes traduites vivent dans le dépôt séparé
+  `harvest-moon-franglais`), donc lancer ce ROM précis dans l'émulateur
+  ne testerait que du texte garbage/zéro, pas un vrai comportement de
+  patch. Un test visuel significatif nécessiterait d'intégrer ce fix
+  dans le pipeline de build de `harvest-moon-franglais` d'abord -- hors
+  mandat de ce round (mission = fomt-decomp uniquement). Documenté
+  explicitement comme NON vérifié visuellement, conformément à la
+  consigne.
+
+### État du worktree en fin de round
+
+- 2 fichiers modifiés : `include/franglais_poc.hh` (ajout de la macro
+  `FRANGLAIS_TRAMPOLINE`), `src/item.cc` (6 corps remplacés).
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant commit.
+  `baserom.gba` et `tools/agbcc/bin/*` (copiés depuis `fomt-decomp` pour
+  pouvoir builder dans ce worktree) restent gitignorés, jamais ajoutés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Les 6 fonctions ciblées par la mission (`Tool`/`Food`/`Article::GetName`/
+  `GetDesc`) sont maintenant des trampolines à taille fixe -- AUCUNE des
+  6 n'est restée bloquée.
+
+## Round w53 (worktree local, branche `parallel-53`) -- conversion du hook `AScriptEngine::GetString` en trampoline à taille fixe
+
+### Correction importante du brief de mission avant de commencer
+
+Le brief transmis pour cette mission affirmait que le hook `GetString`
+décale tout ce qui suit de **-208 octets**, et citait `func_0800E2E4`/
+`func_0800E324` comme les fonctions vanilla concernées. Mesure directe
+(`arm-none-eabi-nm fomt.elf`, build propre AVANT toute modification) :
+**c'est faux pour `GetString`** -- ces deux adresses appartiennent en
+réalité au hook `franglais_season_of` (`src/code_0800E2E4.cc`,
+`func_0800E324`), pas à `GetString` (`src/script_engine.cc`, linké
+beaucoup plus loin dans la ROM, autour de `0x0803F6F4`). L'origine réelle
+du **-208** mesuré à `func_0800E2E4` est en amont, dans `src/item.cc`
+(les hooks `GetName`/`GetDesc` des 3 classes `Tool`/`Food`/`Article`,
+toujours des remplacements de corps à taille libre, non convertis à ce
+jour) -- `item.o` est linké juste avant `code_0800E2E4.o` dans
+`fomt.lds`. Chaîne mesurée avant toute modification (`nm` sur
+`func_ADDR`, delta = adresse liée - adresse nominale) :
+
+```
+func_0800E2E4  -208   (item.cc GetName/GetDesc x3, en amont)
+func_0800E4E0  -240   (franglais_season_of, code_0800E2E4.cc)
+func_0800E4FC  -236   (franglais_farmer_stamina -- NE PAS TOUCHER, autre agent)
+func_0803F8DC    +8   (après script_engine.o -- LE VRAI point concerné par GetString)
+```
+
+Autrement dit : dans ce dépôt, `farmer_stamina` (`func_0800E4FC`) est
+**avant** `GetString` dans l'ordre de la ROM, pas après comme le
+supposait le brief -- la prémisse "tout retombe à delta=0 après GetString
+jusqu'au prochain hook connu (farmer_stamina)" est donc irréalisable
+telle quelle : farmer_stamina n'est pas en aval de GetString, il est en
+amont, et son propre hook (comme ceux de `GetName`/`GetDesc`/
+`season_of`) reste un remplacement à taille libre non corrigé -- hors
+scope de cette mission (confirmé non touché, laissé aux agents
+parallèles qui en ont la charge). Mission recentrée sur ce qui est
+réellement `GetString` : `src/script_engine.cc` +
+`fomt.lds` (le hack `. = . + 0x108;` juste après
+`src/script_engine.o(.text)`, sans commentaire, qui masquait le vrai
+problème par une compensation approximative plutôt qu'un trampoline).
+
+### Root cause du -208→+8 signalé dans DECOMP_RULES.md pour ce hook précis
+
+`fomt.lds` contenait (ligne 228, avant fix) : `. = . + 0x108;` juste
+après `src/script_engine.o(.text)`, sans justification écrite -- exactement
+le type de hack que la règle standing du jour interdit. Mesure isolée
+(`arm-none-eabi-objdump`/`nm` sur `build/src/script_engine.o` seul,
+recompilé deux fois : une fois avec le hook actuel, une fois avec le
+corps vanilla restauré depuis `git show cb06198^:src/script_engine.cc`
+temporairement réappliqué puis annulé) :
+
+- Corps vanilla de `GetString` (bounds check + lookup table + `"Error"`,
+  restauré temporairement pour la mesure) : **0x24 (36) octets**
+  compilés par `agbcp` (`GetString` à l'offset `0x94c`, symbole suivant
+  `ScriptEngine::ScriptEngine(void*)` à `0x970` dans le `.o` isolé).
+- Corps du hook (avant ce round, simple tail-call C++ vers le pointeur
+  fixe du vrai patch franglais) : **0x10 (16) octets** seulement --
+  **-20 octets** de moins que le vanilla, propagés à toute la ROM après
+  `script_engine.o`.
+- `. = . + 0x108` (264 octets) ajouté au mauvais endroit (au niveau du
+  linker script global, pas dans la fonction elle-même) surcompensait
+  largement les -20 octets manquants : **net +244** sur le delta observé
+  après ce point (`-236` avant `script_engine.o` -> `+8` après, soit
+  `-(-20) + 264 = 244`), ce qui explique numériquement le fameux "+8
+  résiduel" documenté dans `DECOMP_RULES.md`/round w52 comme touchant
+  `func_0803F8DC` jusqu'à la fin de la ROM.
+
+### Fix appliqué
+
+1. `src/script_engine.cc` : `GetString` réécrit en fonction `NAKED`
+   (macro déjà utilisée ailleurs dans ce dépôt pour ce cas exact --
+   `Rucksack::Upgrade()`, `func_08034F00`) avec un corps `asm_unified`
+   manuel, même forme que le trampoline déjà corrigé pour
+   `func_0800912C` (`asm/code_08008DE8.s`, commit `f718114`) : `ldr r3,
+   =CONST; bx r3` (tail-call, `this`/`id` déjà dans r0/r1, exactement
+   l'ABI attendue par le pointeur de fonction du hook d'origine) suivi
+   de 14 `nop` de padding pour atteindre exactement 0x24 (36) octets, un
+   commentaire EN ANGLAIS expliquant pourquoi la taille doit rester
+   fixe, littéral pool `.4byte 0x08800001` (même constante
+   `FRANGLAIS_franglais_get_string | 1u` qu'avant, juste encodée en asm
+   au lieu d'un cast C++).
+   - Piège de placement d'attribut rencontré : `char const * NAKED
+     AScriptEngine::GetString(...) const` compile mais l'attribut est
+     **silencieusement ignoré** (warning "`naked' attribute directive
+     ignored", pas une erreur -- le hook aurait fini par être un
+     `bx`+prologue GCC normal en plus du code manuel, mauvaise taille).
+     `char const * AScriptEngine::GetString(...) const NAKED` (attribut
+     après `const`) casse carrément le parsing ("declaration ... outside
+     of class is not definition"). Seule la forme `NAKED char const *
+     AScriptEngine::GetString(u32 id) const` (attribut tout au début,
+     avant le type de retour pointeur) compile ET applique réellement
+     l'attribut -- confirmé par `objdump` (aucun prologue/épilogue
+     généré, juste les 18 octets utiles + littéral).
+2. `fomt.lds` : suppression pure et simple du `. = . + 0x108;` (plus
+   nécessaire, le trampoline conserve maintenant la taille exacte sans
+   aide externe).
+
+### Vérification
+
+- Taille isolée : `arm-none-eabi-objdump -h build/src/script_engine.o`
+  après fix -> `.text 0xa48` (2632 octets), **identique bit-pour-bit** à
+  la taille obtenue en compilant le corps 100% vanilla restauré (mesuré
+  séparément, mêmes 0xa48) -- preuve directe que le fichier entier
+  retrouve exactement sa taille vanilla, pas seulement `GetString`
+  isolément.
+- Désassemblage (`arm-none-eabi-objdump -d`) du trampoline : `ldr r3,
+  [pc,#28]` / `bx r3` / 14x `nop` (`46c0`, `mov r8,r8` -- nop canonique
+  Thumb) / littéral `0x08800001` = exactement 0x24 (36) octets, aucun
+  prologue/épilogue parasite.
+- Rebuild propre complet (`rm -rf build fomt.gba fomt.elf fomt.map` +
+  `head -c 4096 /dev/zero > build/franglais_stub.bin` + `make`),
+  répété 2x pour confirmer la reproductibilité (`sha1sum fomt.gba`
+  identique aux deux runs : `bd1bcaad3c455a21d613aae8060825319004a72b`).
+  Lien complet réussi (aucune référence non définie, aucune définition
+  multiple) ; `sha1sum -c fomt.sha1` échoue comme attendu depuis
+  `cb06198` (non-signal, cf. `DECOMP_RULES.md`).
+- `arm-none-eabi-nm fomt.elf` sur tous les symboles `func_ADDR`, delta =
+  adresse liée - adresse nominale, AVANT/APRÈS ce fix :
+
+  | point de la ROM      | delta AVANT | delta APRÈS |
+  |----------------------|-------------|-------------|
+  | `func_0800E2E4`      | -208        | -208 (inchangé, hors scope) |
+  | `func_0800E4E0`      | -240        | -240 (inchangé, hors scope) |
+  | `func_0800E4FC`      | -236        | -236 (inchangé, hors scope) |
+  | `func_0803F8DC`      | **+8**      | **-236** (plus AUCUN changement de delta à travers `script_engine.o`) |
+  | fin de la ROM        | +8          | -236 (constant jusqu'à la fin, 2707 symboles vérifiés) |
+
+  Le point clé : **le delta ne change plus DU TOUT à la traversée de
+  `script_engine.o`** (`-236` avant, `-236` après, sur les 2707 symboles
+  `func_ADDR` de tout le binaire) -- la preuve que le hook `GetString`
+  est maintenant réellement size-preserving et n'introduit plus AUCUN
+  décalage propre. Le `-236` residuel qui persiste maintenant jusqu'à la
+  fin de la ROM (au lieu du `+8` précédent, qui était une coïncidence
+  arithmétique du hack `0x108`) est intégralement dû aux hooks EN AMONT
+  (`GetName`/`GetDesc` x3 dans `item.cc`, `franglais_season_of`,
+  `franglais_farmer_stamina`) -- non touchés par ce round, toujours des
+  remplacements à taille libre, à convertir par les agents qui en ont la
+  charge.
+
+### Vérification fonctionnelle en jeu -- NON FAITE
+
+Pas de build mGBA/`tools/capture_options.py` lancé depuis ce worktree
+(hors budget de ce round, et l'environnement de ce worktree n'avait même
+pas `tools/agbcc`/`baserom.gba` au départ -- copiés depuis le clone
+voisin `fomt-decomp/` et `harvest-moon-franglais/baserom.gba`
+respectivement pour pouvoir builder du tout, cf. note d'environnement
+ci-dessous). Le raisonnement (tail-call vers le même pointeur de fonction
+fixe `0x08800001`, mêmes registres `r0`/`r1` déjà en place, comportement
+runtime strictement identique à l'ancien hook -- seule la taille du code
+change) rend une régression fonctionnelle peu probable, mais **non
+vérifié visuellement**.
+
+### Note d'environnement (pour les rounds suivants sur ce worktree)
+
+Ce worktree ne contenait ni `tools/agbcc/bin/{agbcp,old_agbcc}` ni
+`baserom.gba` au démarrage de ce round (tous deux `.gitignore`d, jamais
+committés) -- `make` échouait immédiatement (`file not found:
+baserom.gba` + `old_agbcc: Aucun fichier ou dossier de ce nom`). Copiés
+depuis `../../fomt-decomp/tools` (clone voisin déjà installé) et
+`/home/mathias/dev/jeux-langues/harvest-moon-franglais/baserom.gba`
+(sha1 `a2fc3574f0a65a4fcf7682fb274b9d7eebdef963`) pour pouvoir builder ce
+round. Ni l'un ni l'autre n'est commité (vérifié `git status --ignored`).
+
+### État du worktree en fin de round
+
+- 2 fichiers modifiés : `src/script_engine.cc` (trampoline `GetString`),
+  `fomt.lds` (suppression du hack `. = . + 0x108;`). Rien d'autre.
+- `farmer_stamina` (`func_0800E4F0`/`func_0800E4FC`) explicitement NON
+  touché, conformément à la consigne (autre agent en charge).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round ;
+  `tools/`/`baserom.gba` laissés en place (gitignorés, utile pour un
+  prochain round sur ce même worktree, aucun impact sur `git status`).
+- **À remonter à `main`/aux autres agents parallèles** : les hooks
+  restants à convertir en trampolines à taille fixe pour éliminer
+  totalement le résiduel (-236 constant, tout `GetName`/`GetDesc`
+  compris) sont `src/item.cc` (`Tool`/`Food`/`Article` `GetName`/
+  `GetDesc`, 6 fonctions) et `src/code_0800E2E4.cc`
+  (`franglais_season_of`) -- `farmer_stamina` reste dans le périmètre de
+  l'agent qui le traite déjà en parallèle.
+
+## Round w56 (worktree local, branche `parallel-56`) -- conversion du dernier hook restant, `franglais_season_of`, en trampoline à taille fixe
+
+### Contexte
+
+Dernier des 4 hooks C++ à convertir (`GetString` fait en w53,
+`farmer_stamina` en w54, `GetName`/`GetDesc` x3 en w55) : mesuré à
+l'instant sur `main` fusionné, résidu uniforme de **-32 octets** sur
+tout le binaire à partir de `func_0800E4E0` (première fonction
+symbolisée après le point d'injection) jusqu'à la fin de la ROM.
+
+### Localisation
+
+`src/code_0800E2E4.cc`, fonction `func_0800E324` (hook
+`franglais_season_of`, macro `FRANGLAIS_franglais_season_of =
+0x08801944u` dans `include/franglais_poc.hh`). Le corps C++ avant fix :
+un cast vers un pointeur de fonction brut + appel + `return`, compilant
+à **16 octets** (mesuré par `objdump -h build/src/code_0800E2E4.o`,
+offset `func_0800E324` = 0x40, taille totale du fichier = 0x50).
+
+### Piège rencontré -- mauvaise taille cible au premier essai
+
+Première hypothèse (par analogie avec les rounds précédents) : taille
+vanilla = `next_addr - this_addr` entre `func_0800E324` et le
+**prochain symbole `func_` existant**, `func_0800E4E0` (dans
+`src/farmer.cc`) = `0x1BC` = 444 octets. **Fausse** : appliquée telle
+quelle (macro `FRANGLAIS_TRAMPOLINE("0x08801945", "215")`, .text mesuré
+= exactement 444 octets pour la fonction isolée), le rebuild complet a
+montré un delta de **+396** sur tout le binaire après ce point au lieu
+de 0 -- pire qu'avant (`-32` -> `+396`). Cause : `func_0800E4E0` n'est
+**pas** adjacent à `func_0800E324` dans le layout linké réel -- il y a
+entre les deux un bloc de **396 octets d'assembleur brut non
+symbolisé** (une autre fonction vanilla jamais matchée, invisible dans
+la table des symboles `func_`) qui occupe déjà exactement sa place et
+ne doit pas être empiété. La bonne taille ne peut donc pas se déduire
+de la table des symboles `func_` seule quand un hook est immédiatement
+suivi d'une zone non matchée -- il faut désassembler `baserom.gba`
+directement au point du hook.
+
+Taille vanilla réelle, mesurée par désassemblage direct de
+`baserom.gba` :
+```
+arm-none-eabi-objdump -D -b binary -m arm -Mforce-thumb --adjust-vma=0x08000000 \
+  --start-address=0x0800E324 --stop-address=0x0800E390 -EL baserom.gba
+```
+`push {lr}` ... `pop {r1}` / `bx r1` se termine à `0x0800e352`, la
+fonction (non matchée) suivante commence à `0x0800e354` -> taille
+exacte = **0x30 (48) octets**, cohérente avec `16 + 32` (les 32 octets
+de résidu observés avant fix).
+
+### Fix appliqué
+
+`src/code_0800E2E4.cc`, `func_0800E324` : corps remplacé par
+`FRANGLAIS_TRAMPOLINE("0x08801945", "17")` (macro déjà existante dans
+`include/franglais_poc.hh`, utilisée telle quelle par les 6 hooks de
+`item.cc` en w55 -- aucune nouvelle macro nécessaire). `nop_count = 17`
+dérivé empiriquement (compilé, mesuré, ajusté) pour atteindre
+exactement 48 octets. Commentaire inline en anglais expliquant la
+taille réelle, le piège du calcul par soustraction de symboles, et la
+référence croisée vers `FRANGLAIS_TRAMPOLINE`.
+
+### Vérification
+
+- `arm-none-eabi-objdump -h build/src/code_0800E2E4.o` : `.text` total
+  0x70, offset de `func_0800E324` = 0x40 -> taille isolée = **0x30 (48)
+  octets exactement**.
+- Désassemblage du trampoline lié (`objdump -d fomt.elf
+  --start-address=0x0800E324 --stop-address=0x0800E354`) : `ldr r3,
+  [pc,#36]` / `bx r3` / 17 `nop` (`46c0`) / `.word 0x08801945` / `bx lr`
+  (épilogue mort agbcp) = 48 octets pile, aucun octet de trop ni en
+  moins.
+- **Diff octet à octet** entre `fomt.gba` et `baserom.gba` sur la plage
+  `0x0000E354`-`0x0000E4E0` (le bloc de 396 octets d'assembleur brut non
+  symbolisé juste après le hook, identifié comme la cause du piège
+  ci-dessus) : **identique bit pour bit**, preuve directe que ce bloc
+  n'a pas été empiété et que le trampoline a la bonne taille, pas
+  seulement en apparence.
+- Rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map` +
+  `head -c 4096 /dev/zero > build/franglais_stub.bin` + `make -j`) :
+  lien réussi, aucune référence non définie, aucune définition
+  multiple. `sha1sum -c fomt.sha1` échoue comme attendu depuis `cb06198`
+  (non-signal, payload franglais réellement lié).
+- **`arm-none-eabi-nm fomt.elf` sur les 2707 symboles `func_ADDR` de
+  toute la ROM : delta (adresse liée - adresse nominale) = 0 PARTOUT,
+  sans une seule exception.** Signal de clôture de toute la campagne de
+  conversion trampoline : les 4 hooks (`GetString`, `farmer_stamina`,
+  `GetName`/`GetDesc` x3, `season_of`) sont maintenant tous des
+  trampolines à taille fixe, et le résidu de décalage documenté depuis
+  plusieurs rounds dans `DECOMP_RULES.md` a totalement disparu.
+- **Vérification visuelle en jeu (mGBA) NON EFFECTUÉE**, même raison que
+  les rounds précédents : ce dépôt lie un `build/franglais_stub.bin`
+  factice (zéros), pas le vrai payload franglais (qui vit dans le dépôt
+  séparé `harvest-moon-franglais`) -- hors mandat de ce round
+  (fomt-decomp uniquement).
+
+### État du worktree en fin de round
+
+- 1 fichier modifié : `src/code_0800E2E4.cc`.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant commit.
+  `baserom.gba`/`tools/agbcc/bin/*` restent gitignorés, jamais ajoutés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- **À remonter** : la campagne de conversion des 4 hooks C++ en
+  trampolines à taille fixe est terminée -- `DECOMP_RULES.md` (règle
+  "trampoline-partout") peut être mise à jour pour refléter que le
+  résidu de décalage documenté (+8, puis -32 selon les rounds) n'existe
+  plus, une fois ce round mergé sur `main`.
