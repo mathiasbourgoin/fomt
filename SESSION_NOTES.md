@@ -6297,3 +6297,183 @@ d'appelant symbolique cherché ce round) avant de tenter un port.
 - `git status --short` vide, `build/`/`fomt.gba`/`fomt.elf`/`fomt.map`
   nettoyés.
 - `origin` intact, rien poussé, aucune PR.
+
+## Round w41 (worktree `parallel-41`) -- désassemblage manuel complet du blob
+de 1084 octets découvert par w39, 5 matchs, 3 near-miss documentés, 3
+fonctions "pression de registres" isolées mais non tentées
+
+Consigne : explorer le blob `.L08050EE4` (1084 octets, `asm/code_08050E98.s`)
+laissé de côté par `scan_hidden_code_blobs.py` (angle mort : le scanner ne
+couvre que 4-40 octets). Désassembler entièrement à la main
+(`arm-none-eabi-objdump -D -bbinary -marmv4t -Mforce-thumb
+--adjust-vma=0x08050EE4`, en resynchronisant l'alignement à la main aux
+deux points où objdump désassemble un pool littéral comme pseudo-
+instruction -- ça ne désynchronise PAS l'alignement 2 octets tant que le
+pool fait un nombre pair de halfwords, vérifié ici), identifier les
+frontières probables (prologue `push`/épilogue `pop`+`bx`/`bx lr`), matcher
+les plus simples en premier.
+
+### Cartographie complète du blob (0x08050EE4-0x08051320, 1084 octets)
+
+Le blob contient en réalité **8 fonctions distinctes**, jamais une seule,
+séparées par 4 pools littéraux :
+
+| Adresse | Taille | Contenu | Statut |
+|---|---|---|---|
+| `08050EE4` | 88 | ctor : vtable `vtable_unk_080E7878` + 4 champs bitfield packés (5 args) | **near-miss** (masque par négation, cf. ci-dessous) |
+| (pool) | 16 | 4 littéraux (mask/vtable) pour la fonction ci-dessus | -- |
+| `08050F4C` | 18 | `return v?1:v` (normalise un champ à 0/1) | **near-miss** (copie explicite manquante) |
+| (pad) | 2 | alignement | -- |
+| `08050F60` | 12+pool | ctor : vtable `vtable_unk_080E78A8` + copie + flag octet | **matché** (`func_08050F60`) |
+| `08050F70` | 4 | `return self->field_26` | **matché** (`func_08050F70`) |
+| `08050F74` | 44 | setter wraparound (`__umodsi3`) sur 2 champs halfword + reset flag | **near-miss** (registre r4/r5 swap) |
+| `08050FA0` | 312 | grosse fonction, `r8`/`r9`/`sl` vivants dans le CORPS (pas juste prologue) | **signal pression de registres, non tenté** |
+| (pool) | 16 | masques pour la fonction ci-dessus | -- |
+| `080510E8` | 128 | idem, `r8`/`r9` vivants dans le corps à travers plusieurs `bl` | **signal pression de registres, non tenté** |
+| (pad/pool) | 4 | -- | -- |
+| `0805116C` | 328 | idem, `r8`/`r9`/`sl` vivants, boucle + nombreux appels externes | **signal pression de registres, non tenté** |
+| (pool) | 4 | vtable `vtable_unk_080E78C0` | -- |
+| `080512B8` | 16 | `(self->field_24+arg1)`, `-3` si `>2` | **matché** (`func_080512B8`) |
+| `080512C8` | 8 | getter table, stride 4, lecture à `+8` | **matché** (`func_080512C8`) |
+| `080512D0` | 8 | **octet pour octet identique** à `080512C8` | **matché** (`func_080512D0`) |
+| `080512D8` | 60+pool | ctor : vtable `vtable_unk_080E78E0` + bitfield (4 args + 1 stack) | **near-miss** (même classe masque-par-négation que `08050EE4`) |
+
+Total vérifié : 1084 octets exactement (recoupe la taille du blob signalée
+par w39). Les 4 pools contiennent chacun des pointeurs de vtable déjà
+connus dans `fomt.map`/`asm/vtables.s` (`vtable_unk_080E7878`,
+`vtable_unk_080E78A8`, `vtable_unk_080E78C0`, `vtable_unk_080E78E0`) --
+tous les 4 sont référencés ENSEMBLE dans `asm/code_0804E9C8.s` (la grosse
+fonction "unaligned blitter" encore non portée), confirmant que ces 4
+constructeurs appartiennent à une même famille de classes utilisée par le
+rendu de texte/glyphes -- rôle précis pas encore établi, noms restés
+génériques (`func_ADDR` direct, pas d'`ALIAS`) par prudence, cohérent avec
+la règle de nommage "point de vue vanilla" quand le rôle n'est pas
+confirmé.
+
+### Matchs (commit `0ba5e82`, 5 fonctions)
+
+- `func_08050F60` -- ctor triviale (vtable + copie pointeur + flag octet).
+- `func_08050F70` -- getter trivial (`ldrb ...,[r0,#26]; bx lr`, 4 octets).
+- `func_080512B8` -- utilitaire wraparound modulo-3 par soustraction directe
+  (pas d'appel `__umodsi3`, contrairement à `08050F74` ci-dessous) :
+  découverte utile, `1c08`/`adds r0,r1,r0` (ordre d'opérandes précis) +
+  comparaison SIGNÉE (`dd00`/`ble`, pas `bls`) malgré une variable qui ne
+  peut jamais être négative -- contredit en apparence l'anti-pattern #7
+  (`DECOMP_RULES.md`) mais celui-ci ne s'applique qu'aux comparaisons
+  confirmées UNSIGNED dans le désassemblage cible ; ici c'est bien signé,
+  donc `int`, pas `u32`.
+- `func_080512C8`/`func_080512D0` -- deux fonctions consécutives strictement
+  identiques octet pour octet (mêmes 8 octets), portées séparément avec le
+  même corps C (probablement deux accesseurs distincts pour deux tableaux
+  parallèles côté source réel).
+
+Vérification standard `DECOMP_RULES.md` (objet isolé) : taille `.text` de
+chaque `.o` == `next_addr - this_addr` exact (le pool littéral auto-généré
+par `agbcp` pour `08050F60` ajoute bien les 4 octets manquants, `0x10` au
+lieu de `0xc`) ; diff de désassemblage borné (`--adjust-vma=0x08000000`)
+contre `baserom.gba` : identique octet à octet pour les 5. Rebuild complet
+(`rm -rf build ... && make compare`) : LD réussit sans référence non
+définie ni définition multiple (seul `sha1sum` échoue, attendu depuis
+`cb06198`). Sweep anti-doublon (`grep -rl -- ".L08050F60\|.L08050F70\|
+.L080512B8\|.L080512C8\|.L080512D0" asm/*.s`) : aucune occurrence hors des
+3 fichiers `.s` qui les définissent respectivement (attendu, ce sont les
+labels des blobs restants, pas des doublons).
+
+Découpage : `asm/code_08050E98.s` tronqué juste avant `08050F60` (garde
+`func_08050E98`/`func_08050EBC`/le premier fragment near-miss du blob) ;
+nouveau `asm/code_08050F74.s` (fragment near-miss `08050F74` + les 3
+fonctions "pression de registres" + leurs pools) ; nouveau
+`asm/code_080512D8.s` (fragment near-miss `080512D8` + **toute la queue
+inchangée** de l'ancien fichier monolithique, `func_08051320` et tout ce
+qui suivait). `fomt.lds` : 8 entrées insérées à la place de l'unique
+`asm/code_08050E98.o(.text)`.
+
+### Near-miss 1 NON commité : `func_08050EE4`/`func_080512D8` (ctors avec
+masque bitfield construit par négation)
+
+Les deux constructeurs à vtable (88 et 60 octets) partagent le MÊME
+obstacle déjà documenté par w39 pour `func_08050E98`/`func_08050EBC`
+(setters voisins, même blob) : le masque `~0x1f` (ou équivalent) est
+construit dans la cible via `movs r4,#0x20; negs r4,r4; ands r4,r5` (valeur
+négative fabriquée à l'exécution), **jamais** via l'immédiat direct que
+notre compilateur choisit systématiquement (`movs r4,#0xe0; ands r4,r5`) --
+agbcp replie le masque en immédiat 8 bits dès qu'il peut, quelle que soit
+la formulation C testée (masque littéral direct, variable intermédiaire
+non inlinée, etc., mêmes 2 hypothèses déjà explorées par w39 sans succès).
+**Pas de nouvelle piste trouvée ce round** -- confirme qu'il s'agit d'une
+vraie classe de difficulté récurrente sur cette famille de setters/ctors
+de bitfield, pas un accident isolé. Candidat pour `DECOMP_ARCHIVE.md` si
+un 3e cas apparaît.
+
+### Near-miss 2 NON commité : `func_08050F4C` (normalisation booléenne
+`v ? 1 : v`)
+
+Cible (18 octets) : `push{lr}; ldrb r0,[r0,#4]; adds r1,r0,#0; cmp r0,#0;
+beq +2; movs r1,#1; adds r0,r1,#0; pop{r1}; bx r1` -- calcule la valeur
+dans r0, la COPIE explicitement dans r1 (variable séparée), l'écrase
+conditionnellement, puis rapatrie r1 dans r0 pour le retour. **Toutes les
+formulations testées replient cette copie** (`u32 result = v; if(v) result
+= 1; return result;`, ternaire `v ? 1 : v`, variable `volatile` -- qui elle
+ajoute un spill sur pile complètement différent -- drapeau booléen séparé,
+deux `return` distincts) : notre compilateur reconnaît systématiquement
+que `result` et `v` portent la même valeur au moment du retour et élide la
+copie, produisant une fonction 2 octets plus courte (16 au lieu de 18) qui
+travaille entièrement en r0. Aucune piste testée n'a forcé la copie
+explicite. Laissé en `.byte` dans `asm/code_08050E98.s`.
+
+### Near-miss 3 NON commité : `func_08050F74` (setter wraparound
+`__umodsi3`, 2 champs)
+
+Cible (44 octets) : clampe 2 arguments via `__umodsi3(x,3)`/`__umodsi3(y,28)`
+puis les écrit dans 2 champs halfword (`+22`/`+20`) et remet un flag octet
+à 0 (`+25`). Root-caused via `fomt.map` : l'appel `bl 0x80d0f4e` cible bien
+`__umodsi3` (pas un clamp maison), ordre des paramètres confirmé (le 2e
+argument est traité EN PREMIER, stocké à `+22`/modulo 3 ; le 1er argument
+ensuite, `+20`/modulo 28). **Écart résiduel une fois l'ordre corrigé** :
+2 octets + une paire de registres échangée --
+- notre compilation alloue systématiquement `self`->r5, `arg1`->r4 (dans
+  cet ordre d'apparition syntaxique), la cible fait l'inverse
+  (`self`->r4, `arg1`->r5) ;
+- notre code réécrit le résultat de `__umodsi3(arg1,28)` dans le registre
+  "maison" d'`arg1` avant le `strh` final (`adds r4,r0,#0` puis
+  `strh r4,...`), la cible stocke directement depuis `r0` (résultat de
+  l'appel) sans rapatriement, économisant cette instruction.
+Testé : type `u16` au lieu de `u32` sur les params (pire, ajoute des
+`lsls`/`lsrs` de troncature), variable locale nommée séparément avant
+usage, pointeur `u16*` déclaré en premier -- aucun n'a changé l'allocation
+de registre observée. Piste non tentée : peut-être un ordre de déclaration
+de paramètres différent dans la vraie signature (ex. `(self, arg2, arg1)`
+plutôt que `(self, arg1, arg2)`, l'appelant réordonnant déjà à l'appel) --
+pas vérifié faute de site d'appel symbolique trouvé ce round. Laissé en
+`.byte`.
+
+### 3 fonctions "pression de registres" identifiées mais NON tentées
+
+`08050FA0` (312o), `080510E8` (128o), `0805116C` (328o) : les trois
+utilisent `r8`/`r9`/`sl` comme variables vivantes **dans le corps**, à
+travers plusieurs `bl` (pas juste sauvegarde/restauration de prologue/
+épilogue) -- signal d'alerte explicite de `DECOMP_RULES.md`
+("Classes de difficulté à connaître AVANT de choisir une cible"). Pas
+engagées ce round faute de budget dédié ; contiennent des boucles et de
+nombreux appels externes (`__umodsi3`-like helpers à `0x8007xxx`,
+`0x8000xxx`), donc probablement complexes même une fois le mur de
+registres franchi. Laissées en `.byte` dans le nouveau
+`asm/code_08050F74.s`. Candidates sérieuses pour une escalade `fable`
+(stratégie déjà documentée dans `DECOMP_RULES.md`) si un futur round veut
+s'y attaquer -- pas de nouvelle tentative `sonnet` recommandée sans idée
+neuve, cohérent avec la préférence de Mathias sur ce genre de blocage.
+
+### Repo state en fin de round
+
+- 1 commit de matchs (`0ba5e82`, 5 fonctions : `func_08050F60`,
+  `func_08050F70`, `func_080512B8`, `func_080512C8`, `func_080512D0`).
+- 3 near-miss documentés ci-dessus, non commités, aucun fichier modifié
+  pour ces fragments au-delà de leur présence en `.byte` dans les nouveaux
+  fichiers issus du découpage.
+- 3 fonctions "pression de registres" cartographiées (adresses, tailles,
+  signal r8/r9/sl) mais non désassemblées en détail ligne à ligne au-delà
+  du nécessaire pour les frontières -- laissées pour un futur round.
+- `git status --short` vide, `build/`/`fomt.gba`/`fomt.elf`/`fomt.map`
+  nettoyés après la vérification finale.
+- `origin` intact (URL de push toujours cassée volontairement), rien
+  poussé, aucune PR créée.
