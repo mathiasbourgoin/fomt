@@ -4534,3 +4534,123 @@ registres"/famille `Unpack`, pas engagé sans vérification préalable.
   `parallel-26`), pas de conflit observé avec les autres agents en cours
   (w24 travaille sur un ensemble d'adresses disjoint, pas encore mergé
   dans cette branche).
+
+## 2026-08-20, worktree `w27`/`parallel-27` -- `func_0804E5AC` (`DrawGlyphAt`
+recolor) round 3 : piste 2 confirmée (1 registre), mais nouveau résidu
+distinct découvert -- 3e échec honnête, plus un blocage repo-wide inédit
+
+Contexte : reprise de `func_0804E5AC` après l'échec round 10/w22 (2 pistes
+laissées : caractériser le non-spill de `row_tiles`, tester l'inversion
+d'ordre `delta`/`anchor` vs `dest`). Désassemblage relu intégralement
+depuis zéro (`asm/code_0804E5AC.s`, confirmé identique au round précédent :
+3 fonctions dans le fichier, seule `func_0804E5AC` ciblée, appelant
+`func_0804E9CC` -- pas `func_0804E9C8` -- pour le cas non aligné).
+
+### Piste 2 confirmée : `anchor` n'est PAS une variable partagée comme
+`delta`
+
+Différence clé identifiée en relisant le désassemblage : `delta` (`color_b
+- color_a`) est calculé UNE SEULE FOIS et persiste en `sb` (r9) à travers
+les 4 blocs TL/BL/TR/BR (`mov r7, sb` à chaque bloc) -- mais `anchor` (le
+nibble bas de `color_a` étalé sur les 4 octets) est RECALCULÉ intégralement
+à chaque bloc (reload de `color_a` depuis la pile + refaire les 4
+`ands`/`lsls`/`orrs`), jamais gardé en registre partagé. Round 10/w22
+traitait apparemment les deux de la même façon (partagées ou toutes deux
+recalculées), ce qui fait qu'`anchor` devenait un 5e candidat à un registre
+haut persistant alors qu'il n'y a que 4 slots (`ip`=tile_x, `r8`=
+width_tiles, `sb`=delta, `sl`=dest) -- assez pour faire basculer l'arbitrage
+`dest`/`delta` entre `sl` et `sb`. En codant `anchor` comme variable LOCALE
+recalculée dans chaque bloc conditionnel (au lieu d'une variable de portée
+fonction), `dest` atterrit correctement dans `sl` dès la première
+compilation candidate -- **piste 2 validée, l'écart d'1 registre du round
+précédent est résolu**.
+
+### Nouveau résidu, distinct des 2 pistes du round précédent : encodage
+compact vs verbeux de l'addition `+ (u32)dest`
+
+Malgré la correction ci-dessus, la fonction candidate compile à `0x1c8`
+(456) octets contre `0x1f4` (500) attendus -- écart de 44 octets, bien
+plus large que l'écart historique de 2/8 octets. Diagnostic (comparaison
+mnémonique normalisée, désassemblage brut du candidat vs désassemblage du
+vanilla à la même adresse) : dans les 4 blocs TL/BL/TR/BR, l'original
+construit l'adresse finale (`décalé<<5 + dest`) en DEUX instructions
+verbeuses (`mov r0, sl` puis `adds rX, rY, r0` -- copie de `dest` dans un
+registre bas PUIS addition 3-opérandes classique), alors que ma
+reconstruction compile systématiquement vers la forme 2-opérandes compacte
+`add rX, sl` (accumulation directe dans le registre haut, encodage Thumb
+`ADD(4)` à 1 instruction/2 octets au lieu de 2 instructions/4 octets).
+Cette différence, répétée sur les 4 blocs, explique une bonne partie de
+l'écart de 44 octets.
+
+**Deux tentatives pour forcer la forme verbeuse, toutes deux sans effet
+(taille identique à l'octet près, désassemblage byte-identique)** :
+1. Séparer le décalage (`tl_shifted = ... << 5;`) et l'addition finale
+   (`tl = tl_shifted + (u32)dest;`) en deux instructions C distinctes au
+   lieu d'un `+=` composé -- aucun changement (le compilateur choisit
+   quand même la forme compacte).
+2. Construire l'adresse via arithmétique de pointeur explicite
+   (`(u32*)((u8*)dest + tl_shifted)`) au lieu d'arithmétique entière castée
+   -- aucun changement non plus.
+
+Conclusion : le choix compact-vs-verbeux ne semble PAS piloté par la forme
+syntaxique de l'expression C (contrairement à l'hypothèse de départ, qui
+aurait généralisé l'idiome "réassignations successives" du corps plain) --
+il dépend probablement d'un autre facteur de pression de registres au point
+précis de l'addition, non identifié à ce stade (budget de round épuisé
+avant d'isoler la cause). Symptôme additionnel cohérent : `row_below`
+(comparé à `grid_rows` puis relu pour BL/BR) atterrit dans un registre
+(`r9` dans ma reconstruction) au lieu d'être spillé sur la pile comme
+l'original (`str`/`ldr [sp,#0x98]`) -- `row_tiles`, lui, se spille
+correctement désormais (contrairement au round précédent). Piste pour la
+suite : caractériser précisément QUELLE valeur occupe le registre bas
+libre dans l'original à cet instant précis (peut-être `row_below` doit
+justement RESTER en registre plus longtemps dans une formulation
+différente, entrant en collision avec le registre bas que `mov r0,sl`
+utiliserait sinon -- pas testé, faute de temps).
+
+### Blocage repo-wide inédit découvert ce round (hors-sujet direct, mais
+critique) : `make compare` ne peut PLUS jamais réussir en l'état actuel de
+la branche
+
+En tentant le premier rebuild propre de routine, `make compare` a échoué
+dès la toute première tentative avec `src/franglais_payload.s: Error: file
+not found: build/franglais_stub.bin` -- aucune règle Makefile ne génère ce
+fichier. Root cause identifiée : le commit `cb06198` ("franglais: port
+hooks to source build", déjà sur la branche dont ce worktree hérite,
+**pas** un commit d'agent decomp) a commencé à câbler le patch franglais
+directement dans ce dépôt de décompilation, avec des hooks TOUCHANT du code
+tôt dans le ROM (`crt0.s`, `farmer.cc`, `item.cc`, `script_engine.cc`,
+`code_0800E2E4.cc`). Vérifié : même avec un `build/franglais_stub.bin`
+vide créé à la main pour débloquer le lien, `cmp baserom.gba fomt.gba`
+diverge dès l'octet 361 (zone `crt0`) -- **ce n'est pas un stub manquant à
+générer, c'est un changement de comportement RÉEL et volontaire** qui rend
+`sha1sum -c fomt.sha1` structurellement impossible à faire réussir tant que
+ce commit reste dans l'historique de la branche. Ça bloque LES 3 AGENTS
+PARALLÈLES actuels, pas seulement ce round -- aucun match, même
+parfaitement bit-exact sur sa propre fonction, ne pourra passer la
+vérification finale non-négociable tant que `cb06198` n'est pas
+retiré/corrigé ou que la discipline de vérification n'est pas adaptée
+(ex. vérification scoped par fonction plutôt que sha1 ROM entière). Vérifié
+aussi : `baserom.gba` était absent de ce worktree fraîchement créé (copié
+depuis `w26` pour pouvoir travailler -- fichier gitignored, aucun impact
+sur `git status`) ; les worktrees `w1`-`w21`/`w23`-`w26` (créés avant
+`cb06198`) n'ont pas ce problème.
+
+### Repo state en fin de round (worktree w27)
+
+- **Aucun commit.** Toutes les modifications (`src/code_0804E5AC.cc`,
+  `asm/code_0804E7A0.s`, `fomt.lds`) annulées après l'échec (`git checkout
+  --` + suppression des nouveaux fichiers). `git status --short` propre
+  confirmé après nettoyage.
+- Vérification de portée réduite (comparaison mnémonique + taille
+  `.text`, pas de `make compare` sha1 complet -- **impossible** ce round
+  pour la raison ci-dessus, indépendante de `func_0804E5AC`) : la région
+  ROM de `func_0804E5AC` elle-même est restée byte-identique au vanilla
+  avant toute tentative (sanity check confirmé via `objdump -bbinary
+  --adjust-vma=0x08000000`).
+- `origin` non touché, rien poussé, pas de PR.
+- **Signal fort pour Mathias** : le blocage `make compare`/`fomt.sha1`
+  décrit ci-dessus mérite une décision explicite (revert de `cb06198`,
+  correction du stub, ou changement de discipline de vérification) avant
+  que les prochains rounds parallèles ne perdent du temps à buter dessus
+  sans le savoir.
