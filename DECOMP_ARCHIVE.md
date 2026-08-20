@@ -336,6 +336,50 @@ placement déjà connu depuis le round 8 (`func_08007078`/`func_0800598C`),
 pas de move-in, juste vtable + alloc + init + store à self+4 + return
 self.
 
+### Round 11 (w33) -- 15 sites supplémentaires + 2 sous-variantes nouvelles
+
+Le round 10/w24 n'avait pas balayé exhaustivement : reprise de la même
+méthode (script Python sur les blocs `thumb_func_start` combinant un
+littéral `vtable_unk_ADDR` ET un `bl __builtin_new`, croisé avec
+`arm-none-eabi-nm build/src/*.o | grep ' T func_'`) a trouvé 15 sites de
+plus. 12 sont des instances directes des deux variantes déjà connues
+ci-dessus (2-enfants move-in : `func_08057DD8`, `func_0805CEB8`,
+`func_0805E624`, `func_0805FCD0`, `func_08069E14`, `func_08077C40`,
+`func_0807B038`, `func_0807E438`, `func_080854F4`, `func_0809A4D4` ;
+1-enfant : `func_080B3BE4`, `func_080036F8`).
+
+3 sont des sous-variantes réellement nouvelles :
+- **Layout inversé** (`func_080756B0`) : le littéral vtable est stampé à
+  `self+4` et l'objet neuf est stocké à `self+0` -- ordre exactement
+  inversé par rapport à la forme standard. Confirmé en lisant le
+  désassemblage brut au complet (le `str` vers `[self+4]` précède
+  strictement le `bl __builtin_new`, le `str` vers `[self+0]` le suit
+  strictement) -- probablement le constructeur d'un des sous-objets non-
+  polymorphes de 4 octets encore non caractérisés référencés par la
+  famille des 37 destructeurs "riches" (cf. `func_08008574` plus haut),
+  pas confirmé.
+- **Layout étendu** (`func_0807D070` et `func_08088168`) : après le corps
+  standard 2-enfants (vtable, alloc, init, store self+4, move-in self+8),
+  deux arguments supplémentaires du CALLEUR sont stockés TELS QUELS (pas
+  déplacés, pas alloués) à `self+0xc` et `self+0x10`. Deux instances
+  indépendantes confirment que c'est une vraie sous-famille récurrente,
+  pas un accident isolé.
+
+**Piège vécu et corrigé avant commit** : 4 des 15 sites (`func_08077C40`,
+`func_0807B038`, `func_0807D070`, `func_0807E438`) ont un blob `.byte`
+caché encore non matché, coincé entre leur propre fin et le
+`thumb_func_start` réel suivant (cf. "Scan systématique des blobs `.byte`
+cachés" dans `DECOMP_RULES.md`) -- un découpage naïf du fichier `asm/*.s`
+aurait supprimé silencieusement ces octets, décalant l'adresse absolue de
+TOUTES les fonctions suivantes dans la ROM finale. Détecté en comparant la
+taille `.text` compilée à l'écart d'adresse `next_addr - this_addr` (le
+`.o` compilé était systématiquement plus PETIT que l'écart attendu),
+corrigé en réinjectant le blob `.byte` intact dans le nouveau fichier
+`asm/code_NEXT.s`, avant le `thumb_func_start` réel. Revérifié après coup
+via `fomt.map` : tous les symboles en aval (`func_08077CE0`,
+`func_0807B0F0`, `func_0807D194`, `func_0807E4B8`, etc.) retombent
+exactement sur leur adresse vanilla attendue.
+
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
 Voir `DECOMP_RULES.md`, méthode de découpage, point 8 -- déplacé là car
