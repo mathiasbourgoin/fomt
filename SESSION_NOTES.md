@@ -2612,3 +2612,60 @@ budget already spent getting this close.
   still-`asm/`-resident original -- caught and fixed before finishing).
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
+||||||| 3bf9cbd
+
+## Round 6 (worktree w11) -- 14 sites supplémentaires de la famille "riche"
+
+Suite du travail w7 (`0809A518`, `080B3C0C`, `080BC8C0`, `080C7ED0`) et w3
+(`0800371C`, `08004BDC`, `080059D0`, `080070A4`) : worktree isolé `w11`
+(branche `parallel-11`) chargé de la PREMIÈRE moitié des 29 sites restants
+de la liste triée par adresse croissante (les 14 premiers, jusqu'à
+`0808048C` inclus), un worktree parallèle `w12` prenant le reste -- pas de
+recoupement possible (worktrees git séparés).
+
+**14 sites tentés, 14 matchés, 0 échec.** Chaque site a été re-scanné
+avant de le classer (règle de prudence explicite du round) : tous suivent
+bien un des deux corps déjà caractérisés round 6 (pas de variante
+imprévue) :
+
+- **11 en variante "2 enfants"** (self+8 plain check EN PREMIER, puis
+  self+4 MI -- exactement le corps de `func_0809A518`) : `080521BC`,
+  `08057E1C`, `0805CEFC`, `0805E658`, `0805FD04`, `08069E58`, `0807561C`,
+  `0807DD68`, `0807EE44`, `0807F5B0`, `0808048C`.
+- **3 en variante "1 enfant"** (self+4 MI seul -- corps de
+  `func_080B3C0C`) : `0806D918`, `0806EA00`, `080709D8`.
+
+Seule variable par site : la constante `vtable_unk_ADDR` propre (lue
+directement dans le littéral `.L...: .4byte vtable_unk_ADDR` juste après
+le corps désassemblé) -- corps C identique mot pour mot aux exemples déjà
+documentés dans `DECOMP_RULES.md`, aucune adaptation de structure requise.
+
+Découpage mécanique : les 4 premiers (`080521BC`..`0805E658`) étaient
+dans `asm/code_0804E9C8.s` (déjà partiellement isolé), les 10 suivants
+dans `asm/code_0805E760.s`. Split répété 14 fois selon la méthode
+standard (`DECOMP_RULES.md` section "Méthode de découpage") : à chaque
+étape, la fonction cible sort en `.cc`, tout ce qui suit part dans un
+nouveau fichier `asm/code_<ADDR_SUIVANT>.s` nommé d'après l'adresse de la
+fonction immédiatement suivante (pas forcément le prochain site de la
+famille -- des fonctions non apparentées peuvent s'intercaler, ex. entre
+`func_08057E1C` et `func_0805CEFC`). Script bash générique écrit pour
+automatiser ce découpage précis (extraction du corps + troncature du
+fichier courant + génération du nouveau fichier avec header standard) --
+évite les erreurs manuelles de bornes de `sed` répétées 14 fois.
+
+Un commit par fonction (14 commits), `make compare` bit-exact sur rebuild
+complètement propre (`rm -rf build fomt.gba fomt.elf fomt.map`) avant
+CHAQUE commit, sans exception.
+
+### Repo state à la fin de ce sous-round (w11)
+
+- 14 nouveaux commits, un par fonction matchée, tous vérifiés `make
+  compare` bit-exact sur rebuild propre.
+- `origin` intact (`DISABLED-local-only-see-CLAUDE-md`), rien poussé,
+  aucune PR.
+- Arbre de travail propre à la fin (hors mise à jour de
+  `DECOMP_RULES.md`/`SESSION_NOTES.md`, ce commit-ci).
+- Sites restants de la famille (15) laissés à `w12` et rounds futurs :
+  `08080DC4, 08081A70, 08082144, 08083AEC, 08085528, 080881AC, 0808AB68,
+  0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0, 08093A88, 080C0D44,
+  080E41B0`.
