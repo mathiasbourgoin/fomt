@@ -131,6 +131,7 @@ SECTIONS
         asm/code_entities_080320DC.o(.text);
         src/npc_entity.o(.text);
         asm/code_entities_08034CEC.o(.text);
+        src/code_0803A804.o(.text);
 
         asm/code_0803A8A4.o(.text);
         src/script_engine.o(.text);
