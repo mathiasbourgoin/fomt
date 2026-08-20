@@ -427,6 +427,8 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_080C7ED0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e902a6c` |
 | `func_080BC8C0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `3f33b7d` |
 | `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
+| `func_080521BC`, `func_08057E1C`, `func_0805CEFC`, `func_0805E658`, `func_0805FD04`, `func_08069E58`, `func_0807561C`, `func_0807DD68`, `func_0807EE44`, `func_0807F5B0`, `func_0808048C` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain) | 6 (w11) | commits successifs (voir `git log`) |
+| `func_0806D918`, `func_0806EA00`, `func_080709D8` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w11) | commits successifs (voir `git log`) |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -512,15 +514,18 @@ lien) puis `make compare` en rebuild propre (x2).
 à refaire au besoin) : 37 sur 47 matchent ce patron "riche" (les 10
 autres restent la variante "vide" de `func_08004C54`/`func_080E09B0`,
 ou un autre patron pas encore vu). Triés par adresse croissante :
-0800371C, 08004BDC (**4 premiers, matchés round 6**), 080059D0,
-080070A4, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
-08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
-0807F5B0, 0808048C, 08080DC4, 08081A70, 08082144, 08083AEC, 08085528,
-080881AC, 0808AB68, 0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0,
-08093A88, 0809A518, 080B3C0C, 080BC8C0, 080C0D44, 080C7ED0, 080E41B0.
-**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante** ;
-un worktree parallèle (w7) travaille la seconde moitié -- pas de
-recoupement possible, worktrees git séparés.
+~~0800371C, 08004BDC, 080059D0, 080070A4~~ (matchés round 6, `ef58287`),
+~~080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04, 08069E58, 0806D918,
+0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44, 0807F5B0,
+0808048C~~ (matchés round 6, worktree w11, commits successifs -- 11 en
+variante 2-enfants + 3 en variante 1-enfant, cf. tableau ci-dessus),
+08080DC4, 08081A70, 08082144, 08083AEC, 08085528, 080881AC, 0808AB68,
+0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0, 08093A88 (**ceux-ci
+restent à traiter, cf. worktree w12**), ~~0809A518, 080B3C0C, 080BC8C0,
+080C7ED0~~ (matchés round 6, worktree w7), 080C0D44, 080E41B0 (restent
+à traiter). **8 + 14 = 22 matchés sur les 37 sites de la famille**, 15
+restants (worktree w12 en cours sur la seconde moitié de la liste
+restante).
 
 ## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
 ||||||| 43c9148
