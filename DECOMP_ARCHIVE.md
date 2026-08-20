@@ -49,6 +49,11 @@ gardée ici.
 | `func_0805218C`, `func_080755EC`, `func_0807DD38`, `func_0807F580`, `func_0808045C`, `func_08080D94`, `func_08081A40`, `func_08082114`, `func_0808AB38`, `func_0808C56C`, `func_0808ECD8`, `func_08090E54`, `func_080931B0`, `func_08093A58` | 14 sœurs de `func_0807EE14` (même forme exacte), une par site restant de la famille "riche" 2-enfants déjà cataloguée | 10 (w24) | `42960fa` |
 | `func_080A3744` | 15e sœur de `func_0807EE14`, mais AUCUN destructeur stampant `vtable_unk_080E8278` trouvé dans le dépôt -- porté par pure similarité de forme | 10 (w24) | `16aac6b` |
 | `func_080BC898`, `func_080C7EA8`, `func_080C0D1C` | 3 constructeurs de placement, variante 1-enfant (sans move-in), contreparties des destructeurs "riches" 1-enfant `func_080BC8C0`/`func_080C7ED0`/`func_080C0D44` déjà matchés | 10 (w24) | `3e23c90` |
+| `func_08004C48` | constructeur de base sœur de `func_08004C54` (destructeur "riche" round 4), même vtable `vtable_unk_080E5A88` | 10 (w26) | `25ff995` |
+| `func_080098DC` | init-step sœur de la classe documentée dans `src/code_080099EC.cc` (blob caché round 9) | 10 (w26) | `6f788cc` |
+| `func_080D79CC`, `func_080D7AD4` | paire de constructeurs du sous-objet dont le teardown est dans `func_08008A68` (round 9/w21), même paire de vtables `vtable_unk_080E5B0C`/`080E5B18` | 10 (w26) | `7201ee1` |
+| `func_0803A804`, `func_0803A80C`, `func_0803A814`, `func_0803A820`, `func_0803A840`, `func_0803A870`, `func_0803A8A0` | 7 fonctions NON cataloguées, ex-`.byte` bruts (160 octets) après `func_0803A798` : accesseurs/prédicat/wrapper sur `UnknownEntityThing::sprite_animator`, helper `SetAnim` dédupliqué (sœur de `AActorEntity::RefreshSprite`), getter trivial `UnknownEntityThingBase::dummy` | 10 (w23) | `0ae8f12` |
+| `func_08011ED8` | 2e overload du constructeur de la classe bâtie par `func_08011DC4` (asm, non porté) -- construit une `Location` locale avec un seul champ initialisé (les 2 autres restent non-initialisés, comme l'original), ex-`.byte` bruts (272 octets) après `func_08011DC4` | 10 (w23) | `51cbacc` |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve

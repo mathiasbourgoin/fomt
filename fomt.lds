@@ -125,6 +125,7 @@ SECTIONS
         src/code_08010F14.o(.text);
         src/game_state.o(.text);
         asm/code_08010F54.o(.text);
+        src/code_08011ED8.o(.text);
         src/code_08011FE8.o(.text);
         asm/code_08012028.o(.text);
         src/entity.o(.text);
@@ -134,6 +135,7 @@ SECTIONS
         asm/code_entities_080320DC.o(.text);
         src/npc_entity.o(.text);
         asm/code_entities_08034CEC.o(.text);
+        src/code_0803A804.o(.text);
 
         asm/code_0803A8A4.o(.text);
         src/script_engine.o(.text);
