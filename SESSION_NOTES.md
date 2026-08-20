@@ -5875,3 +5875,60 @@ si elle existe pour ce binaire, plutôt qu'une 7e itération d'idiomes.
   pas de `make compare` (toujours hors de portée pour la raison `cb06198`
   documentée round 10/w27, sans rapport avec cette fonction).
 - `origin` non touché, rien poussé, pas de PR.
+
+## Round w38 -- match `func_08050DF0` (TransitionCtlQuery)
+
+Cible choisie depuis `DECOMP_ARCHIVE.md` "Autres cibles ouvertes" :
+`franglais_transition_ctl_query` (nom côté dépôt patch) à `0x08050DF0`,
+appelée depuis une douzaine de sites (`code_08005A58.s`,
+`code_08085568.s`, `code_0805CF3C.s`, `code_0808ABA8.s`,
+`code_080881EC.s`, `code_0807B0F0.s`, `code_08069E98.s` x6,
+`code_080521FC.s`, `code_08092604.s`, `code_08083B2C.s`,
+`code_08057E5C.s`, etc.), jamais portée. Petite fonction isolée (0x1c =
+28 octets) en toute fin de `code_0804E9C8.s`, juste avant
+`func_08050E0C`.
+
+**Forme** : `self` est un handle dont le premier mot est un pointeur vers
+l'objet réel (`inner = *self`). Lit le champ discriminant à `+8` de
+`inner` ; si `== 6`, retourne 0 ; sinon retourne le champ à `+0x158` de
+`inner` (offset 0xac<<1 = 0x158, trop grand pour un immédiat `ldr` 5-bit,
+d'où le calcul d'adresse explicite dans le désassemblage original --
+confirmé aussi dans notre sortie compilée, même encodage `movs
+r2,#0xac; lsls r2,r2,#1`). Aucune vtable/`this` visible -- porté en
+fonction C libre, pas en méthode, cohérent avec la règle "refléter la
+structure réelle" de `DECOMP_RULES.md`.
+
+**Nom** : `TransitionCtlQuery`, point de vue vanilla (le nom
+`franglais_transition_ctl_query` vient du dépôt patch, jamais utilisé ici
+comme symbole -- seulement en commentaire de provenance). `func_08050DF0`
+reste l'alias de compatibilité pour les dizaines de sites `bl` encore
+dans `asm/*.s`, cf. convention de nommage.
+
+**Convergence** : premier essai littéral (déréférencement double,
+comparaison directe `== 6`, retour du champ à `+0x158`) bit-exact du
+premier coup via le harnais rapide -- aucun near-miss, aucune itération
+nécessaire.
+
+**Vérification** (standard `DECOMP_RULES.md` objet isolé) :
+1. `arm-none-eabi-readelf -S build/src/code_08050DF0.o` : taille `.text`
+   = `0x1c`, exactement `0x08050E0C - 0x08050DF0`.
+2. Diff de désassemblage borné (`objdump` du `.o` compilé vs
+   `objdump -bbinary -marmv4t -Mforce-thumb --adjust-vma=0x08000000`
+   direct sur `baserom.gba`) : identique octet à octet, aucune divergence.
+3. Rebuild complet (`rm -rf build fomt.gba fomt.elf fomt.map && make
+   compare`, avec le `build/franglais_stub.bin` factice documenté dans
+   `DECOMP_RULES.md`) : LD réussit sans erreur de référence non définie
+   ni de définition multiple -- seul le `sha1sum -c fomt.sha1` final
+   échoue, attendu et documenté (payload franglais non-vanilla lié dans
+   la ROM depuis `cb06198`), pas un signal d'échec de ce match.
+4. Sweep anti-doublon : `grep -l -- ".L08050DF0\|.L08050E0C" asm/*.s`
+   vide -- aucun label brut résiduel après découpage.
+
+**Fichiers** : `src/code_08050DF0.cc` (nouveau), `asm/code_08050E0C.s`
+(nouveau, reste de `code_0804E9C8.s` après le point de coupe),
+`asm/code_0804E9C8.s` (tronqué juste avant `func_08050DF0`), `fomt.lds`
+(deux nouvelles entrées insérées à l'emplacement exact de l'ancienne
+entrée unique `asm/code_0804E9C8.o(.text)`).
+
+`origin` non touché, rien poussé, pas de PR. `build/`, `fomt.gba`,
+`fomt.elf`, `fomt.map` nettoyés après vérification, avant commit.
