@@ -4333,3 +4333,110 @@ tenter la généralisation qu'après un premier match confirmé.
   commiter un match qui ne matche pas" respectée, aucun match trouvé).
 - `origin` intact (push toujours désactivé), rien poussé, aucune PR.
 - Pas de conflit observé avec d'autres worktrees actifs en parallèle.
+
+## 2026-08-20, round (worktree `w22`, branche `parallel-22`) -- `func_0804E5AC`
+(`DrawGlyphAt`, variante recoloration) -- échec honnête, généralisation
+directe NE suffit PAS
+
+Contexte : le commit `247e6f3` (round précédent, même worktree) venait de
+faire tomber `func_0804E4AC` (`DrawGlyphAt`, corps plain) après 4 tentatives
+échouées sur un écart irréductible de 2 octets. La forme C exacte qui a
+débloqué ce mur est documentée dans `src/code_0804E4AC.cc` (voir les
+commentaires "MATCHING-CRITICAL SHAPES"). Cible de ce round :
+`func_0804E5AC`, la variante RECOLORATION jamais tentée jusque-là -- même
+structure de blit 4-tuiles (TL/BL/TR/BR conditionnels) que le corps plain,
+mais chaque `CpuFastSet` est remplacé par une boucle de remap de couleur par
+nibble (`docs/VWF.md` dans le dépôt patch documente la formule exacte :
+masque `0x11111111`, `anchor + delta*((v|v>>1)&masque) + (v>>1&masque)`,
+confirmé bit-a-bit contre le désassemblage).
+
+### Ce qui a été fait
+
+1. Désassemblage relu en entier (`asm/code_0804E5AC.s`, 452 lignes,
+   contenait EN FAIT 3 fonctions : `func_0804E5AC`, `func_0804E7A0`,
+   `func_0804E7DC` -- seule la première était la cible). Signature
+   confirmée par l'appelant déjà décompilé `DrawStringRecolor`
+   (`src/code_0804E958.cc`) : `(dims, dest, x, y, code, color_a, color_b)`.
+2. Reconstruction C calquée statement-par-statement sur le désassemblage,
+   en transplantant DIRECTEMENT les idiomes qui ont débloqué `func_0804E4AC` :
+   - même structure de contrôle (gardes tile_x/tile_y, x_ok/y_ok imbriqués,
+     `goto out` unique, délégation `func_0804E9CC` pour le cas non aligné) ;
+   - `row_tiles` en copie explicite de `width_tiles*tile_y`, sauvegardée et
+     réutilisée pour TR (miroir de `grid_rows`/`br_tile_x` dans la version
+     plain) ;
+   - adresse construite en PLUSIEURS instructions successives plutôt qu'une
+     expression unique partout où le désassemblage montre un ping-pong de
+     registres (`tl = offset<<5; ...; tl += dest;` puis `bl`, `tr`, et le
+     `right_addr` de BR en trois réassignations, exactement le motif
+     documenté pour la BR du corps plain).
+3. Split du fichier `.s` : `func_0804E5AC` extrait vers un nouveau
+   `src/code_0804E5AC.cc`, le reste du fichier (`func_0804E7A0` +
+   `func_0804E7DC`, toujours utilisées par `asm/code_0803A8A4.s` et
+   `asm/code_0804E9C8.s`) déplacé vers un nouveau `asm/code_0804E7A0.s`
+   (même mécanique que le split `code_0803EE94.s` -> `code_0804E4AC.cc` du
+   round précédent). `fomt.lds` mis à jour en conséquence.
+
+### Résultat : NE matche PAS bit-exact, écart caractérisé précisément
+
+Build propre, `make compare` échoue (`sha1sum` : Échec). Diagnostic via
+`asmdiff.sh` (⚠️ le script utilise `-bbinary` donc les adresses doivent être
+converties en offset fichier, i.e. `addr - 0x08000000`, sinon le diff est
+vide par erreur -- piège vécu ce round, à noter pour la prochaine fois) :
+
+- La fonction compilée fait `0x1ec` (492) octets contre `0x1f4` (500)
+  attendus -- **exactement 8 octets** (2 instructions) manquants, la même
+  classe d'écart que le round 4/8 du corps plain avant sa résolution.
+- Le désassemblage diverge dès le prologue : `dest` (paramètre `r1`) atterrit
+  dans **`r9`** au lieu de **`sl` (r10)** dans l'original -- un swap de
+  paires de registres hauts, MAIS cette fois entre `dest` et `delta` (qui
+  devrait aller en `sb`/r9), pas entre `kind` et `dest` comme pour le corps
+  plain. `kind`, contrairement au corps plain, n'est jamais gardé en
+  registre dans l'original (`str` sur la pile juste après l'appel à
+  `func_080D0D28`, rechargé aux deux seuls points d'usage) -- il n'est donc
+  PAS un candidat à la course de registres ici, ce qui invalide directement
+  l'hypothèse "même remède que le round précédent".
+- La pile allouée fait `0x9c` (156) contre `0xa0` (160) attendus -- un mot de
+  moins. Le candidat naturel est `row_tiles` (`width_tiles*tile_y`), stocké
+  sur pile dans l'original (`str [sp,#0x9c]`) pour être rechargé au bloc TR ;
+  dans ma reconstruction il reste en registre (pas de spill), ce qui
+  suggère une pression de registres insuffisante à cet endroit précis --
+  mais promouvoir `bl`/`tr` (les adresses locales des blocs BL/TR) en
+  variables de portée fonction entière (au lieu de portée bloc) n'a PAS
+  changé le résultat (toujours `0x1ec`), donc ce n'est pas simplement un
+  problème de portée de déclaration.
+
+### Diagnostic honnête
+
+L'instruction de ce round était explicite : si l'écart de 2 octets (ici son
+équivalent, 8 octets / 1 registre) réapparaît malgré la transplantation
+directe de la forme qui a marché sur le corps plain, c'est un signal qu'il y
+a un ingrédient supplémentaire propre à la recoloration -- pas la peine de
+forcer. C'est exactement ce qui s'est passé : la généralisation directe
+reproduit fidèlement la structure de contrôle et l'ORDRE des opérations
+(vérifié statement-par-statement contre le désassemblage), mais échoue sur
+l'allocation de registres pour un COUPLE DIFFÉRENT de variables (`dest`
+vs `delta`, pas `kind` vs `dest`), avec en prime un spill de pile manquant
+qui n'a pas de correspondance dans le corps plain (le corps plain n'a que
+5 slots pile locaux hors `glyph_buf` ; ici il en faut 5 aussi mais un
+d'entre eux -- `row_tiles` -- ne se spill pas naturellement chez moi alors
+qu'il le fait dans l'original). Deux pistes non explorées faute de temps
+pour la prochaine tentative :
+- caractériser la vraie raison du spill de `row_tiles` (peut-être une copie
+  redondante supplémentaire est nécessaire, du genre `br_tile_x`/`grid_rows`
+  du corps plain, mais pour une variable différente -- `delta` ou `anchor`
+  peut-être, pas testé) ;
+- essayer d'inverser l'ordre `delta`/`anchor` par rapport à `dest` dans le
+  texte source (actuellement : row_tiles, tl-offset, delta, anchor, tl+=dest
+  -- peut-être `dest` doit être référencé plus tôt/plus souvent pour gagner
+  la course face à `delta`).
+
+### Repo state en fin de round (worktree w22)
+
+- **Aucun commit.** Toutes les modifications (`src/code_0804E5AC.cc`,
+  `asm/code_0804E7A0.s`, `fomt.lds`) ont été annulées après l'échec
+  (`git checkout -- fomt.lds`, suppression des nouveaux fichiers,
+  restauration de `asm/code_0804E5AC.s` via `git checkout --`).
+- Rebuild propre + `make compare` reconfirmé RÉUSSI après annulation (état
+  identique à `247e6f3`).
+- `git status --short` propre.
+- `origin` non touché, rien poussé, pas de PR.
