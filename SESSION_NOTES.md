@@ -4202,3 +4202,134 @@ confirme que c'est bien la fenêtre 5h qui s'est refermée) -- w22/w23
 n'ont rien committé, w24 a committé avant de tomber. w22 (fable,
 `DrawGlyphAt`) relancé pour ne pas perdre sa progression (variante `g5`
 à -2 octets/122 instructions au moment de l'interruption).
+
+## Round (worktree w25, isolated, branche `parallel-25`) -- "SmartPtr field
+assignment" (`func_080070D4`/`func_08005A00`/`func_0806EA30`) : 4
+nouvelles hypothèses testées, toutes négatives, mécanisme du blocage
+enfin cerné avec confiance
+
+Mission : tenter précisément la combinaison signalée "pas encore
+essayée" en fin de round 9 (`DECOMP_ARCHIVE.md`) -- construire `tmp` via
+la convention hidden-return-value ET typer `field` en `T**`/`void**`
+brut. **Chaque callee opaque (`func_08005B68`/`func_080050F8`/
+`func_0806DB38`) est traité comme boîte noire**, conformément à la
+méthode déjà établie ce round-là.
+
+### Découverte préalable utile : le tail `vt[2](x, 3)` n'est PAS
+`SmartPtr<T>::~SmartPtr()`
+
+Avant de tester du code, relecture de `src/code_08004BDC.cc` et
+`src/code_0809A518.cc` (déjà matchés) : les deux établissent que le motif
+`ldr r0,[r1]; ldr r2,[r0,#8]; adds r0,r1,#0; movs r1,#3; bl
+_call_via_r2` (`vt[2](x, 3)`) est un appel virtuel **explicite** appelé
+`Unregister(int category)` dans ce dépôt -- une primitive générique de
+gestion de liste d'acteurs, PAS un artefact de destructeur. Ceci est
+important : **`SmartPtr<T>::~SmartPtr()`'s `delete inner;` ne peut
+structurellement JAMAIS produire ce motif**, quel que soit `T` -- un
+`delete` sur un pointeur polymorphe passe TOUJOURS par le slot 0 du
+vtable (destructeur "deleting"), jamais le slot 2. **Donc le tail
+observé dans les 3 fonctions cibles est forcément un appel EXPLICITE
+écrit dans la source (`if (x) x->Unregister(3);`), jamais l'effet
+implicite du destructeur de `tmp`** -- ceci corrige/precise
+l'hypothèse de travail des rounds 8/9, qui assumait (sans le vérifier
+contre ce précédent) qu'il s'agissait du destructeur de `SmartPtr<T>`.
+
+### 4 hypothèses testées (harnais rapide, aucune n'a atteint `make compare`)
+
+**8. Combinaison demandée à la lettre** : `SmartPtr<Widget> tmp =
+func_08005B68(arg);` (syntaxe `=`) avec `field` en `void**` brut.
+**Ne compile pas** -- identique à l'échec déjà documenté rounds 8/9
+(`SmartPtr<Widget>::SmartPtr(SmartPtr<Widget>&)` privé). Confirme, une
+3e fois, que **cette syntaxe précise ne compile jamais** dans ce
+compilateur quel que soit le contexte -- close définitivement, ne pas
+retenter.
+
+**9. Construction par défaut puis assignation** (`SmartPtr<Widget> tmp;
+tmp = func_08005B68(arg);`, en pariant sur l'`operator=` implicite
+généré par le compilateur, qui prend `const SmartPtr&` et peut donc
+biner une rvalue là où l'`operator=(SmartPtr&)` non-const explicite
+round 8 échouait) : **compile**, mais produit une forme radicalement
+différente -- pré-zéro de `tmp` (comme round 9 #2) PLUS **deux appels
+`__builtin_delete`** (un pour l'assignation implicite, un pour le
+destructeur final), zéro trace du motif `vt[2](x,3)`. Le destructeur
+implicite de `Widget` (qui n'a qu'`Unregister` comme virtuelle, pas de
+destructeur virtuel explicite) n'est PAS virtuel dans ce compilateur --
+`delete inner` appelle `operator delete` directement, jamais via une
+table virtuelle. **Fermé** : la voie "assignation implicite" ne
+produira jamais le tail observé, indépendamment du problème de pré-zéro
+déjà connu.
+
+**10. `func_08005B68(arg).Move()` appelé sur la rvalue anonyme**
+(`void *raw = func_08005B68(arg).Move(); *field = raw;`) : **compile**,
+23 octets contre 60 attendus -- le destructeur du temporaire anonyme
+(désormais avec `inner` déjà mis à zéro par `.Move()`) est éliminé
+purement et simplement (même mécanisme que rounds 8/9 : `Widget` sans
+destructeur virtuel explicite -> pas de dispatch vtable possible de
+toute façon pour ce destructeur implicite non-virtuel -- cohérent avec
+l'hypothèse 9 ci-dessus). Fermé pour la même raison structurelle.
+
+**11. Convention out-param authentique, `tmp` en pointeur BRUT (pas
+`SmartPtr<T>`) pour éviter le pré-zéro du constructeur par défaut, PLUS
+vérification explicite `if (tmp) ((Widget*)tmp)->Unregister(3);`
+écrite à la main** : **le candidat le plus proche obtenu ce round**.
+Compile, taille 44 octets contre 60 attendus (écart de 16 octets, soit
+~4 instructions manquantes). Reproduit EXACTEMENT le tail `vt[2](x,3)`
+visé (le check `if(tmp)` survit intact, car `tmp` provient d'un appel
+opaque sans zéro-écriture locale connue -- cohérent avec la règle
+round 9 "l'adresse doit s'échapper vers l'appel opaque pour survivre au
+peephole"). Ce qui manque : la double-écriture `sp+4`/`sp+8`
+(`mov r0,sp; str r0,[sp,#4]; str r2,[sp,#8]; adds r1,r0`) visible entre
+le retour de `func_08005B68` et le stockage dans `field` -- **tentative
+de la reproduire en réintroduisant un vrai `SmartPtr<Widget>*` via un
+cast de pointeur sur le stockage brut** (`SmartPtr<Widget> *tmp =
+(SmartPtr<Widget>*)&tmp_storage;`, `tmp->Move()`/`tmp->Get()`) :
+**échec, mais informatif** -- dès qu'un `Move()`/zéro RÉEL a lieu sur
+l'adresse locale, agbcp élimine intégralement le check `if` qui suit
+(0 instruction, pas juste le store/load), **même** avec une copie
+préalable (`saved = tmp->Get(); tmp->Move(); *field = saved; if
+(tmp->Get()) ...`) censée découpler le check de la valeur utilisée pour
+`field`. Autrement dit : **la présence de la double-écriture sp+4/sp+8
+ET la survie du check final sont mutuellement exclusives dans tout ce
+qui a été tenté** -- soit on obtient le zéro-dance (et le check est
+alors éliminé, provably-dead), soit on garde le check vivant (mais sans
+le zéro-dance, car sa valeur doit rester "inconnue" du compilateur pour
+échapper au repliement).
+
+### État honnête : toujours pas convergé, mais le mécanisme de blocage
+est maintenant identifié avec précision
+
+Onze hypothèses testées au total (7 rounds 8/9 + 4 ce round), aucune
+n'a atteint `make compare`. **Nouvelle compréhension actionnable** :
+le tail `vt[2](x,3)` du binaire original observe un check
+"structurellement mort" (l'opérande est zéro juste avant, prouvé par
+lecture directe du désassemblage) que le VRAI compilateur d'époque n'a
+PAS éliminé, alors que `agbcp` (cette réimplémentation) élimine
+systématiquement ce motif précis dès qu'il peut prouver localement que
+la valeur checkée est zéro -- **avec ou sans** stockage intermédiaire,
+tant qu'aucun appel opaque ne s'intercale entre le zéro-write et le
+check. Piste concrète non testée faute de budget ce round : insérer un
+VRAI appel opaque supplémentaire entre le zéro et le check (pas pour
+matcher la taille, mais pour vérifier empiriquement si un `bl` opaque
+quelconque, sans rapport avec l'adresse de `tmp`, suffit à désactiver
+le repliement -- si oui, chercher QUEL appel légitime pourrait occuper
+cette position dans la vraie source ; si non, le blocage est plus
+probablement une divergence structurelle irréductible entre `agbcp` et
+le compilateur d'origine sur ce point précis, auquel cas cette classe
+mériterait d'être reclassée "possiblement infaisable avec ce
+compilateur" à côté de `Unpack`, mais SEULEMENT après ce test
+supplémentaire -- pas encore fait ce round, donc pas encore prononcé).
+`func_0806EA30` (3e site) non testé séparément ce round : les 4
+tentatives ci-dessus ont toutes échoué sur `func_080070D4` avant
+d'atteindre `func_0806EA30`, cohérent avec la consigne mission de ne
+tenter la généralisation qu'après un premier match confirmé.
+
+### Repo state en fin de round w25
+
+- Aucun fichier `src/`, `asm/`, `fomt.lds`, `include/` modifié -- toutes
+  les tentatives sont restées dans le harnais rapide
+  (`/tmp/claude-.../scratchpad/w25qt/qt.cc`, hors du dépôt). `git status
+  --short` vide avant et après le round.
+- Aucun commit ce round (rien à commiter -- discipline "ne jamais
+  commiter un match qui ne matche pas" respectée, aucun match trouvé).
+- `origin` intact (push toujours désactivé), rien poussé, aucune PR.
+- Pas de conflit observé avec d'autres worktrees actifs en parallèle.
