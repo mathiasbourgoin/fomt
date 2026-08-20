@@ -7906,3 +7906,183 @@ vtable_unk_080E85E8)` -- 1 commit, 107 vtables, 327/758 slots symbolisés.
   propre après commit.
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
+
+## Round w53 (worktree local, branche `parallel-53`) -- conversion du hook `AScriptEngine::GetString` en trampoline à taille fixe
+
+### Correction importante du brief de mission avant de commencer
+
+Le brief transmis pour cette mission affirmait que le hook `GetString`
+décale tout ce qui suit de **-208 octets**, et citait `func_0800E2E4`/
+`func_0800E324` comme les fonctions vanilla concernées. Mesure directe
+(`arm-none-eabi-nm fomt.elf`, build propre AVANT toute modification) :
+**c'est faux pour `GetString`** -- ces deux adresses appartiennent en
+réalité au hook `franglais_season_of` (`src/code_0800E2E4.cc`,
+`func_0800E324`), pas à `GetString` (`src/script_engine.cc`, linké
+beaucoup plus loin dans la ROM, autour de `0x0803F6F4`). L'origine réelle
+du **-208** mesuré à `func_0800E2E4` est en amont, dans `src/item.cc`
+(les hooks `GetName`/`GetDesc` des 3 classes `Tool`/`Food`/`Article`,
+toujours des remplacements de corps à taille libre, non convertis à ce
+jour) -- `item.o` est linké juste avant `code_0800E2E4.o` dans
+`fomt.lds`. Chaîne mesurée avant toute modification (`nm` sur
+`func_ADDR`, delta = adresse liée - adresse nominale) :
+
+```
+func_0800E2E4  -208   (item.cc GetName/GetDesc x3, en amont)
+func_0800E4E0  -240   (franglais_season_of, code_0800E2E4.cc)
+func_0800E4FC  -236   (franglais_farmer_stamina -- NE PAS TOUCHER, autre agent)
+func_0803F8DC    +8   (après script_engine.o -- LE VRAI point concerné par GetString)
+```
+
+Autrement dit : dans ce dépôt, `farmer_stamina` (`func_0800E4FC`) est
+**avant** `GetString` dans l'ordre de la ROM, pas après comme le
+supposait le brief -- la prémisse "tout retombe à delta=0 après GetString
+jusqu'au prochain hook connu (farmer_stamina)" est donc irréalisable
+telle quelle : farmer_stamina n'est pas en aval de GetString, il est en
+amont, et son propre hook (comme ceux de `GetName`/`GetDesc`/
+`season_of`) reste un remplacement à taille libre non corrigé -- hors
+scope de cette mission (confirmé non touché, laissé aux agents
+parallèles qui en ont la charge). Mission recentrée sur ce qui est
+réellement `GetString` : `src/script_engine.cc` +
+`fomt.lds` (le hack `. = . + 0x108;` juste après
+`src/script_engine.o(.text)`, sans commentaire, qui masquait le vrai
+problème par une compensation approximative plutôt qu'un trampoline).
+
+### Root cause du -208→+8 signalé dans DECOMP_RULES.md pour ce hook précis
+
+`fomt.lds` contenait (ligne 228, avant fix) : `. = . + 0x108;` juste
+après `src/script_engine.o(.text)`, sans justification écrite -- exactement
+le type de hack que la règle standing du jour interdit. Mesure isolée
+(`arm-none-eabi-objdump`/`nm` sur `build/src/script_engine.o` seul,
+recompilé deux fois : une fois avec le hook actuel, une fois avec le
+corps vanilla restauré depuis `git show cb06198^:src/script_engine.cc`
+temporairement réappliqué puis annulé) :
+
+- Corps vanilla de `GetString` (bounds check + lookup table + `"Error"`,
+  restauré temporairement pour la mesure) : **0x24 (36) octets**
+  compilés par `agbcp` (`GetString` à l'offset `0x94c`, symbole suivant
+  `ScriptEngine::ScriptEngine(void*)` à `0x970` dans le `.o` isolé).
+- Corps du hook (avant ce round, simple tail-call C++ vers le pointeur
+  fixe du vrai patch franglais) : **0x10 (16) octets** seulement --
+  **-20 octets** de moins que le vanilla, propagés à toute la ROM après
+  `script_engine.o`.
+- `. = . + 0x108` (264 octets) ajouté au mauvais endroit (au niveau du
+  linker script global, pas dans la fonction elle-même) surcompensait
+  largement les -20 octets manquants : **net +244** sur le delta observé
+  après ce point (`-236` avant `script_engine.o` -> `+8` après, soit
+  `-(-20) + 264 = 244`), ce qui explique numériquement le fameux "+8
+  résiduel" documenté dans `DECOMP_RULES.md`/round w52 comme touchant
+  `func_0803F8DC` jusqu'à la fin de la ROM.
+
+### Fix appliqué
+
+1. `src/script_engine.cc` : `GetString` réécrit en fonction `NAKED`
+   (macro déjà utilisée ailleurs dans ce dépôt pour ce cas exact --
+   `Rucksack::Upgrade()`, `func_08034F00`) avec un corps `asm_unified`
+   manuel, même forme que le trampoline déjà corrigé pour
+   `func_0800912C` (`asm/code_08008DE8.s`, commit `f718114`) : `ldr r3,
+   =CONST; bx r3` (tail-call, `this`/`id` déjà dans r0/r1, exactement
+   l'ABI attendue par le pointeur de fonction du hook d'origine) suivi
+   de 14 `nop` de padding pour atteindre exactement 0x24 (36) octets, un
+   commentaire EN ANGLAIS expliquant pourquoi la taille doit rester
+   fixe, littéral pool `.4byte 0x08800001` (même constante
+   `FRANGLAIS_franglais_get_string | 1u` qu'avant, juste encodée en asm
+   au lieu d'un cast C++).
+   - Piège de placement d'attribut rencontré : `char const * NAKED
+     AScriptEngine::GetString(...) const` compile mais l'attribut est
+     **silencieusement ignoré** (warning "`naked' attribute directive
+     ignored", pas une erreur -- le hook aurait fini par être un
+     `bx`+prologue GCC normal en plus du code manuel, mauvaise taille).
+     `char const * AScriptEngine::GetString(...) const NAKED` (attribut
+     après `const`) casse carrément le parsing ("declaration ... outside
+     of class is not definition"). Seule la forme `NAKED char const *
+     AScriptEngine::GetString(u32 id) const` (attribut tout au début,
+     avant le type de retour pointeur) compile ET applique réellement
+     l'attribut -- confirmé par `objdump` (aucun prologue/épilogue
+     généré, juste les 18 octets utiles + littéral).
+2. `fomt.lds` : suppression pure et simple du `. = . + 0x108;` (plus
+   nécessaire, le trampoline conserve maintenant la taille exacte sans
+   aide externe).
+
+### Vérification
+
+- Taille isolée : `arm-none-eabi-objdump -h build/src/script_engine.o`
+  après fix -> `.text 0xa48` (2632 octets), **identique bit-pour-bit** à
+  la taille obtenue en compilant le corps 100% vanilla restauré (mesuré
+  séparément, mêmes 0xa48) -- preuve directe que le fichier entier
+  retrouve exactement sa taille vanilla, pas seulement `GetString`
+  isolément.
+- Désassemblage (`arm-none-eabi-objdump -d`) du trampoline : `ldr r3,
+  [pc,#28]` / `bx r3` / 14x `nop` (`46c0`, `mov r8,r8` -- nop canonique
+  Thumb) / littéral `0x08800001` = exactement 0x24 (36) octets, aucun
+  prologue/épilogue parasite.
+- Rebuild propre complet (`rm -rf build fomt.gba fomt.elf fomt.map` +
+  `head -c 4096 /dev/zero > build/franglais_stub.bin` + `make`),
+  répété 2x pour confirmer la reproductibilité (`sha1sum fomt.gba`
+  identique aux deux runs : `bd1bcaad3c455a21d613aae8060825319004a72b`).
+  Lien complet réussi (aucune référence non définie, aucune définition
+  multiple) ; `sha1sum -c fomt.sha1` échoue comme attendu depuis
+  `cb06198` (non-signal, cf. `DECOMP_RULES.md`).
+- `arm-none-eabi-nm fomt.elf` sur tous les symboles `func_ADDR`, delta =
+  adresse liée - adresse nominale, AVANT/APRÈS ce fix :
+
+  | point de la ROM      | delta AVANT | delta APRÈS |
+  |----------------------|-------------|-------------|
+  | `func_0800E2E4`      | -208        | -208 (inchangé, hors scope) |
+  | `func_0800E4E0`      | -240        | -240 (inchangé, hors scope) |
+  | `func_0800E4FC`      | -236        | -236 (inchangé, hors scope) |
+  | `func_0803F8DC`      | **+8**      | **-236** (plus AUCUN changement de delta à travers `script_engine.o`) |
+  | fin de la ROM        | +8          | -236 (constant jusqu'à la fin, 2707 symboles vérifiés) |
+
+  Le point clé : **le delta ne change plus DU TOUT à la traversée de
+  `script_engine.o`** (`-236` avant, `-236` après, sur les 2707 symboles
+  `func_ADDR` de tout le binaire) -- la preuve que le hook `GetString`
+  est maintenant réellement size-preserving et n'introduit plus AUCUN
+  décalage propre. Le `-236` residuel qui persiste maintenant jusqu'à la
+  fin de la ROM (au lieu du `+8` précédent, qui était une coïncidence
+  arithmétique du hack `0x108`) est intégralement dû aux hooks EN AMONT
+  (`GetName`/`GetDesc` x3 dans `item.cc`, `franglais_season_of`,
+  `franglais_farmer_stamina`) -- non touchés par ce round, toujours des
+  remplacements à taille libre, à convertir par les agents qui en ont la
+  charge.
+
+### Vérification fonctionnelle en jeu -- NON FAITE
+
+Pas de build mGBA/`tools/capture_options.py` lancé depuis ce worktree
+(hors budget de ce round, et l'environnement de ce worktree n'avait même
+pas `tools/agbcc`/`baserom.gba` au départ -- copiés depuis le clone
+voisin `fomt-decomp/` et `harvest-moon-franglais/baserom.gba`
+respectivement pour pouvoir builder du tout, cf. note d'environnement
+ci-dessous). Le raisonnement (tail-call vers le même pointeur de fonction
+fixe `0x08800001`, mêmes registres `r0`/`r1` déjà en place, comportement
+runtime strictement identique à l'ancien hook -- seule la taille du code
+change) rend une régression fonctionnelle peu probable, mais **non
+vérifié visuellement**.
+
+### Note d'environnement (pour les rounds suivants sur ce worktree)
+
+Ce worktree ne contenait ni `tools/agbcc/bin/{agbcp,old_agbcc}` ni
+`baserom.gba` au démarrage de ce round (tous deux `.gitignore`d, jamais
+committés) -- `make` échouait immédiatement (`file not found:
+baserom.gba` + `old_agbcc: Aucun fichier ou dossier de ce nom`). Copiés
+depuis `../../fomt-decomp/tools` (clone voisin déjà installé) et
+`/home/mathias/dev/jeux-langues/harvest-moon-franglais/baserom.gba`
+(sha1 `a2fc3574f0a65a4fcf7682fb274b9d7eebdef963`) pour pouvoir builder ce
+round. Ni l'un ni l'autre n'est commité (vérifié `git status --ignored`).
+
+### État du worktree en fin de round
+
+- 2 fichiers modifiés : `src/script_engine.cc` (trampoline `GetString`),
+  `fomt.lds` (suppression du hack `. = . + 0x108;`). Rien d'autre.
+- `farmer_stamina` (`func_0800E4F0`/`func_0800E4FC`) explicitement NON
+  touché, conformément à la consigne (autre agent en charge).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round ;
+  `tools/`/`baserom.gba` laissés en place (gitignorés, utile pour un
+  prochain round sur ce même worktree, aucun impact sur `git status`).
+- **À remonter à `main`/aux autres agents parallèles** : les hooks
+  restants à convertir en trampolines à taille fixe pour éliminer
+  totalement le résiduel (-236 constant, tout `GetName`/`GetDesc`
+  compris) sont `src/item.cc` (`Tool`/`Food`/`Article` `GetName`/
+  `GetDesc`, 6 fonctions) et `src/code_0800E2E4.cc`
+  (`franglais_season_of`) -- `farmer_stamina` reste dans le périmètre de
+  l'agent qui le traite déjà en parallèle.
