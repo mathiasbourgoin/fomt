@@ -285,6 +285,22 @@ prologue/épilogue), ou si un registre `r0`-`r3` est réutilisé après un
 `bl` sans rechargement visible, s'arrêter et lire `DECOMP_ARCHIVE.md`
 avant de continuer.
 
+**Stratégie d'escalade sur une cible bloquée (préférence de Mathias)** :
+`DrawGlyphAt` (round 9, worktree `w22`) a montré qu'un modèle `fable`
+peut débloquer une cible "pression de registres" fermée après plusieurs
+échecs `sonnet` -- l'idée neuve manquait, pas l'exécution. Deux options
+d'escalade, dans cet ordre de préférence :
+1. **Plus économe (préférée)** : demander à un agent `fable` seulement
+   des PISTES/hypothèses neuves sur la cible bloquée (pas d'exécution),
+   puis confier ces pistes à un agent `sonnet` pour les tenter. La valeur
+   de `fable` ici est l'angle créatif, pas le travail d'exécution brut.
+2. **Plus coûteuse (repli)** : dédier un agent `fable` complet à
+   l'attaque de bout en bout (ce qui a été fait pour `DrawGlyphAt`,
+   justifié par 4 échecs `sonnet` déjà accumulés sur exactement le même
+   écart).
+Par défaut, préférer l'option 1 sauf si la cible a déjà échoué plusieurs
+rounds ou bloque un bug ouvert (justifiant le coût de l'option 2).
+
 ## Méthode de découpage d'un fichier `asm/*.s` monolithique
 
 1. `grep -n "thumb_func_start"` pour trouver la ligne de la fonction
