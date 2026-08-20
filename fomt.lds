@@ -104,7 +104,8 @@ SECTIONS
         src/script_engine.o(.text);
         asm/code_0803EE94.o(.text);
         src/code_0804E8F0.o(.text);
-        asm/code_0804E958.o(.text);
+        src/code_0804E958.o(.text);
+        asm/code_0804E9C8.o(.text);
         src/code_0805E6CC.o(.text);
         asm/code_0805E760.o(.text);
 
