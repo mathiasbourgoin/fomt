@@ -46,6 +46,23 @@ vieilles notes.
   soit utiliser `git add -A` sans restriction (puis vérifier `git status`
   avant de commiter), soit lister explicitement CHAQUE fichier modifié/
   supprimé/ajouté.
+- **Avant de créer un nouveau worktree avec `git worktree add ... main`,
+  vérifier que le checkout principal est vraiment SUR `main`** (`git
+  branch --show-current`), pas juste faire confiance au nom de branche
+  passé en argument. Bug réel vécu : le checkout principal s'est
+  retrouvé basculé sur une autre branche locale (`franglais-poc`, créée
+  par un agent externe) sans que personne ne le remarque -- tous les
+  merges ont continué à landing sur cette branche, `main` est resté figé
+  ~19 commits en arrière pendant plusieurs heures, et deux nouveaux
+  worktrees ont été créés par erreur depuis ce `main` périmé (détecté
+  seulement en comparant `git log --oneline -3` du nouveau worktree
+  contre le checkout principal -- décalage flagrant). Fixé par fast-
+  forward (`git branch -f main franglais-poc && git checkout main`) une
+  fois confirmé que les deux branches n'avaient pas divergé
+  (`git merge-base --is-ancestor main franglais-poc`). Réflexe : après
+  toute intervention d'un agent externe sur ce dépôt, revérifier
+  `git branch --show-current` avant de continuer à merger/créer des
+  worktrees.
 - **Après un merge, même sans conflit signalé par git : chercher les
   doublons silencieux.** Bug réel vécu (merge `parallel-18`, commit
   documenté dans `git log`) : deux worktrees indépendants peuvent chacun
