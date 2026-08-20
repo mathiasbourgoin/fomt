@@ -5015,3 +5015,82 @@ inutile de refaire l'analyse, juste réappliquer le split `asm/*.s` +
   (fichier gitignored, n'affecte pas l'état git) -- prochain agent sur ce
   worktree : ne pas supposer qu'un `make compare` propre passera tant que
   le point ci-dessus n'est pas corrigé en amont.
+
+## 2026-08-20, worktree w30/`parallel-30` -- `func_080D7944` matché
+(near-miss d'1 instruction résolu), pas de doublon avec `func_080D7AAC`/
+`func_080D7B04`
+
+Mission initiale : reproduire et committer `func_080D7AAC`/`func_080D7B04`
+(candidats vérifiés au niveau harnais par w28, jamais committés). En
+cours de route, le coordinateur a signalé que `w28` avait entre-temps été
+relancé et avait lui-même committé ces deux fonctions (`076eb72`, déjà
+sur `main`) -- travail abandonné ici avant tout commit pour éviter un
+doublon au merge (`src/code_080D7AAC.cc`/`src/code_080D7B04.cc` supprimés,
+`git status --short` vide reconfirmé avant de continuer).
+
+Priorité 2 : `func_080D7944` (destructeur "riche" de la même famille,
+`asm/code_080D6DB8.s`, near-miss d'1 instruction laissé ouvert par w28 --
+`ands r5,r0` attendu, `ands r0,r5` produit par toute formulation testée).
+
+**Résolu.** Vérifié d'abord sur le baserom réel (pas seulement les notes
+paraphrasées de w28) via désassemblage direct
+(`--adjust-vma=0x08000000 --start-address=0x080D7944
+--stop-address=0x080D7990`, `~/dev/jeux-langues-assets/fomt-decomp/
+baserom.gba`) : confirme `movs r0,#1; ands r5,r0` à `0x080D7972`. Toutes
+les formulations déjà tentées par w28 (`flags &= 1`, `flags = flags & 1`,
+`1 & flags`, variable intermédiaire, `do {} while(0)`) rejouées ici,
+même résultat négatif (`ands r0,r5`). Piste qui a débloqué : la double
+négation explicite `if (!!(flags & 1))` -- déclenche chez agbcp un chemin
+de normalisation booléenne différent qui écrit le résultat DANS le
+registre du paramètre au lieu d'un scratch. Généralisé dans
+`DECOMP_RULES.md` (nouvel anti-pattern #12).
+
+Vérification par objet (nouveau standard, `main`) :
+- `arm-none-eabi-readelf -S build/src/code_080D7944.o` : `.text` =
+  `0x4c` octets, exactement `0x080D7990 - 0x080D7944`.
+- Diff de désassemblage borné (`objdump -d` du `.o` vs `baserom.gba`
+  `--adjust-vma=0x08000000 --start-address=0x080D7944
+  --stop-address=0x080D7990`) : 20 instructions + pool littéral (3
+  `.4byte`) byte-pour-byte identiques (bl targets non résolus dans le
+  `.o` mais adresses de destination cohérentes).
+- Lien complet réussi (`make` avec `build/franglais_stub.bin` factice
+  copié depuis `~/dev/jeux-langues-assets/fomt-decomp`) : AS+LD passent
+  sans erreur de symbole non défini/dupliqué ; seul le
+  `sha1sum -c fomt.sha1` final échoue, comme attendu et documenté
+  (`cb06198`, payload franglais non-vanilla lié en fin de ROM -- gate
+  cassé pour tout le monde, pas une régression de ce round).
+- Doublon silencieux : `grep -rl -- "080D7944" asm/*.s` vide après
+  split (aucune autre copie de cette adresse) ; `fomt.map` confirme
+  `func_080D7944` à `0x080d7944` taille `0x4c`, suivi immédiatement de
+  `asm/code_080D7990.o` à `0x080d7990` taille `0x3c` (jusqu'à
+  `0x080D79CC`, déjà matché).
+
+Découpage du fichier monolithique `asm/code_080D6DB8.s` (qui contenait
+déjà `func_080D7944` en dernière fonction, suivie d'un blob `.byte` non
+désassemblé jusqu'à `0x080D79CC`) : partie "avant" tronquée à la ligne
+1608 (juste avant `thumb_func_start func_080D7944`), partie "après" (le
+blob `.byte` restant, sans `thumb_func_start` -- même style que
+`asm/code_080D79F8.s`) déplacée dans un nouveau fichier
+`asm/code_080D7990.s`. Entrées `fomt.lds` insérées dans l'ordre :
+`asm/code_080D6DB8.o(.text); src/code_080D7944.o(.text);
+asm/code_080D7990.o(.text); src/code_080D79CC.o(.text);`.
+
+**Commité** : `src/code_080D7944.cc`, `asm/code_080D6DB8.s` (tronqué),
+`asm/code_080D7990.s` (nouveau), `fomt.lds`. Ajout accompagnant dans
+`DECOMP_RULES.md` (anti-pattern #12, `!!(x & 1)` vs `x & 1`/`x &= 1` nu).
+
+Priorité 3 non atteinte ce round faute de temps -- reste ouverte pour un
+prochain round (autres voisins de `gUnk_03000410`, ou cible de
+`DECOMP_ARCHIVE.md`).
+
+### Repo state at end of round (worktree w30)
+
+- 1 commit local ajouté sur `parallel-30` (`func_080D7944` + doc
+  `DECOMP_RULES.md`). `git status --short` vide après commit.
+- `origin` non touché (push toujours désactivé délibérément), rien
+  poussé, aucune PR.
+- `build/franglais_stub.bin` local à ce worktree (gitignored, copié
+  depuis `~/dev/jeux-langues-assets/fomt-decomp`) -- même limitation que
+  les rounds précédents : `sha1sum -c fomt.sha1` ne peut structurellement
+  pas passer tant que le gate n'est pas corrigé en amont ; vérification
+  faite par objet (taille + diff borné) conformément au nouveau standard.
