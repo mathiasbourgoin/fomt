@@ -3256,3 +3256,178 @@ here have considered, rather than continuing to shape-hunt blind.
   update (`SESSION_NOTES.md`) is the only change in this worktree.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
+
+## Round (worktree w20, isolated, branche `parallel-20`) -- chasse "méthode
+sœur" par classe déjà matchée, 1 match, 1 near-miss documenté, 2 cibles
+écartées par pré-évaluation de risque
+
+Méthodologie demandée : plutôt que de choisir une cible au hasard dans
+`asm/*.s`, partir des classes qui ont DÉJÀ au moins une méthode matchée
+(`include/*.hh` + `src/*.cc` correspondant) et chercher des `func_ADDR`
+sœurs, encore en asm, proches en adresse ou listées dans le même header.
+
+### Étape 1 -- scanner tous les `include/*.hh` ayant un `src/*.cc` pour des
+déclarations non matchées
+
+Premier script (naïf, cherchant des motifs `Classe::Méthode` absents du
+`.cc`) a produit une quinzaine de "gaps" apparents (`actor::GetMap/GetX/
+GetY`, `entity::GetQ16X/...`, `field::PlotAt/PutAtRandom/RandThing/...`,
+`farmer::func_0800Exxx` x50, `held_item::func_0800Fxxx` x5,
+`script_engine::Clear/OnCall/Pop/Top`, `scene::~AScene/~AUnk_0800080C/
+SceneMain`). **Tous se sont révélés faux positifs sauf un**, pour deux
+raisons distinctes :
+- Beaucoup de méthodes courtes sont **inline dans le header lui-même**
+  (`actor.hh`, `entity.hh`, `field.hh`) -- mon grep sur `.cc` ratait ces
+  définitions puisqu'il n'y en a pas, le corps vit entièrement dans le
+  `.hh`. Un script plus robuste doit vérifier l'inline AVANT de conclure
+  à un gap.
+- L'idiome `EC RetType func_ADDR(...)` (fonction libre, pas méthode `::`)
+  est très utilisé (`farmer.hh`, `held_item.hh`) -- mon premier script ne
+  cherchait que le motif `Classe::Nom`, qui ne matche jamais ce style.
+  **Second script, correct** : extraire tous les `func_[0-9A-F]{8}` du
+  `.hh` et du `.cc` et faire un `comm -23` -- résultat : **zéro gap** sur
+  la totalité des paires `.hh`/`.cc` existantes pour cet idiome. Autrement
+  dit, toutes les classes ayant une paire `.hh`/`.cc` dans ce dépôt sont
+  déjà complètes pour leurs fonctions libres `func_ADDR` déclarées en
+  header (`HeldItem`, `Farmer`, etc. sont donc **entièrement matchées**,
+  pas des cibles).
+
+Seul gap réel trouvé par ce balayage complet : `SceneMain` (`scene.hh`
+ligne 23, `void SceneMain(SmartPtr<AScene> scene_ptr);`) -- un vrai nom
+sémantique (pas `func_ADDR`), jamais implémenté, à côté de deux
+destructeurs déjà matchés dans le même fichier (`AScene::~AScene`
+= `func_080007EC`, `AUnk_0800080C::~AUnk_0800080C` = `func_0800080C`),
+exactement le patron "méthode sœur" recherché.
+
+### Étape 2 -- balayage complémentaire des déclarations `extern`/`EC`
+locales dans `src/*.cc` sans `.hh`
+
+Un second grep (`func_[0-9A-F]{8}\(.*\);$` sans `ALIAS`) sur tous les
+`src/*.cc` a listé les callees encore non portés référencés en avant :
+la quasi-totalité sont des callees **déjà matchés ailleurs dans ce dépôt**
+(le fameux `func_080007EC`/destructeur commun à toute la famille "riche").
+Candidats réellement non matchés identifiés : `func_0803DA24`
+(`data_schedules.cc`), `func_0805E860`/`func_080AC070`
+(`entity_actor.cc`), `func_080D6D98` (`hardware.cc`), `func_08034F00`/
+`func_08035380` (`npc_entity.cc`). `func_08034F00` s'est avéré un faux
+positif de plus : déjà implémenté en `NAKED` inline asm directement dans
+`npc_entity.cc` (juste jamais visible via `thumb_func_start` dans
+`asm/*.s` puisqu'il n'y est plus).
+
+### Match : `func_080D6D98` -- initialiseur de free-list du pool
+d'entrées hardware
+
+**Commit `a3343...` (voir `git log`).** Fonction minuscule (16
+instructions, uniquement `r0`-`r3`, aucune pression de registres),
+directement adjacente à `func_080D6D8C`/`func_080D6DB8` à l'intérieur de
+la section linkonce `.text.code_080D68C0` (`asm/code_linkonce.s`).
+Contexte immédiatement disponible côté appelant déjà matché
+(`src/hardware.cc` : `unk_00 = func_080D6D98(unk_04, 0x10, 0);`, à
+rapprocher de `FreeEntry`/`AllocEntry` déjà portés dans la même classe) --
+confirme le principe de départ de cette session (méthode sœur d'une
+classe déjà comprise = cible plus sûre). Sémantique reconstituée sans
+ambiguïté depuis le désassemblage seul : construit en place une liste
+chaînée descendante sur `self[0..num)`, terminée par `val` (`nullptr` au
+site d'appel), et retourne `self[0]` (tête de la free-list) -- exactement
+le pattern attendu d'un initialiseur de pool à listes libres. Forme C qui
+a matché du premier coup à l'instruction près SAUF l'ordre d'évaluation :
+
+```c
+Unk_hardware_ent_080D6D98 * ent = self + (num - 1);   // PAS (self + num) - 1
+```
+
+`self + num - 1` (parsé `(self+num)-1` en C, associativité gauche standard)
+compile un `adds` avant le `subs` ; le désassemblage cible fait le
+`subs #4` AVANT le `adds` -- seule la parenthèse explicite `self + (num -
+1)` reproduit cet ordre. Petit ajout à noter à côté de la règle #5 déjà
+connue (ordre des statements = ordre des instructions) : **ça s'applique
+aussi à l'ordre des SOUS-EXPRESSIONS à l'intérieur d'une même expression
+arithmétique**, pas seulement à l'ordre des statements entiers. Découpage
+de la section linkonce fait selon la méthode déjà documentée (fichier
+`asm/code_080D6DB8.s` créé pour la partie après la fonction portée,
+`fomt.lds` mis à jour en gardant les wildcards `*(.gnu.linkonce.t...)`
+APRÈS les nouvelles entrées, cf. piège déjà documenté). `make compare`
+bit-exact confirmé sur rebuild propre x2 avant commit.
+
+### Near-miss documenté, NON commité : `SceneMain` (`func_0800082C`,
+`asm/scene.s`)
+
+Pas de pression de registres (`r4`-`r7` seulement, prologue simple) --
+ne relève PAS de la classe "pression de registres" déjà fermée. Mais
+c'est le **premier vrai consommateur de `SmartPtr<T>` par assignation**
+dans ce dépôt (jusqu'ici `SmartPtr<T>` n'était utilisé que côté retour de
+valeur, cf. piège déjà documenté sur le ctor de copie privé/no-op) --
+aucun idiome établi pour `scene_ptr = nullptr;` / `next = other.Move();`
+enchaînés. Reconstruction sémantique de haut niveau réussie (boucle sur
+`scene_ptr.Get()`, `Run()` -> `SmartPtr<AUnk_0800080C> next`, puis si
+non-null `vfunc_0C()` -> nouveau `scene_ptr`, sinon la boucle se termine)
+et confirmée cohérente avec le désassemblage instruction par instruction
+(les 4 blocs de destruction gardés par test nul correspondent exactement
+aux destructions temporaires de `SmartPtr` attendues à chaque point de
+séquence). **Mais la taille ne matche pas** : meilleure variante
+obtenue = 202 octets compilés contre 230 octets cible (-28 octets,
+~12-14 instructions manquantes), toutes les variantes testées (next/
+result nullifiés dans des ordres différents, extraction du pointeur brut
+dans une variable nommée séparée avant reconstruction) gardent une
+frame de pile à 3 emplacements (12 octets, `sp+0/+4/+8`) alors que la
+cible en utilise 7 (28 octets, jusqu'à `sp+0x18`) -- signal clair qu'il
+manque des temporaires/objets locaux distincts dans ma reconstruction,
+pas juste un problème d'ordre. Piste non testée avant d'arrêter (budget
+de cette session épuisé sur cette cible) : la paire d'emplacements
+`(adresse, valeur)` stockée deux fois dans le désassemblage cible
+(commentaires d'origine `@ (&var_04, var_04)`) suggère que `Move()`
+n'est PAS inliné directement au site d'appel mais passe par un chemin
+qui matérialise À LA FOIS le pointeur `this` de l'objet temporaire ET sa
+valeur extraite dans des emplacements distincts et PERSISTANTS (pas
+réutilisés) -- peut-être un idiome différent de `.Move()` pour ce genre
+d'assignation en chaîne (`operator=` prenant une référence plutôt qu'un
+raw pointer, actuellement absent de `smart_ptr.hh`), ou bien `SmartPtr`
+lui-même n'a pas exactement le layout/l'API supposée ici (rappel :
+`smart_ptr.hh` porte deux `// TODO` sur ce point précis, dont un
+directement sur `Move()`). **Ne pas re-tenter sans revoir d'abord
+`smart_ptr.hh` lui-même** plutôt que de continuer à shape-hunter le
+site d'appel -- cohérent avec la règle déjà connue "un near-miss d'1
+registre sur un CALL vers une fonction/classe déjà supposée correcte
+vient souvent du CALLÉ, pas de l'appelant", ici appliquée à un TYPE
+(`SmartPtr<T>`) plutôt qu'à une fonction. À noter : `func_08004C68`
+(round 6, non convergé) touche aussi `SmartPtr<T>` -- deuxième signal
+indépendant que l'abstraction `SmartPtr<T>` telle qu'actuellement écrite
+dans ce dépôt n'est peut-être pas encore tout à fait le bon modèle.
+Fichiers de travail laissés uniquement dans le scratchpad de session
+(jamais dans l'arbre de travail), `git status` vérifié propre avant
+d'arrêter cette piste.
+
+### Cibles écartées par pré-évaluation de risque (pas tentées)
+
+- **`func_08035380`** (`asm/code_entities_08034CEC.s`, déclarée mais non
+  définie dans `npc_entity.cc`) : prologue `push {r4,r5,r6,r7,lr}; mov
+  r7,sl; mov r6,sb; mov r5,r8; push {r5,r6,r7}` -- signature exacte de la
+  classe "pression de registres" déjà fermée (4/4 échecs cette nuit),
+  fonction de surcroît volumineuse (~757 lignes de `.s`). Écartée sans
+  tentative, cohérent avec la discipline de ne pas retenter cette classe
+  sans idée nouvelle.
+- **`func_0805E860`** (`asm/code_0805E760.s`, déclarée dans
+  `entity_actor.cc`) : PAS dans la classe "pression de registres" (`r0`-
+  `r4` seulement, 16 lignes, cible de taille comparable à
+  `func_080D6D98`). Écartée pour une raison DIFFÉRENTE : elle dépatche un
+  appel virtuel (`_call_via_r3`, slot vtable +0xC) sur un pointeur lu à
+  `self+0`, où `self` est `SpriteAnimator*` -- mais `SpriteAnimator`
+  (`include/unknown_types.hh:122`) est actuellement un simple
+  `STRUCT_PAD(0x00, 0x14)` opaque, ses champs réels (dont ce pointeur
+  vtable-isé à l'offset 0, et la nature du retour struct-par-valeur de
+  8 octets consommé) ne sont PAS caractérisés. Cf. règle déjà connue :
+  ne jamais deviner le layout d'un champ enfant avant de le caractériser
+  côté dépôt patch (Ghidra) -- risque sémantique, pas risque de forme/
+  pression de registres, donc pas couvert par le tri "compte les
+  registres hauts" habituel. Écartée sans tentative faute de
+  caractérisation préalable du type `SpriteAnimator`/de l'objet pointé.
+
+### Repo state en fin de session (worktree w20)
+
+- 1 commit (`func_080D6D98`), vérifié bit-exact via rebuild complet +
+  `make compare` deux fois (avant et après le commit).
+- `git status --short` propre après le commit.
+- Aucune modification laissée en cours sur `SceneMain` (piste non
+  convergée, aucun fichier `src/`/`asm/`/`fomt.lds` touché pour cette
+  cible, toute l'itération faite dans le scratchpad de session).
+- `origin` non touché, rien poussé, pas de PR.

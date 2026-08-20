@@ -134,6 +134,18 @@ sémantiquement équivalent. agbcp ne réordonne quasiment rien -- le
 statement order EST l'instruction order, décalé par le register
 allocation.
 
+**5bis. La règle #5 s'applique aussi à l'ordre des SOUS-EXPRESSIONS à
+l'intérieur d'une même expression arithmétique**, pas seulement à l'ordre
+des statements entiers. Vu round (worktree w20, `func_080D6D98`) :
+`self + num - 1` (parsé `(self+num)-1`, associativité gauche standard du
+C) compile un `adds` avant le `subs` ; le désassemblage cible faisait le
+`subs #4` AVANT le `adds`. Seule la parenthèse explicite `self + (num -
+1)` reproduit cet ordre exact, alors que les deux formes sont
+arithmétiquement identiques. Signal pratique : si une expression
+mélange `+`/`-` sur un pointeur et que la taille matche mais l'ORDRE des
+deux instructions correspondantes est inversé, tenter de reparenthéser
+l'expression avant de chercher une explication plus compliquée.
+
 ### 5. Guard clause précoce vs `if (valide) { ... } return invalide;`
 en fin de fonction
 
