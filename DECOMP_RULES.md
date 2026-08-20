@@ -1,19 +1,31 @@
-# Règles de décompilation (local, jamais poussé)
+# Règles de décompilation (local, jamais poussé) -- QUICK-START
 
-Ce fichier est un **résumé actionnable**, pas un journal -- `SESSION_NOTES.md`
-reste la trace chronologique complète (rounds, tentatives échouées, détail
-des diffs). Celui-ci extrait les règles réutilisables, organisées par sujet,
-pour qu'on n'ait plus à relire 800+ lignes de notes pour savoir "c'est quoi
-déjà l'histoire du masque `& 0xFFFF` ?". Mets-le à jour à chaque round qui
-découvre une règle généralisable -- pas chaque tentative, seulement ce qui
-survit à plus d'un cas.
+Ce fichier est le **point d'entrée obligatoire** avant toute tentative de
+match : discipline, pièges de traduction C->asm connus, méthodologie,
+conventions de nommage. Tout ce qui est utile à CHAQUE round, quelle que
+soit la cible.
+
+L'historique détaillé (table des matchs, récits complets des classes de
+difficulté, liste des cibles priorisées avec leur statut) vit maintenant
+dans **`DECOMP_ARCHIVE.md`** -- à consulter seulement si la cible touche
+une famille déjà documentée (destructeurs "riches", `SmartPtr`, pression
+de registres, etc.) ou pour choisir la prochaine cible. Pas la peine de le
+lire en entier avant de commencer : ce fichier-ci suffit pour les 80% de
+règles qui s'appliquent à tout.
+
+`SESSION_NOTES.md` reste la trace chronologique complète (rounds,
+tentatives échouées, détail des diffs) -- n'y aller que pour le détail
+d'un round précis déjà référencé depuis `DECOMP_ARCHIVE.md`.
 
 Rappel de contexte permanent : ce dépôt (`fomt-decomp`, clone de
 `StanHash/fomt`) est un chantier strictement interne. `origin` a une URL de
 push volontairement cassée (`DISABLED-local-only-see-CLAUDE-md`) --
 **jamais** la restaurer, **jamais** `git push`, **jamais** de PR. Commits
-locaux uniquement. Un seul agent actif à la fois sur ce dépôt sauf mention
-explicite contraire (cf. le round 4, shape-hunting parallèle assumé).
+locaux uniquement. Règle standing actuelle de Mathias : **toujours
+exactement 3 agents actifs en parallèle** sur ce portage (worktrees
+isolés `fomt-decomp-worktrees/wN`, branches `parallel-N`) -- pas la
+règle historique "un seul agent à la fois" qu'on peut encore lire dans de
+vieilles notes.
 
 ## Discipline non négociable
 
@@ -34,11 +46,19 @@ explicite contraire (cf. le round 4, shape-hunting parallèle assumé).
   soit utiliser `git add -A` sans restriction (puis vérifier `git status`
   avant de commiter), soit lister explicitement CHAQUE fichier modifié/
   supprimé/ajouté.
-- **Un seul agent actif sur ce dépôt à la fois**, sauf accord explicite
-  (le round 4 a eu un "shape hunting" parallèle assumé sur un near-miss
-  précis -- exception documentée, pas la norme). Si `git log`/`git status`
-  montre une activité qu'on n'a pas soi-même produite : ne pas l'écraser,
-  vérifier qu'elle est bit-exact, documenter, continuer par-dessus.
+- **Après un merge, même sans conflit signalé par git : chercher les
+  doublons silencieux.** Bug réel vécu (merge `parallel-18`, commit
+  documenté dans `git log`) : deux worktrees indépendants peuvent chacun
+  ajouter le même contenu sans que git ne voie de conflit -- un côté sous
+  un label local `.LADDRESS` (octets bruts jamais matchés), l'autre en
+  C fraîchement matché (`src/code_ADDR.cc`). Aucune collision de symbole
+  global, donc AUCUNE erreur de link, juste une ROM plus grosse que
+  prévu. Réflexe après tout merge touchant des fonctions nouvellement
+  matchées : `grep -rl -- ".LADDRESS" asm/*.s` pour chaque adresse
+  nouvellement matchée par les DEUX branches fusionnées. Si le rebuild
+  final ne matche pas malgré des fichiers individuellement corrects,
+  comparer la taille du binaire/`l_iwram_lma` à l'attendu -- un écart net
+  de N octets pointe directement vers un blob dupliqué de N octets.
 
 ## Anti-patterns de traduction C -> asm connus (agbcp, egcs ~1999)
 
@@ -70,7 +90,7 @@ démarrant au bit `P = (32 - S1) - N` du mot chargé. Vérifié round 7
 (`func_08010F04`, `S1=27,S2=31` -> 1 bit à `P=4` soit masque `0x10` ;
 `func_08010F1C`, `S1=25,S2=26` -> 6 bits à `P=1` soit masque `0x7E>>1`).
 Écrire le C en double-shift littéral (`(u32)(champ) << S1 >> S2`), pas en
-`(champ >> P) & mask`, cohérent avec l'anti-pattern #1 ci-dessous -- les
+`(champ >> P) & mask`, cohérent avec l'anti-pattern #1 ci-dessus -- les
 deux formes ont le même résultat arithmétique mais seule la première
 reproduit l'absence de `ands`/littéral dans le désassemblage cible.
 
@@ -121,9 +141,13 @@ complètement, aucun load de littéral. Si le désassemblage montre un
 directement dans l'expression finale fait disparaître le `ands` chez
 nous, **séparer le load dans une statement à part** (`unsigned int tmp =
 ent->champ; return ((tmp & 0xFFFF) << 4) | ...;`) déjoue ce peephole
-précis et reproduit le `ldrh`+`ands` exact. Vu 1 fois, à confirmer sur
-un second cas avant de généraliser complètement, mais suffisamment net
-(reproductible sur les 2 variantes testées round 6) pour être noté.
+précis et reproduit le `ldrh`+`ands` exact. Généralisé round 9 : ce
+peephole n'est pas limité à "une seule variable, même expression" --
+empiriquement, il s'applique à **toute variable locale dont l'adresse est
+prise, tant que son cycle de vie complet reste visible dans UNE fonction
+sans que l'adresse ne s'échappe vers un appel externe opaque**. Voir
+`DECOMP_ARCHIVE.md`, saga `SmartPtr`/`func_08004C68`, pour le détail
+complet des 7 hypothèses testées sur ce terrain.
 
 ### 5. Ordre des instructions = ordre des statements C, littéralement
 
@@ -146,7 +170,7 @@ mélange `+`/`-` sur un pointeur et que la taille matche mais l'ORDRE des
 deux instructions correspondantes est inversé, tenter de reparenthéser
 l'expression avant de chercher une explication plus compliquée.
 
-### 5. Guard clause précoce vs `if (valide) { ... } return invalide;`
+### 5ter. Guard clause précoce vs `if (valide) { ... } return invalide;`
 en fin de fonction
 
 Un `if (cond_invalide) return valeur_par_défaut;` placé EN PREMIER dans une
@@ -190,161 +214,60 @@ bit-exact. Toujours typer ces variables `u32`/`unsigned`, jamais `int`,
 dès que UNE SEULE comparaison sur elles est unsigned dans le
 désassemblage (round 6, `func_0804E4AC`, `kind`).
 
-## Classe de problème "pression de registres" -- ne PAS re-tenter sans
-gros budget
+### 8. Appel explicite de destructeur sur un membre polymorphe : toujours
+qualifier
 
-**4 échecs sur 4 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1, re-tenté et toujours échoué round 6 malgré un
-shape-hunting systématique -- voir `SESSION_NOTES.md` round 6, le blocage
-est descendu à une décision précise d'allocation de registre pour UNE
-seule variable (le paramètre pointeur de sortie, évincé vers `ip` par
-l'original dès la 1re instruction, jamais reproduit malgré une forme C
-jugée par ailleurs correcte), `func_0800736C` (round 2), `func_0804E4AC`
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
-**3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
-**4 échecs sur 4 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1), `func_0800736C` (round 2 ET round 6, 2
-tentatives distinctes sur la même fonction), `func_0804E4AC` (round 3,
-`DrawGlyphAt`). Round 6 a généré 5 variantes systématiques sur
-`func_0800736C` (contre 2 au round 2) via le harnais rapide, et a
-réduit l'écart de -8/-16 octets à -12 octets avec une structure bien
-plus proche (accumulateur unique + epilogue partagé + reload du masque
-`& 0xFFFF` -- cf. règle 4bis ci-dessus -- matchent maintenant
-exactement), mais **n'a toujours pas convergé**. Piste explicitement
-fermée par le round 6, à ne PAS retenter telle quelle : lire le champ
-`h->unk_00` dans une variable locale distincte pour le second check
-"redondant" (idée notée comme non-testée à la fin du round 2) --
-testée round 6 via `h->AllocEntry(ent)` lié à une variable `ent2`
-distincte, résultat **identique** à ne pas utiliser `AllocEntry` du
-tout : `AllocEntry` est toujours inliné par agbcp, et son
-élimination du branchement redondant semble opérer sur l'IDENTITÉ DE
-REGISTRE (pseudo-valeur pré-allocation), pas sur l'identité de variable
-source -- aucune des 5 formulations testées (if plat, goto/label
-partagé, appel à `AllocEntry` avec ou sans variable de retour distincte)
-n'a préservé le second check. Signature du problème : une fonction avec
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
-(round 3, `DrawGlyphAt`). Round 6 identifie un 4e candidat mais NE
-TENTE PAS le port -- `func_080AC674` (analyse complète en asm/champ
-mémoire faite, `param_2` élucidé avec certitude statique, voir
-`SESSION_NOTES.md` round 6) utilise `r8`+`sb`+`sl`+`ip` simultanément
-sur ~180 instructions (pire que les 3 précédents), avec en plus deux
-boucles d'init de pool ET 13 sites d'appel `func_0805E6CC` dont
-plusieurs offsets sont des incréments du registre d'ITÉRATION
-PRÉCÉDENTE plutôt que des littéraux frais -- signal d'alerte cumulé,
-pas juste un des symptômes. Signature du problème : une fonction avec
-**beaucoup de valeurs simultanément vivantes** (dépilement de liste
-libre, parcours de section déroulée, ou ici un blit conditionnel à 4
-tuiles avec flags), qui sature `r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où
-CHAQUE reformulation C testée garde une valeur de moins en vie
-simultanément que l'original à un point donné -- ce qui n'est pas
-récupérable juste en relisant l'ordre des instructions, il faut deviner
-la forme EXACTE de l'expression C source pour forcer le même pic de
-pression de registres. **Ne pas re-tenter cette classe sans budget de
-plusieurs rounds dédiés.** Signal d'alerte AVANT de commencer une
-**3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
-**beaucoup de valeurs simultanément vivantes** (dépilement de liste
-libre, parcours de section déroulée, ou ici un blit conditionnel à 4
-tuiles avec flags), qui sature `r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où
-CHAQUE reformulation C testée garde une valeur de moins en vie
-simultanément que l'original à un point donné -- ce qui n'est pas
-récupérable juste en relisant l'ordre des instructions, il faut deviner
-la forme EXACTE de l'expression C source pour forcer le même pic de
-pression de registres. **Ne pas re-tenter cette classe sans budget de
-plusieurs rounds dédiés.** Signal d'alerte AVANT de commencer une
-**3 échecs sur 3 tentatives, puis un near-miss serré au round 6** sur
-cette classe précise : `func_0805E790` (round 1), `func_0800736C`
-(round 2), `func_0804E4AC` (round 3 : échec total ; round 6 : shape-hunt
-systématique, near-miss à UNE instruction de 2 octets près, toujours pas
-matché -- voir `SESSION_NOTES.md` round 6 pour le détail complet et
-l'hypothèse de piste la plus prometteuse, la profondeur d'imbrication des
-`if`). Signature du problème : une fonction avec **beaucoup de valeurs
-simultanément vivantes** (dépilement de liste libre, parcours de section
-déroulée, ou ici un blit conditionnel à 4 tuiles avec flags), qui sature
-`r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où CHAQUE reformulation C testée garde
-une valeur de moins en vie simultanément que l'original à un point donné
--- ce qui n'est pas récupérable juste en relisant l'ordre des
-instructions, il faut deviner la forme EXACTE de l'expression C source
-pour forcer le même pic de pression de registres. **Ne pas re-tenter
-cette classe sans budget dédié.** Signal d'alerte AVANT de commencer une
-tentative : si le désassemblage utilise déjà `r8`+`sb`+`sl`+`ip`
-simultanément dans le corps (pas juste au prologue/épilogue), c'est
-probablement cette classe -- mais round 6 montre qu'un shape-hunt
-systématique (règles 5-7 ci-dessus + les règles 1-2 déjà connues) peut
-fermer l'essentiel de l'écart même sur cette classe, donc ça reste
-rentable d'essayer avec la bonne méthode plutôt que de l'écarter
-d'office.
+Une classe qui POSSÈDE (pas juste pointe) un membre d'un type ayant un
+destructeur `virtual`, et dont le désassemblage montre un `bl` DIRECT
+vers le symbole mangle du destructeur du membre (pas un dispatch virtuel
+via SA PROPRE vtable) : le code C++ source doit utiliser la forme
+**qualifiée** de l'appel explicite de destructeur (`membre.Base::~Base()`
+via un pointeur `((Base*)ptr)->Base::~Base()`), **jamais** la forme nue
+(`membre.~Base()` / `ptr->~Base()`). Vécu round 6 (`func_08010158`) :
+`((AScriptEngine*)(self+8))->~AScriptEngine()` (forme nue, C++ valide)
+compile en un VRAI appel virtuel (`ldr` la vtable du membre embarqué à
+son offset propre, `ldr` le slot 2, `bl _call_via_r2`) parce que
+`AScriptEngine` a un destructeur `virtual` -- alors que l'original
+appelle `_._13AScriptEngine` directement, sans aucune indirection, la
+destruction statique d'un membre de type connu n'ayant jamais besoin de
+dispatch virtuel. Corrigé en qualifiant :
+`((AScriptEngine*)(self+8))->AScriptEngine::~AScriptEngine();`.
 
-À l'inverse, la classe "boucle simple, peu de valeurs vivantes,
-délègue le gros du travail à un appel `bl` opaque" (les 2 boucles
-`DrawString`) matche du premier ou deuxième coup à chaque fois essayée.
-**Ne pas supposer qu'une famille entière de fonctions documentée dans
-un seul fichier de doc (`docs/VWF.md` etc.) a la même difficulté** --
-`DrawString` (boucle) et `DrawGlyphAt` (blit multi-tuiles) sont dans la
-même section de doc mais dans deux classes de difficulté totalement
-différentes.
+### 9. `SmartPtr<T>` : ne jamais nommer localement une valeur de retour
 
-## Classe de problème "ABI partagée entre `bl`" -- INFAISABLE en C,
-ne pas re-tenter (constat, pas un échec de tentative)
+`SmartPtr<T>::SmartPtr(SmartPtr&)` (`include/smart_ptr.hh:47`) est
+**privé et no-op** (ne recopie même pas `inner`). Conséquence directe
+pour tout `Run()`/méthode qui retourne un `SmartPtr<T>` par valeur :
+`SmartPtr<T> ret(ptr); return ret;` **ne compile pas** (tentative
+d'appel au copy-ctor privé). Le seul idiome correct est de construire
+le temporaire directement dans l'expression `return` :
+`return SmartPtr<T>(ptr);` -- le compilateur construit alors la valeur
+directement dans le slot de retour caché (convention ABI CFront/ARM
+pour les types à destructeur non-trivial). `SmartPtr<T>::Move()` (ligne
+38-43 du même header) **est déjà implémenté**, pas un stub -- ne pas
+supposer que c'est la pièce manquante d'un near-miss sans l'avoir vérifié
+(confusion vécue round 9/w21, corrigée : le `// TODO` du header porte
+sur autre chose).
 
-Round dédié `Unpack` (`0x080D102C`, worktree `parallel-1`) : contrairement
-à la classe "pression de registres" ci-dessus (qui reste un problème DE
-FORME C, récupérable avec assez de budget), cette classe est un problème
-DE NATURE -- aucune reformulation C, quel que soit le budget, ne peut
-produire la séquence observée, parce qu'elle **viole la convention
-d'appel elle-même**, pas juste la forme d'une expression.
+## Classes de difficulté à connaître AVANT de choisir une cible
 
-Constat sur `Unpack` (`0x080D102C`) et tout son arbre d'appel
-(`func_080D10F0`, `func_080D1186`, `func_080D11A4`/`sub_080D11B8`
-= lecteur de bits bit-à-bit, `sub_080D1224`/`129A`/`12EC`/`139C`/`1204`
-= les 5 modes de corps, `func_080D1518`/`1548`/`1564`/`1574` = les 4
-post-filtres, tous dans `asm/code_809E804.s` autour de la ligne 103423) :
-l'état du lecteur de bits (`buf` en r2, `avail` en r3) est **passé par
-valeur dans r2/r3 à travers une longue chaîne de `bl` vers des fonctions
-distinctes** (`Unpack` -> `func_080D11A4` -> `func_080D10F0` ->
-`sub_080D1224` etc.), SANS AUCUN rechargement entre deux `bl` consécutifs
-qui utilisent tous les deux ce même état. Exemple concret vérifié :
-`sub_080D1224` (mode de corps 0) commence directement par `bl
-func_080D14EC` puis `bl func_080D11A4`, tous deux consommant `r2`/`r3`
-comme lecteur de bits déjà initialisé -- ces registres n'ont pourtant été
-positionnés que dans `Unpack`, plusieurs `bl` plus haut, et rien dans
-`sub_080D1224` ne les recharge depuis la mémoire ou un registre
-callee-saved. Or `r0`-`r3` sont **caller-saved dans TOUTE convention
-d'appel ARM/Thumb standard** (APCS, AAPCS, et la convention utilisée par
-agbcp lui-même pour tout code qu'il génère) -- un compilateur C, quelle
-que soit la forme du code source, DOIT toujours supposer que `r0`-`r3`
-sont détruits par un appel `bl` et les recharger avant réutilisation.
-Voir la même valeur cette nuit-là côté dépôt patch (docs, section
-"Pourquoi pas la décompilation Ghidra directe" de
-`docs/BACKGROUNDS_INVENTORY.md` du dépôt `harvest-moon-franglais`) : "de
-l'assembleur Thumb écrit à la main, optimisé, pas une sortie de
-compilateur" -- ce round confirme ce constat de façon INDÉPENDANTE et
-plus précise (identification du mécanisme exact de la violation, pas
-seulement l'observation générale que Ghidra échoue dessus).
+Deux classes ont un historique de récidive documenté en détail dans
+`DECOMP_ARCHIVE.md` -- lire la section correspondante avant de s'engager :
 
-**Conclusion : `Unpack` et tout son arbre d'appel ne sont PAS des cibles
-de décompilation C valides.** Ce n'est pas "pas encore réussi", c'est
-"structurellement impossible" -- toute tentative de porter une de ces
-fonctions comme fonction C libre appelant les autres via `bl` produirait
-nécessairement un code différent (rechargements de `r2`/`r3` que
-l'original n'a pas), donc jamais bit-exact. Seule option théorique
-(non tentée, jugée hors scope d'un round de décompilation C) : porter le
-bloc entier comme un unique gros morceau d'assembleur inline, ce qui ne
-serait qu'une recopie du `.s` existant sans valeur ajoutée. **Retirer
-`Unpack` de la liste des cibles priorisées** (voir en fin de fichier) --
-ne pas re-tenter sans une raison nouvelle et spécifique de penser que ce
-diagnostic était faux.
+- **"Pression de registres"** : fonctions à beaucoup de valeurs vivantes
+  simultanément (`r4`-`r7`+`r8`/`sb`/`sl`/`ip`). Plusieurs échecs
+  documentés, dont `DrawGlyphAt` fermée après 4 tentatives sérieuses avec
+  un écart irréductible de 2 octets. **Ne pas s'engager sans budget dédié
+  et une idée réellement neuve.**
+- **"ABI partagée entre `bl`"** (`Unpack` et son arbre d'appel) :
+  **structurellement infaisable en C**, pas un problème de forme --
+  retirée définitivement de la liste des cibles.
 
-Signal d'alerte généralisable pour de futures cibles : avant de commencer
-une tentative sur une fonction qui appelle plusieurs `bl` vers d'autres
-fonctions non triviales, vérifier si un registre `r0`-`r3` est
-**réutilisé après un `bl` sans rechargement visible entre-temps**, à la
-fois dans l'appelant ET dans le corps du callé juste après son propre
-prologue. Si oui, c'est cette classe -- pas la peine de tenter une
-reformulation C, le problème n'est pas la forme du source.
+Signal d'alerte AVANT de commencer une tentative : si le désassemblage
+utilise déjà `r8`/`sb`/`sl`/`ip` simultanément dans le corps (pas juste au
+prologue/épilogue), ou si un registre `r0`-`r3` est réutilisé après un
+`bl` sans rechargement visible, s'arrêter et lire `DECOMP_ARCHIVE.md`
+avant de continuer.
 
 ## Méthode de découpage d'un fichier `asm/*.s` monolithique
 
@@ -374,6 +297,18 @@ reformulation C, le problème n'est pas la forme du source.
    en `--start-address` sort silencieusement une sortie VIDE (hors plage
    pour `-bbinary`, pas d'erreur). Toujours ajouter
    `--adjust-vma=0x08000000` à la main.
+8. **Mécanique `.text.code_ADDR` (linkonce/COMDAT)** : `asm/code_linkonce.s`
+   regroupe QUELQUES sections `.text.code_ADDR` explicites par plusieurs
+   fonctions. Un wildcard `*(.gnu.linkonce.t.NOM_MANGLE)` juste après une
+   entrée `asm/code_linkonce.o(.text.code_ADDR)` dans `fomt.lds` N'EST PAS
+   FORCÉMENT INERTE -- il peut matcher une vraie instanciation de template
+   occupant un gap d'adresses juste AVANT la section suivante. Si
+   `make compare` échoue avec un GROS bloc de diffs contigu démarrant
+   pile à l'adresse de la fonction découpée, comparer `fomt.map` à
+   l'adresse attendue : un désaccord pointe vers un problème d'ORDRE dans
+   `fomt.lds`, pas de contenu. Les nouvelles entrées doivent être insérées
+   immédiatement après l'entrée `asm/code_linkonce.o(.text.code_ADDR)`
+   d'origine, AVANT tout wildcard qui suivait déjà cette entrée.
 
 ## Vérifier taille puis contenu, dans cet ordre
 
@@ -420,23 +355,34 @@ scratch dédié) plutôt que les chemins nus `/tmp/qt.s`/`/tmp/qt.o` de la
 recette ci-dessus -- `/tmp` est partagé avec tout ce qui tourne par
 ailleurs sur la machine.
 
-## Appel explicite de destructeur sur un membre polymorphe : toujours qualifier
+## Scan systématique des blobs `.byte` cachés
 
-Une classe qui POSSÈDE (pas juste pointe) un membre d'un type ayant un
-destructeur `virtual`, et dont le désassemblage montre un `bl` DIRECT
-vers le symbole mangle du destructeur du membre (pas un dispatch virtuel
-via SA PROPRE vtable) : le code C++ source doit utiliser la forme
-**qualifiée** de l'appel explicite de destructeur (`membre.Base::~Base()`
-via un pointeur `((Base*)ptr)->Base::~Base()`), **jamais** la forme nue
-(`membre.~Base()` / `ptr->~Base()`). Vécu round 6 (`func_08010158`) :
-`((AScriptEngine*)(self+8))->~AScriptEngine()` (forme nue, C++ valide)
-compile en un VRAI appel virtuel (`ldr` la vtable du membre embarqué à
-son offset propre, `ldr` le slot 2, `bl _call_via_r2`) parce que
-`AScriptEngine` a un destructeur `virtual` -- alors que l'original
-appelle `_._13AScriptEngine` directement, sans aucune indirection, la
-destruction statique d'un membre de type connu n'ayant jamais besoin de
-dispatch virtuel. Corrigé en qualifiant :
-`((AScriptEngine*)(self+8))->AScriptEngine::~AScriptEngine();`.
+`python3 tools/scripts/scan_hidden_code_blobs.py` (aucune dépendance hors
+stdlib, déjà commité) parcourt tout `asm/*.s`, repère les blocs purement
+`.byte` (jamais `.4byte` -- convention du dépôt : `.4byte` =
+littéral/pointeur légitime, `.byte` = octets bruts jamais désassemblés)
+de 4 à 40 octets coincés entre deux VRAIES fonctions (`thumb_func_start`),
+et tente un désassemblage Thumb partiel maison pour juger la plausibilité
+(tous les halfwords doivent décoder vers un mnémonique connu, le dernier
+doit être un branchement/`bx` -- signal fort, pas une preuve : la
+vérification réelle reste toujours désassemblage manuel -> harnais rapide
+-> `make compare`). Round 9 a matché 16 fonctions en une passe avec cette
+méthode -- voir `DECOMP_ARCHIVE.md` pour le détail.
+
+**Piège de parsing vécu** : `thumb_func_start NAME` apparaît textuellement
+comme fin du bloc PRÉCÉDENT dans un parseur ligne-par-ligne naïf (pas comme
+un "préfixe" du bloc `NAME:` qui suit) -- toujours vérifier l'adjacence
+`thumb_func_start` en regardant la QUEUE du bloc précédent.
+
+**Discipline appliquée à chaque candidat** (à ne pas raccourcir même sous
+pression de temps) : désassembler les octets bruts (`arm-none-eabi-objdump
+-D -bbinary -marmv4t -Mforce-thumb --adjust-vma=0x08000000`), vérifier
+qu'aucun appelant symbolique n'existe (grep négatif attendu, pas anormal
+en soi), écrire le C candidat, compiler via le harnais rapide, comparer
+octet à octet, PUIS SEULEMENT appliquer au fichier `asm/*.s` + `fomt.lds`
++ rebuild propre complet + `sha1sum -c fomt.sha1` avant CHAQUE commit (un
+blob = un commit). Ne jamais laisser un candidat "vérifié en harnais"
+sans l'appliquer immédiatement.
 
 ## Conventions de nommage
 
@@ -475,24 +421,18 @@ dispatch virtuel. Corrigé en qualifiant :
   pas comme fonction C libre qui bricole une vtable à la main pour
   produire les mêmes octets -- ça suit la convention déjà posée par
   `fomt` et généralise souvent gratuitement à des fonctions sœurs
-  (ex. la famille de ~24 destructeurs apparentés à `func_08004C54`). Si
+  (ex. la famille de ~37 destructeurs apparentés à `func_08004C54`). Si
   la fonction est du C procédural pur dans l'original (pas de `this`,
   pas de vtable -- utilitaires bas niveau type décompression/rendu,
   comme `DrawString`/`DrawStringRecolor` qui prennent `dims, dest, x, y,
   s` en arguments plats), rester en C simple -- inventer une structure
   OO qui n'existe pas dans le binaire serait deviner, contraire à la
-  discipline du dépôt (cf. règle "ne jamais deviner un type/prototype
-  sans vérifier le corps compilé" plus haut).
+  discipline du dépôt.
 - **Quand une fonction fraîchement portée appelle une fonction DÉJÀ
   portée (déjà matchée dans ce dépôt), référencer son nom sémantique,
   pas son alias `func_ADDR`** -- ça rend le corps du call-site
-  auto-documenté (on voit "j'appelle `DrawString`" au lieu de "j'appelle
-  `func_0804E8F0`, va relire le commentaire d'en-tête pour savoir ce que
-  c'est"). Ne s'applique évidemment qu'aux fonctions déjà portées avec
-  un corps réel dans ce dépôt -- tant que le callé est encore en asm
-  (cas de `func_0804E4AC`/`func_0804E5AC`, `DrawGlyphAt`, appelés par
-  les deux `DrawString`), il n'y a pas de nom sémantique "réel" à
-  référencer, `func_ADDR` reste le seul choix honnête.
+  auto-documenté. Ne s'applique évidemment qu'aux fonctions déjà portées
+  avec un corps réel dans ce dépôt.
 - **Variables locales** : nommer selon la sémantique comprise dès qu'elle
   est claire (`right_edge_x`, `glyph_kind` plutôt que `right`, `kind` --
   ou pire, les noms bruts `uVar4`/`param_1` que Ghidra produirait). Pas
@@ -508,444 +448,3 @@ dispatch virtuel. Corrigé en qualifiant :
   `unk_` (ou le type/nom Ghidra `undefined4`/`DAT_ADDR` traduit en
   `unk_ADDR`), ne pas inventer un nom qui suggère une certitude non
   acquise.
-
-## Scan systématique des blobs `.byte` cachés (round 9, `tools/scripts/scan_hidden_code_blobs.py`)
-
-Généralisation de la découverte round 8 (`func_08010F14`) en méthode
-outillée : `python3 tools/scripts/scan_hidden_code_blobs.py` (aucune
-dépendance hors stdlib) parcourt tout `asm/*.s`, repère les blocs
-purement `.byte` (jamais `.4byte` -- convention du dépôt : `.4byte` =
-littéral/pointeur légitime, `.byte` = octets bruts jamais désassemblés)
-de 4 à 40 octets coincés entre deux VRAIES fonctions (`thumb_func_start`),
-et tente un désassemblage Thumb partiel maison pour juger la plausibilité
-(tous les halfwords doivent décoder vers un mnémonique connu, le dernier
-doit être un branchement/`bx` -- signal fort, pas une preuve : la
-vérification réelle reste toujours désassemblage manuel -> harnais rapide
--> `make compare`). Round 9 : **4 blobs / 16 fonctions matchées en une
-passe** (`func_0800711C` ; `func_0800057C`/`08000580`/`08000584`/`08000590` ;
-`func_080099EC`/`08009A04`/`08009A2C`/`08009A38` ;
-`func_080100F0`/`08010104`/.../`0801014C`, 7 fonctions), voir
-`SESSION_NOTES.md` round 9 pour le détail complet de chaque cas. Après ce
-round, relancer le script doit afficher 0 candidat court -- tout nouveau
-candidat dans un round futur est réellement nouveau.
-
-**Piège de parsing vécu** : `thumb_func_start NAME` apparaît textuellement
-comme fin du bloc PRÉCÉDENT dans un parseur ligne-par-ligne naïf (pas comme
-un "préfixe" du bloc `NAME:` qui suit) -- un premier script naïf a raté
-`func_0800711C` à cause de ça (candidat vérifié via harnais mais jamais
-appliqué faute d'avoir été re-détecté). Toujours vérifier l'adjacence
-`thumb_func_start` en regardant la QUEUE du bloc précédent, pas seulement
-un éventuel "préfixe" du bloc courant.
-
-**Discipline appliquée à chaque candidat** (identique au round 8, à ne pas
-raccourcir même sous pression de temps) : désassembler les octets bruts
-(`arm-none-eabi-objdump -D -bbinary -marmv4t -Mforce-thumb
---adjust-vma=0x08000000`, piège `--adjust-vma` déjà documenté plus haut),
-vérifier qu'aucun appelant symbolique n'existe (grep négatif attendu,
-comme pour `func_08010F14` -- pas anormal en soi), écrire le C candidat,
-compiler via le harnais rapide, comparer octet à octet, PUIS SEULEMENT
-appliquer au fichier `asm/*.s` + `fomt.lds` + rebuild propre complet +
-`sha1sum -c fomt.sha1` avant CHAQUE commit (un blob = un commit). Ne
-jamais laisser un candidat "vérifié en harnais" sans l'appliquer
-immédiatement -- voir le piège de process ci-dessus.
-
-**Famille "Unpack" retrouvée ailleurs** : le scan (correctement) ne
-signale JAMAIS les blobs `.byte` de `asm/code_080C7F00.s` autour de
-`.L080D12D0`-`.L080D1426` (leur "bloc précédent" est une étiquette de
-branchement interne à une fonction, pas un `thumb_func_start`) -- mais une
-inspection manuelle round 9 confirme que ce sont de vrais octets Thumb
-valides (pas du bruit), appartenant à la famille `Unpack`/lecteur de bits
-déjà diagnostiquée infaisable en C (section dédiée plus haut) --
-**empreinte plus large que documenté** : la note de localisation
-d'origine ne citait que `asm/code_809E804.s`, ces fragments de
-continuation après `mov lr,pc; bx sb` existent aussi dans
-`asm/code_080C7F00.s`. Ne pas re-tenter, diagnostic confirmé indépendamment.
-
-## Historique des matchs confirmés (voir `SESSION_NOTES.md` pour le détail)
-
-| fonction | rôle | round | commit |
-|---|---|---|---|
-| `func_0805E6CC` | `DefinedSprite`, constructeur d'archive | 1 | `648d15f` |
-| `DrawString` (`func_0804E8F0`) | boucle DrawString, police normale | 3, renommé 5 | `ecef66e`, `48ebfa3` + round 5 |
-| `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
-| `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
-| `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
-| `func_08010158` | destructeur dérivé, classe construite par `func_080D3EF4` (0x554 octets, membre `ScriptEngine` à +8) -- variante SIMPLE (appels directs, pas de dispatch virtuel) de la famille "riche" | 6 | `a85f4b1` |
-| `func_0800371C`, `func_08004BDC`, `func_080059D0`, `func_080070A4` | famille "riche" : destructeur dérivé + teardown conditionnel d'un champ enfant à `self+4` | 6 | `ef58287` |
-| `func_0809A518` | destructeur "riche" de la famille des ~23, 2 enfants (offset+4 MI, offset+8 plain) | 6 (w7) | `95a55f3` |
-| `func_080C7ED0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e902a6c` |
-| `func_080BC8C0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `3f33b7d` |
-| `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
-| `func_080521BC`, `func_08057E1C`, `func_0805CEFC`, `func_0805E658`, `func_0805FD04`, `func_08069E58`, `func_0807561C`, `func_0807DD68`, `func_0807EE44`, `func_0807F5B0`, `func_0808048C` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain) | 6 (w11) | commits successifs (voir `git log`) |
-| `func_0806D918`, `func_0806EA00`, `func_080709D8` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w11) | commits successifs (voir `git log`) |
-| `func_08080DC4`, `func_08081A70`, `func_08082144`, `func_08083AEC`, `func_08085528`, `func_080881AC`, `func_0808AB68`, `func_0808C59C`, `func_0808ED08`, `func_08090E84`, `func_080925C4`, `func_080931E0`, `func_08093A88` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), même corps que `func_0809A518` | 7 (w12) | `e1b1931`, `1f085cf`, `7c09c6d`, `0271566`, `91f7ebe`, `5b09238`, `0f8825f`, `3c6bf9f`, `7631bff`, `228b133`, `9b04a4d`, `d1cc3d2`, `ef78680` (1 commit/fonction) |
-| `func_080C0D44` | destructeur "riche", 1 enfant offset+4 (MI) | 7 (w12) | `18e8b5e` |
-| `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
-| `func_08010F04`, `func_08010F1C` | getters `GameState` (bit `0x10` octet 0 ; champ 6 bits octet 3 bits[1:6]) -- complètent les 4 setters round 6 | 7 (w14) | (voir `git log`) |
-| `func_08010F14` | getter `GameState` NON catalogué (7 bits à `P=2` du halfword `self+2`, adjacent au champ 5 bits de `func_08010F0C` sur le même mot `self+0`) -- ex-`.byte` bruts sans symbole, décodé et porté | 8 (w17) | `05e966f` |
-| `func_0806EA6C`, `func_08007110`, `func_08005A3C` | getters `*(self+4)+OFFSET` sur les 3 familles de widgets de `func_08004C68` (saisie texte, confirmation, sélecteur) | 8 (w15) | `95de198`, `bbf7765`, `476d93c` |
-| `func_08007078`, `func_0800598C`, `func_0806E9D8` | constructeurs de placement des mêmes 3 familles de widgets (stamp vtable, `operator new`, init opaque, stocke à `self+4`, `return self`) | 8 (w15) | `476d93c`, `9c50133` |
-| `func_08008DB8` | wrapper `m4aSongNumStartOrChange` (troncature u16) | 8 (w15) | `b7e035a` |
-| `func_0800711C` | accesseur pointeur+offset (`self + 0x461C`) NON catalogué, ex-`.byte` bruts juste après le pool littéral de `func_08007110` | 9 (w18) | `4329ae7` |
-| `func_0800057C`, `func_08000580`, `func_08000584`, `func_08000590` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_08000568` : 2 stubs placement-new (`operator new(size_t,void*)`/`new[]`), 2 thunks vers `operator new`/`delete` (forme identique à `__builtin_vec_new`/`__builtin_vec_delete` déjà compilés dans `src/new.cc`) | 9 (w18) | `7fd2ab1` |
-| `func_080099EC`, `func_08009A04`, `func_08009A2C`, `func_08009A38` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_080099D4` : 2 constructeurs qui stampent des vtables déjà connues (`vtable_unk_080E5BB4`/`080E5BD8`/`080E5BE8`), 1 prédicat "sentinelle vide" assorti, 1 utilitaire sans rapport (test non-nul branchless) | 9 (w18) | `d417e87` |
-| `func_080100F0`, `func_08010104`, `func_08010118`, `func_08010128`, `func_08010138`, `func_08010148`, `func_0801014C` | 7 accesseurs NON catalogués, ex-`.byte` bruts après `func_0801004C` : 6 lisent le global déjà connu `gUnk_0300040C` à divers offsets constants, 1 retourne une constante entière brute | 9 (w18) | `dc8fd26` |
-| `func_08008A68` | teardown de `func_08008980` (registre du root object démarrage, `AgbMain`/`func_0801004C`) | 9 (w21) | `2bab4c4` |
-
-## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
-le premier slot déclaré
-
-Confirmé round 6 en lisant les octets bruts de `vtable_unk_080E5A88`
-(`func_08004C54`, déjà vérifiée bit-exact round 4) directement dans
-`baserom.gba` : mot0/mot1 = `0`, mot2 (offset +8) = le destructeur, mot3
-(offset +12) = la méthode virtuelle suivante déclarée. **Toute classe C++
-écrite dans ce dépôt pour matcher un vtable existant doit donc compter
-le premier slot utile à l'offset +8, pas +0** -- une classe locale avec UNE
-SEULE méthode virtuelle déclarée (pas de destructeur) place cette méthode
-à l'offset +8 automatiquement, ce qui matche directement le pattern
-`ldr rX, [rY, #8]` vu dans la famille des "23 destructeurs riches"
-(`func_08004C54`) sans qu'il faille ajouter un destructeur ou une méthode
-placeholder pour "pousser" le slot -- la première tentative round 6 a fait
-exactement cette erreur (ajouté un destructeur virtuel + une méthode
-placeholder en pensant "reconstituer" 3 slots utiles) et a produit
-l'offset +16 au lieu de +8, corrigé en ne déclarant QUE la méthode
-réellement appelée.
-## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
-
-Contrairement à un fichier `asm/*.s` monolithique en `.text` implicite,
-`asm/code_linkonce.s` a QUELQUES (4, pas une par fonction) `.section
-".text.code_ADDR"` explicites regroupant chacune plusieurs fonctions --
-le découpage suit la MÊME méthode générale que le fichier monolithique
-(cf. section dédiée plus haut), sauf sur un piège spécifique :
-
-**Un wildcard `*(.gnu.linkonce.t.NOM_MANGLE)` dans `fomt.lds`, placé
-juste après une entrée `asm/code_linkonce.o(.text.code_ADDR)`, N'EST
-PAS FORCÉMENT INERTE.** Round 5 (`func_080E09B0`) : ce wildcard matchait
-en réalité une vraie instanciation de template C++ de ~60 octets,
-compilée depuis un fichier `.cc` DÉJÀ porté ailleurs dans le dépôt
-(`src/script_engine.cc` ici), et occupant un vrai gap d'adresses juste
-AVANT la section `.text.code_ADDR` suivante (pas après celle qu'on
-découpe). Symptôme si on se trompe d'ordre : `make compare` échoue avec
-UN GROS bloc de diffs contigu (pas un near-miss de quelques octets) qui
-démarre PILE à l'adresse de la fonction découpée et s'arrête pile à la
-frontière de la section suivante -- diagnostic rapide : comparer
-`fomt.map` (adresse réellement assignée à l'objet fraîchement séparé)
-à l'adresse attendue (son nom `code_ADDR`) ; si elles ne correspondent
-pas, c'est un problème d'ORDRE des entrées dans `fomt.lds`, pas un
-problème de contenu du `.s`/`.cc`. **Règle pratique : les nouvelles
-entrées `src/code_ADDR.o(.text)` / `asm/code_ADDR_suivant.o(.text)`
-doivent être insérées immédiatement après l'entrée
-`asm/code_linkonce.o(.text.code_ADDR_section)` d'origine, AVANT tout
-wildcard `*(.gnu.linkonce.t...)` qui suivait déjà cette entrée dans le
-`fomt.lds` d'origine** -- ne jamais supposer qu'un tel wildcard est un
-vestige inerte sans avoir vérifié son adresse assignée dans `fomt.map`
-sur un build propre AVANT de toucher au fichier.
-
-## La famille "riche" des ~37 destructeurs à teardown d'enfant (round 6)
-
-Layout désormais caractérisé (voir commit `ef58287`, 4 matchs) : `self+4`
-contient un pointeur brut vers un objet enfant (alloué par
-`__builtin_new`, ex. 0x1A0 octets pour la famille de `func_08004BDC`,
-construit par `func_080041DC`). **Le pointeur de dispatch de cet enfant
-vit à l'offset +4 DE LUI-MÊME, pas +0** -- confirmé en lisant
-`func_080041DC` : elle appelle `func_08008574` sur l'objet neuf AVANT de
-stamper `vtable_unk_080E5A5C` à `[r7, #4]`, cohérent avec un sous-objet
-non-polymorphe de 4 octets en tête (offset 0) suivi de la partie
-polymorphe (vtable à +4) -- typique d'un héritage multiple où la base
-polymorphe n'est pas listée en premier. Le rôle exact de ce sous-objet
-de 4 octets (`func_08008574`) n'est PAS caractérisé -- **ne pas
-inventer sa classe C++** : porter ces destructeurs comme pointeur brut
-(`void**`/arithmétique d'adresses), pas comme appel de méthode C++,
-exactement le corps utilisé dans `src/code_0800371C.cc` (et ses 3
-soeurs) :
-```c
-void *child = *(void **)((char *)self + 4);
-if (child != nullptr) {
-    void **vt = *(void ***)((char *)child + 4);
-    void (*fn)(void *, int) = (void (*)(void *, int))vt[2];
-    fn(child, 3);
-}
-```
-Toutes les fonctions de cette famille partagent EXACTEMENT ce corps,
-seule la constante `vtable_unk_ADDR` propre change -- vérifié bit-exact
-sur les 4 premiers cas via harnais rapide (compilateur+assembleur, sans
-lien) puis `make compare` en rebuild propre (x2).
-
-**Scan complet des 47 sites `bl func_080007EC`** (script en
-`/tmp/.../scratchpad/callsites.txt` de la session round 6, non commité,
-à refaire au besoin) : 37 sur 47 matchent ce patron "riche" (les 10
-autres restent la variante "vide" de `func_08004C54`/`func_080E09B0`,
-ou un autre patron pas encore vu). Triés par adresse croissante :
-~~0800371C, 08004BDC, 080059D0, 080070A4~~ (matchés round 6, `ef58287`),
-~~080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04, 08069E58, 0806D918,
-0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44, 0807F5B0,
-0808048C~~ (matchés round 6, worktree w11, commits successifs -- 11 en
-variante 2-enfants + 3 en variante 1-enfant, cf. tableau ci-dessus),
-08080DC4, 08081A70, 08082144, 08083AEC, 08085528, 080881AC, 0808AB68,
-0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0, 08093A88 (**ceux-ci
-restent à traiter, cf. worktree w12**), ~~0809A518, 080B3C0C, 080BC8C0,
-080C7ED0~~ (matchés round 6, worktree w7), 080C0D44, 080E41B0 (restent
-à traiter). **8 + 14 = 22 matchés sur les 37 sites de la famille**, 15
-restants (worktree w12 en cours sur la seconde moitié de la liste
-restante).
-ou un autre patron pas encore vu). Triés par adresse croissante :
-0800371C, 08004BDC (**4 premiers, matchés round 6**), 080059D0,
-080070A4, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
-08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
-0807F5B0, 0808048C, 08080DC4, 08081A70, 08082144, 08083AEC, 08085528,
-080881AC, 0808AB68, 0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0,
-08093A88, 0809A518, 080B3C0C, 080BC8C0, 080C0D44, 080C7ED0, 080E41B0.
-**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante** ;
-un worktree parallèle (w7) travaille la seconde moitié -- pas de
-recoupement possible, worktrees git séparés.
-ou un autre patron pas encore vu). Triés par adresse croissante,
-~~biffés~~ = matchés :
-
-~~0800371C~~, ~~08004BDC~~ (4 premiers, matchés round 6), ~~080059D0~~,
-~~080070A4~~, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
-08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
-0807F5B0, 0808048C, ~~08080DC4~~, ~~08081A70~~, ~~08082144~~,
-~~08083AEC~~, ~~08085528~~, ~~080881AC~~, ~~0808AB68~~, ~~0808C59C~~,
-~~0808ED08~~, ~~08090E84~~, ~~080925C4~~, ~~080931E0~~, ~~08093A88~~,
-~~0809A518~~, ~~080B3C0C~~, ~~080BC8C0~~, ~~080C0D44~~, ~~080C7ED0~~,
-~~080E41B0~~.
-
-**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante ;
-worktree w7 a pris `0809A518`/`080C7ED0`/`080BC8C0`/`080B3C0C`.
-Round 7 (worktree w12) a pris les 15 derniers de la liste restante**
-(`08080DC4` -> `080E41B0`, en incluant les 13 sites plus tard vus dans
-`asm/code_0805E760.s`, `080C0D44` dans `asm/code_080BC8F0.s`, et
-`080E41B0` dans `asm/code_linkonce.s`) -- **les 15 ont matché du premier
-coup**, tous suivant l'un des 3 corps déjà connus (2-enfants façon
-`func_0809A518` pour 13 d'entre eux, 1-enfant façon `func_080B3C0C` pour
-`func_080C0D44`), sauf `func_080E41B0` qui introduit une 4e variante,
-voir section dédiée juste en dessous.
-
-**Il ne reste plus que `080521BC` à `0808048C` (13 sites) à traiter dans
-cette famille** -- pris par un autre worktree en parallèle (w11) au
-moment du round 7, cf. répartition ci-dessus.
-
-### Variante "sans restamp de vtable propre" (round 7, `func_080E41B0`)
-
-Un seul site vu jusqu'ici sur les 15 traités ce round : `func_080E41B0`
-a exactement le corps "2 enfants" (`self+8` plain puis `self+4` MI, même
-ordre, même `_call_via_r2`/arg `3`) mais **ne stocke aucune valeur à
-`[r4]` (self+0) et ne référence aucun littéral `vtable_unk_ADDR`** --
-confirmé en lisant le désassemblage brut au complet, aucune instruction
-`str r0, [r4]` ni pool littéral pour une vtable dans le corps entier. Ne
-pas deviner pourquoi (candidats non vérifiés : classe intermédiaire dont
-le vtable stamp est fait ailleurs par un caller, ou un cas où le
-compilateur a pu élider un stamp redondant) -- porté strictement tel
-quel : la struct C locale garde un champ `unk_00` (offset 0) jamais
-écrit, seuls `unk_04`/`unk_08` sont lus. Confirmé bit-exact via
-`make compare` en rebuild propre. **Si un futur site montre ce même
-manque de stamp, vérifier d'abord s'il partage un point commun
-structurel avec `func_080E41B0`** (ex. serait-il appelé UNIQUEMENT
-depuis un autre destructeur "riche" déjà-stampé plutôt que directement
-depuis une vtable ?) avant de généraliser une explication.
-
-## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
-## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
-## Piège `SmartPtr<T>` : ne jamais nommer localement une valeur de retour
-
-`SmartPtr<T>::SmartPtr(SmartPtr&)` (`include/smart_ptr.hh:47`) est
-**privé et no-op** (ne recopie même pas `inner`). Conséquence directe
-pour tout `Run()`/méthode qui retourne un `SmartPtr<T>` par valeur :
-`SmartPtr<T> ret(ptr); return ret;` **ne compile pas** (tentative
-d'appel au copy-ctor privé). Le seul idiome correct est de construire
-le temporaire directement dans l'expression `return` :
-`return SmartPtr<T>(ptr);` -- le compilateur construit alors la valeur
-directement dans le slot de retour caché (convention ABI CFront/ARM
-pour les types à destructeur non-trivial, cf. `func_08004C68` round 6
-pour l'analyse complète du pourquoi `SmartPtr<T>`, malgré ses 4 octets,
-suit cette convention plutôt que `r0` direct).
-
-## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
-
-1. ~~`func_080E09B0`~~ -- matché round 5.
-2. La famille de ~22 destructeurs "plus riches" restants (vtable +
-   teardown d'enfant) -- round 6 a montré que TOUS ne partagent pas
-   forcément le shape "appel virtuel" initialement supposé
-   (`func_08010158` s'est avéré une 3e variante, appels DIRECTS
-   uniquement, matchée du premier coup) : **re-scanner chaque site avant
-   de le classer "virtuel/dur"**, certains matcheront aussi facilement
-   que `func_08010158`. Pour ceux qui montrent vraiment un dispatch
-   virtuel sur le champ enfant (`ldr [r1,#4]; ldr [r0,#8]; bl
-   _call_via_r2`), toujours **ne pas deviner le layout du champ enfant à
-   l'offset +4 avant de le caractériser côté dépôt patch** (Ghidra sur
-   2-3 exemples).
-2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
-   d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
-   enfant à l'offset +4 avant de le caractériser côté dépôt patch**
-   (Ghidra sur 2-3 exemples).
-2. ~~4 premiers de la famille "riche"~~ -- matchés round 6
-   (`func_0800371C`, `func_08004BDC`, `func_080059D0`, `func_080070A4`,
-   commit `ef58287`). **Reste ~33 sites de la même famille** (liste
-   complète ci-dessus) -- même corps exact, changer seulement la
-   constante `vtable_unk_ADDR` par site ; mécanique de découpage `.s`
-   déjà rodée sur 4 exemples (dont un découpage triple dans un même
-   fichier, `asm/code_08004C68.s` -- attention au piège vécu round 6 :
-   NE PAS oublier une fonction non-portée intercalée entre deux
-   découpages dans le même fichier, cf. `func_080070D4` oubliée puis
-   retrouvée via `undefined reference` au link).
-2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
-   d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
-   enfant à l'offset +4 avant de le caractériser côté dépôt patch**
-   (Ghidra sur 2-3 exemples).
-2. ~~La famille de ~23 destructeurs "plus riches"~~ -- layout du/des
-   champ(s) enfant CARACTÉRISÉ round 6 (`w7`), directement depuis le
-   désassemblage (pas besoin de Ghidra en fait) : voir la section
-   "Layout des vtables sous `-fvtable-thunks`" ci-dessus. 4 exemples
-   matchés round 6 (`func_0809A518`, `func_080C7ED0`, `func_080BC8C0`,
-   `func_080B3C0C`). Reste ouvert : les ~19 autres sites de la famille
-   (le round 6 n'a traité que la moitié haute des adresses,
-   `code_linkonce.s` compris, pas encore attaqué -- cf.
-   `SESSION_NOTES.md` round 6 "What's left in this family").
-3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-3. **`func_08004C68` (round 6, tenté, NON convergé ; round 8/w15, callees
-   attaqués, toujours NON tenté sur la fonction elle-même)** : identifié
-   avec certitude structurelle comme `Run()` de la classe scène de
-   l'enregistrement #12 (séquence de saisie New Game : nom joueur,
-   sélecteur 1 octet, nom ferme, nom chien -- voir round 6 pour le
-   détail complet du layout `+0x04`/`+0x14`/`+0x24`/`+0x28`).
-   **Round 8 (worktree w15) a matché 10 de ses 15 callees listées**
-   (voir tableau des matchs + `SESSION_NOTES.md` round 8) : les 3
-   familles de widgets (saisie texte, écran confirmation, sélecteur)
-   partagent toutes la même forme "constructeur de placement" (stamp
-   vtable, `operator new(SIZE)`, appel d'init opaque, stocke à
-   `self+4`, `return self`) -- généralise gratuitement, aucun
-   shape-hunting nécessaire une fois la forme identifiée une fois.
-   **Reste bloqué par 4 callees** (round 9/w21 a matché `func_08008A68`
-   et re-classé `func_0806EA30` -- voir ci-dessous) :
-   - `func_080070D4`/`func_08005A00`/`func_0806EA30` (**3 sites, pas 2**
-     -- round 9/w21 a confirmé que `func_0806EA30` est une 3e instance
-     BYTE POUR BYTE IDENTIQUE de la même forme, pas un cas "pression de
-     registres" séparé comme classé par erreur round 8 ; seul le callé
-     opaque diffère, `func_0806DB38` au lieu de `func_08005B68`/
-     `func_080050F8`) : "assignation de champ SmartPtr", analysé en
-     profondeur rounds 8 ET 9, **classe de difficulté nouvelle et
-     distincte** de la classe "pression de registres" et du piège
-     `SmartPtr<T>` déjà connu (voir section dédiée `SESSION_NOTES.md`
-     rounds 8 et 9) -- ni pression de registres ni ABI infaisable, un
-     vrai problème de FORME C++ non résolu. **7 hypothèses testées au
-     total (4 round 8 + 3 round 9), toutes négatives** : syntaxe `=` vs
-     `()` pour l'init (identique, même échec de compilation), convention
-     out-param explicite (compile mais produit une forme vérifiablement
-     différente -- confirme que `field` n'est PAS un `SmartPtr<T>*`
-     passant par `operator=(T*)`, sinon l'ancienne valeur de `field`
-     serait lue/comparée, ce qui n'apparaît jamais dans la cible), alias
-     manuel reproduisant l'exact désassemblage (agbcp le promeut
-     entièrement en registres et l'élimine, encore plus agressivement
-     que la tentative round 8 #1). **Règle généralisable découverte round
-     9** : le peephole d'élimination dead-store/dead-load d'agbcp n'est
-     PAS étroit ("une seule variable, même expression" comme
-     qualifié prudemment round 8) -- empiriquement, il s'applique à
-     **toute variable locale dont l'adresse est prise, tant que son
-     cycle de vie complet (écriture, lecture, aliasing) reste visible
-     dans UNE fonction sans que l'adresse ne s'échappe vers un appel
-     externe opaque** ; le seul cas sur les 7 testés qui n'a PAS été
-     replié est celui où `&tmp` s'échappe précisément vers l'appel
-     opaque `func_08005B68` (convention out-param) -- mais cette forme
-     ne matche pas la cible pour une autre raison (le compare sur
-     l'ancienne valeur de `field`). **Piste concrète non encore testée**
-     (round 9, à essayer en priorité round 10) : combiner LES DEUX
-     ingrédients qui marchent séparément -- construire `tmp` via la
-     convention hidden-return-value (`SmartPtr<Widget> tmp =
-     func_08005B68(arg);`, seule forme de construction qui compile ET ne
-     pré-zéro pas, cohérent avec le désassemblage) **ET** typer `field`
-     comme `T**`/`void**` BRUT (jamais `SmartPtr<T>*`), pour qu'aucune
-     surcharge `operator=` ne puisse jamais être sélectionnée quelle que
-     soit la forme de l'assignation. Cette combinaison précise n'a été
-     essayée par aucun des deux rounds.
-   - `func_08008980` : **caractérisée en détail round 9/w21** (voir
-     `SESSION_NOTES.md` round 9) -- confirmée classe "pression de
-     registres" par inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants
-     simultanément sur tout le corps), PLUS un double-stamp de vtable
-     inexpliqué sur un sous-objet (même question ouverte que le piège
-     `SmartPtr<T>` sous-classe pour `func_08004C68`). **Pas attaquée**,
-     cohérent avec la règle "ne pas retenter cette classe sans budget
-     dédié" -- c'est ici la première vraie inspection (pas une retentative
-     à l'aveugle), donc la classification est maintenant fiable plutôt
-     que suspectée.
-   - ~~`func_08008A68`~~ -- **matchée round 9/w21** (`2bab4c4`) : utilise
-     seulement `r4-r7`, pas `r8`/`sb`/`ip` -- shape simple malgré le
-     voisinage avec `func_08008980`, matchée du premier coup.
-   **Avant de retenter `func_08004C68` elle-même** : soit fermer ces 4
-   callees, soit au minimum établir un prototype `extern "C"` correct
-   pour chacun (ce qui NE nécessite PAS de les porter bit-exact --
-   suffit pour les appeler depuis `func_08004C68` en tant que boîte
-   noire, cf. le principe déjà utilisé pour les 12 callees listées dès
-   le round 6). Le double-stamp de vtable (piège `SmartPtr<T>`, sous-
-   classe C++ réelle avec override de la méthode virtuelle pure) reste
-   une question ouverte indépendante des callees, à re-traiter au
-   moment de l'attaque de la fonction elle-même.
-4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-3. ~~`func_0804E4AC` (`DrawGlyphAt`, plain)~~ -- **RETIRÉE de la liste des
-   cibles priorisées (round 8, worktree w16), pas juste dépriorisée.**
-   Historique : round 3, échec total (20 octets d'écart dès la 1re
-   instruction) ; round 6, shape-hunt systématique convergé à un near-miss
-   d'UNE instruction de 2 octets (250/252 octets, spill+reload redondant de
-   `tile_x` avant le blit BR) ; round 7, piste "profondeur d'imbrication"
-   testée et fermée (aucun effet isolable de la profondeur syntaxique,
-   confondue avec la pression de registres réelle) ; round 8, piste "ce qui
-   se passe entre les appels `CpuFastSet` de BL et TR" testée et fermée --
-   tracé instruction par instruction (les deux zones BL->TR et TR->BR),
-   AUCUNE des deux ne touche `r4`(`tile_x`)/`r5`/`r8`, donc aucun effet de
-   bord n'explique le spill à cet endroit précis. **4 tentatives sérieuses,
-   3 reconstructions C indépendantes retombant sur EXACTEMENT le même écart
-   d'1 instruction** -- signal net d'un mur d'allocateur de registres réel
-   (probablement un artefact interne à `agbcp`, slot de spill réservé tôt
-   par une passe puis consommé opportunément par une passe ultérieure au
-   site d'usage textuellement LE PLUS TARDIF, indépendant de toute
-   restructuration C testée). Voir `SESSION_NOTES.md` round 8 pour le détail
-   complet (2 probes empiriques supplémentaires testées et négatives : ordre
-   de déclaration inversé -> écart PIRE, 118/121 ; lecture forcée via
-   pointeur `volatile` de `tile_x` juste au site BR -> bien pire, 132
-   instructions). **Ne pas retenter sans idée réellement nouvelle non
-   couverte par les rounds 3/6/7/8** -- si retenté un jour, la seule piste
-   non essayée identifiée est de comparer avec la décompilation Ghidra
-   amont de `StanHash/fomt` pour cette adresse, si elle existe, plutôt que
-   de continuer le shape-hunting à l'aveugle. `func_0804E5AC` (variante
-   recoloration, même forme attendue) n'a jamais été tentée -- pas la peine
-   avant que le corps plain ne matche.
-4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
-   `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
-   NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
-   pointeur de recherche -- si/quand cette fonction est portée ICI,
-   lui donner un nom neutre côté vanilla, pas ce nom-là littéralement,
-   cf. règle "point de vue vanilla" ci-dessus), table de dispatch
-   script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
-   "pression de registres", cf. section dédiée ci-dessus -- pas sans
-   gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
-   cf. règle "point de vue vanilla" ci-dessus), `Unpack` (`0x080D102C`,
-   référence Python déjà disponible côté patch repo), table de dispatch
-   script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
-   "pression de registres", cf. section dédiée ci-dessus -- pas sans
-   gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
-   cf. règle "point de vue vanilla" ci-dessus), `Unpack` (`0x080D102C`,
-   référence Python déjà disponible côté patch repo), table de dispatch
-   script (`0x0803F900`), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
-   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
-4. ~~`Unpack` (`0x080D102C`)~~ -- **retiré définitivement** de cette
-   liste (round dédié worktree `parallel-1`) : classe "ABI partagée
-   entre `bl`", structurellement infaisable en C, cf. section dédiée
-   ci-dessus. Ne pas re-tenter.
-5. ~~`func_08010F04`, `func_08010F1C`~~ -- matchés round 7 (w14), voir
-   tableau des matchs ci-dessus. ~~Piste annexe découverte en les
-   portant~~ : le getter GameState NON catalogué à `0x08010F14` (7 bits
-   `P=2` d'un halfword `self+2`, adjacent au champ `func_08010F0C` sur
-   le même mot `self+0`) est désormais **matché round 8 (w17)**, voir
-   tableau des matchs ci-dessus (`func_08010F14`, commit `05e966f`).
-   Aucun appelant symbolique trouvé dans `asm/`/`src/` (grep négatif) --
-   piste non explorée plus loin : peut-être appelé via une table
-   indirecte, ou mort. Aucun symbole officiel trouvé ailleurs (Ghidra/
-   dépôt patch non consultés ce round, nom `func_ADDR` gardé par défaut).
-4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
-   la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté
-   dépôt patch). Dimensionnée round 6 : 0x6F4 octets (~800 lignes de
-   `.s`), prologue `push {r4,r5,r6,r7,lr}; mov r7,sl; mov r6,sb` --
-   signature "pression de registres" identique à `DrawGlyphAt`/
-   `func_0805E790`. **Pas tentée, même classe de difficulté, pas de
-   budget dédié.**
