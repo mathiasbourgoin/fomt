@@ -576,3 +576,48 @@ jamais utilisée dans ce dépôt).
   successifs (`__builtin_new` puis un helper 7-8 arguments). Ne pas
   tenter sans budget dédié ; utilisables en boîte noire par des wrappers
   dérivés plus simples (cf. `func_0803BF78` ci-dessus).
+- **Famille "entity factory" `func_080324BC`, 3 sites restants** (round
+  worktree w40 a matché 38 des 41 sites connus, cf. `SESSION_NOTES.md`) :
+  `asm/code_080E41E8.s`, `asm/code_entities_080320DC.s` (2 sites),
+  `asm/code_entities.s` (1 site) contiennent chacun un appel `bl
+  func_080324BC` avec exactement le même shape (alloc 0x8c + store
+  f0/f4/f8/fc sur la pile + `func_080324BC(obj, ctx, kind, subkind, f0,
+  f4, f8, (bool)fc)`, callee traité en boîte noire). Candidat direct pour
+  un prochain round : même méthode, même prototype, piège `bool`/`char`
+  déjà documenté (`DECOMP_RULES.md` #13). `func_080324BC` lui-même reste
+  non porté (`r8`/`sb` utilisés tout du long -- signal "pression de
+  registres", pas attaqué).
+- **Famille "entity factory" `func_080324BC`, 3 sites restants -- statut
+  affiné round w42 (39e site matché, 2 restants reclassés)** : des 4 sites
+  d'appel `bl func_080324BC` recensés hors `code_entities_08034CEC.s`
+  (`asm/code_080E41E8.s` x1, `asm/code_entities_080320DC.s` x2,
+  `asm/code_entities.s` x1), un seul (`func_080E44E4`,
+  `asm/code_080E41E8.s`) était réellement une instance du shape exact des
+  38 déjà matchés (alloc 0x8c + store f0/f4/f8/fc sur la pile +
+  `func_080324BC(obj, ctx, kind, subkind, f0, f4, f8, (bool)fc)`, AUCUN
+  littéral `vtable_unk_ADDR` dans le bloc) -- **matché round w42**
+  (kind=5/subkind=27/a=1/b=0/c=0/d=false), byte-exact (harnais rapide +
+  réassemblage du bloc original avec les mêmes outils, cf. `git log`).
+  **Les 2 autres sites (`func_08032A00` dans
+  `asm/code_entities_080320DC.s`, `func_080222A8` dans
+  `asm/code_entities.s`) sont une SOUS-VARIANTE DIFFÉRENTE, pas le même
+  shape** : ici `self` est déjà alloué par l'APPELANT (passé en r0/r6, pas
+  de `bl __builtin_new` dans le bloc), le bloc délègue à `func_080324BC`
+  PUIS stampe sa PROPRE vtable à `self+4` juste après (`func_08032A00` :
+  `vtable_unk_080E6864` ; `func_080222A8` : `vtable_unk_080E64B4`, celui-ci
+  utilise en plus `r8` et appelle 2 helpers -- `func_08022320`/
+  `func_08022334` -- pour construire les 2 premiers arguments-pile avant
+  l'appel). Un 3e site (`func_08034A14`, `asm/code_entities_080320DC.s`,
+  91 lignes) est une fonction bien plus grosse et complexe (utilise
+  `r8`/`sb` tout du long, plusieurs `bl` vers des callees différents en
+  plus de `func_080324BC`) -- signal "pression de registres" au sens de
+  la classe documentée plus haut, PAS un simple wrapper, à ne pas confondre
+  avec la famille "entity factory". Vérifié par scan exhaustif des blocs
+  `thumb_func_start` de ces 3 fichiers (`bl __builtin_new` + AUCUN littéral
+  `vtable_unk_` + alloc 0x8c) : aucun autre candidat non catalogué du shape
+  exact trouvé dans ces 3 fichiers. **`func_08032A00`/`func_080222A8`
+  restent des cibles ouvertes** pour un futur round dédié à cette
+  sous-variante "self déjà alloué + stamp vtable propre après délégation"
+  (candidat de nommage/forme à documenter séparément, pas encore tenté).
+  `func_080324BC` lui-même reste non porté (`r8`/`sb` utilisés tout du
+  long -- signal "pression de registres", pas attaqué).
