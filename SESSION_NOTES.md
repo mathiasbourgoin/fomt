@@ -7906,3 +7906,134 @@ vtable_unk_080E85E8)` -- 1 commit, 107 vtables, 327/758 slots symbolisés.
   propre après commit.
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
+
+## Round w54 (worktree `parallel-54`) -- conversion du hook `franglais_farmer_stamina` en trampoline à taille fixe
+
+### Mission
+
+Convertir le hook C++ qui remplace `func_0800E4F0` (`src/farmer.cc`,
+"stamina du fermier") d'un remplacement de corps à taille libre vers un
+trampoline à taille FIXE identique à la fonction vanilla, suivant le
+même pattern déjà validé pour `func_0800912C`
+(`asm/code_08008DE8.s`, commit `f718114`/`4f55c43`) : `ldr r3, =PAYLOAD;
+bx r3` + `nop` de padding jusqu'à la taille vanilla exacte.
+
+### Localisation et taille vanilla mesurée
+
+Le hook vit dans `src/farmer.cc` (fonction déjà "matchée", pas un
+`asm/*.s`) : `func_0800E4F0` appelait un pointeur de fonction brut vers
+`FRANGLAIS_franglais_farmer_stamina` (`0x08801074`, défini dans
+`include/franglais_poc.hh`), un corps C++ entier (pas de l'assembleur à
+la main), donc de taille non contrôlée directement.
+
+Taille vanilla mesurée par désassemblage direct de `baserom.gba` (repris
+depuis le checkout principal `~/dev/jeux-langues-assets/fomt-decomp`,
+absent -- gitignoré -- de ce worktree, copié dedans sans toucher à rien
+en dehors) :
+```
+arm-none-eabi-objdump -D -b binary -m arm -Mforce-thumb --adjust-vma=0x08000000 \
+  --start-address=0x0800E4F0 --stop-address=0x0800E500 -EL baserom.gba
+0800e4f0: adds r0, #0x44 ; ldrh r0,[r0,#0] ; lsls r0,r0,#17 ; lsrs r0,r0,#24 ; bx lr ; (pad 2 octets)
+```
+= **0xC octets (12) exactement**, cohérent avec `next_addr - this_addr`
+(`func_0800E4FC - func_0800E4F0 = 0xC`).
+
+### Fix appliqué
+
+Remplacé le corps C++ libre par une fonction `NAKED` (`EC NAKED unsigned
+int func_0800E4F0(...)`, macro déjà utilisée ailleurs dans le dépôt --
+précédent : `func_08034F00` dans `src/npc_entity.cc`) contenant de
+l'assembleur brut via `asm_unified(...)`, EXACTEMENT sur le modèle de
+`func_0800912C` : `ldr r3, =LITERAL; bx r3` (4 octets) + 2 `nop` (4
+octets) + `.align 2,0` + littéral `.4byte 0x08801075` (adresse payload
+avec bit thumb posé, 4 octets) = 12 octets pile. `r0` contient déjà
+`&self` à l'entrée (même convention d'appel que le vanilla, qui utilisait
+aussi `r0` comme pointeur `self`), donc passé tel quel au payload sans
+manipulation. Commentaire inline en ANGLAIS (règle non-négociable du
+dépôt), citant `func_0800912C`/`asm/code_08008DE8.s` comme précédent.
+Le littéral est codé en dur (pas de macro `FRANGLAIS_...` dans la chaîne
+asm -- le préprocesseur C n'expanse pas les macros à l'intérieur des
+littéraux de chaîne, donc impossible d'y référencer
+`FRANGLAIS_franglais_farmer_stamina` directement ; même limitation que le
+littéral hardcodé `0x08801871` déjà présent dans
+`asm/code_08008DE8.s` pour `franglais_read_keys`). L'`#include
+"franglais_poc.hh"` devenu inutile a été retiré de `src/farmer.cc`.
+
+### Vérification
+
+Environnement de build initialement cassé dans ce worktree (indépendant
+de ma modification) : `tools/agbcc/bin/` vide (agbcc/agbcp/old_agbcc
+absents), `tools/agbcc/lib/` absent (`libgcc.a`/`libc.a` manquants), et
+`baserom.gba` absent (gitignoré, spécifique à chaque worktree). Reconstruit
+depuis un répertoire de build agbcc déjà présent sur la machine
+(`/tmp/tmp.Cv88fZh1RY`, sources agbcc avec `agbcc`/`agbcp`/`old_agbcc`
+déjà compilés) : `make -C libgcc` / `make -C libc` pour produire les 2
+`.a` manquants, copie des binaires + includes + libs dans
+`tools/agbcc/{bin,include,lib}` de CE worktree uniquement (tous
+gitignorés, aucun impact sur `git status`), et copie de `baserom.gba`
+depuis le checkout principal. Rien touché en dehors de ce worktree.
+
+1. **Taille du `.o` fraîchement compilé** : `arm-none-eabi-objdump -d
+   build/src/farmer.o` -> `func_0800E4F0` à l'offset `0x19c`,
+   `func_0800E4FC` à `0x1a8` = **0xC octets**, identique à la taille
+   vanilla mesurée. Contenu exact : `4b01 4718 46c0 46c0 08801075`
+   (`ldr r3,[pc,#4] ; bx r3 ; nop ; nop ; .word 0x08801075`).
+2. **Lien complet propre** (`rm -rf build fomt.gba fomt.elf fomt.map` +
+   `head -c 4096 /dev/zero > build/franglais_stub.bin` + `make -j`) :
+   aucune erreur structurelle (référence non définie/définition
+   multiple). Seul `sha1sum -c fomt.sha1` échoue, ATTENDU (payload
+   franglais réel lié, cf. `DECOMP_RULES.md`/commit `cb06198`).
+3. **Delta avant/après mesuré précisément par `nm` sur l'ELF lié**, en
+   comparant à l'AMONT du hook (`func_0800E4E8`, hors de portée de ce
+   round, décalage `-208`/`-240` dû au hook `GetString` non corrigé dans
+   CE worktree) :
+   - **AVANT** ma correction (corps C++ libre, revert temporaire via
+     `git stash`) : `func_0800E4E8` lié à `0800e3f8` (delta amont
+     `-0xF0` = -240) ; `func_0800E4F0` (le hook) lié à `0800e400`
+     (même -240, point de départ) ; `func_0800E4FC` (juste après le
+     hook) lié à `0800e410` -- **delta `-0xEC` = -236**, soit le hook
+     ajoutait lui-même **+4 octets** de décalage local (taille compilée
+     16 octets au lieu des 12 vanilla).
+   - **APRÈS** ma correction : `func_0800E4E8` toujours à `0800e3f8`
+     (-240, inchangé, cause amont hors de portée) ; `func_0800E4F0` à
+     `0800e400` ; **`func_0800E4FC` à `0800e40c` -- delta `-0xF0` =
+     -240, IDENTIQUE à l'amont**. Le hook ne contribue plus AUCUN
+     décalage local (0 au lieu de +4). Vérifié aussi sur
+     `func_0800E504` (encore -240, aucune dérive supplémentaire en
+     aval).
+   - **Correction du chiffre annoncé dans la mission** : la consigne
+     initiale citait un décalage de -240 *supplémentaires* attribuables
+     à ce hook précis. La mesure réelle (avant/après isolé par `git
+     stash`) montre que la contribution locale RÉELLE du hook libre
+     était seulement de **+4 octets** (16 vs 12 vanilla), pas -240 --
+     le -240 global observé partout dans ce worktree est entièrement
+     dû au hook `GetString` en amont (traité par un autre agent en
+     parallèle), pas à `franglais_farmer_stamina`. Signalé ici pour que
+     `main` ajuste le décompte total attendu après fusion des deux
+     fixes : le hook `farmer_stamina` seul ne retire que 4 octets de
+     décalage cumulé, pas 240.
+4. **Vérification fonctionnelle en jeu (mGBA)** : NON EFFECTUÉE ce
+   round (hors budget) -- le comportement du payload lui-même
+   (`0x08801074`) n'est pas modifié par ce fix, seul le point
+   d'accroche change de forme (identique en taille et en effet : même
+   valeur de registre `r0`, même saut vers la même adresse `|1`), donc
+   risque fonctionnel jugé minimal, mais un test visuel mGBA reste à
+   faire pour confirmation complète (cf. mémoire projet "Toast visual
+   check pending" -- même type de vérification en attente).
+
+### Commit
+
+1 commit : conversion de `func_0800E4F0` en trampoline à taille fixe
+(`src/farmer.cc`), avec commentaire anglais citant le précédent
+`func_0800912C`.
+
+### État du worktree en fin de round
+
+- 1 fichier modifié dans git (`src/farmer.cc`), `git status --short`
+  propre après commit.
+- `baserom.gba` et `tools/agbcc/{bin,include,lib}` ajoutés dans ce
+  worktree pour permettre le build (gitignorés, n'apparaissent pas dans
+  `git status`) -- nécessaires pour tout futur round dans CE worktree
+  spécifique.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
