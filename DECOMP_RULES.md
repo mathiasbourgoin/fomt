@@ -29,9 +29,27 @@ vieilles notes.
 
 ## Discipline non négociable
 
-- **Ne jamais commiter un match qui ne matche pas.** `make compare` doit
-  passer bit-exact (`sha1sum -c fomt.sha1` réussi) avant TOUT commit
-  touchant `src/`, `asm/`, ou `fomt.lds`.
+- **Ne jamais commiter un match qui ne matche pas.**
+  **`sha1sum -c fomt.sha1` (ROM entière contre `baserom.gba`) NE PASSE
+  PLUS depuis le commit `cb06198`** ("port hooks to source build") : un
+  vrai payload franglais est maintenant lié dans la ROM (`fomt.lds`
+  référence `build/franglais_stub.bin`, absent d'un checkout nu -- un
+  `head -c 4096 /dev/zero > build/franglais_stub.bin` suffit pour faire
+  passer le LINK, pas le check sha1, qui échouera TOUJOURS même sur un
+  match parfait puisque la ROM est désormais intentionnellement non-
+  vanilla). **Nouveau standard de vérification** (`main`, confirmé avec
+  Mathias) : vérifier CHAQUE fonction ISOLÉMENT --
+  1. taille du `.text` du `.o` fraîchement compilé comparée à
+     `next_addr - this_addr` (`arm-none-eabi-objdump -h build/src/code_ADDR.o`) ;
+  2. diff de désassemblage borné à cette taille exacte contre l'original
+     (`--adjust-vma=0x08000000`, piège déjà documenté plus bas) ;
+  3. optionnellement, un lien complet (avec le `franglais_stub.bin`
+     factice ci-dessus) pour vérifier l'absence d'erreur structurelle
+     (référence non définie, définition multiple) -- ça prouve l'absence
+     de régression de lien, pas la correction de la fonction elle-même.
+  Le harnais rapide (compilateur+assembleur sans lien, section dédiée
+  plus bas) reste la meilleure vérification PENDANT le tâtonnement, quel
+  que soit ce standard.
 - Toujours vérifier via un **rebuild propre**, pas juste le dernier `make`
   incrémental : `rm -rf build fomt.gba fomt.elf fomt.map && make compare`.
   Le coût est faible (~5-10s pour ce dépôt), donc pas de raccourci.
@@ -46,6 +64,23 @@ vieilles notes.
   soit utiliser `git add -A` sans restriction (puis vérifier `git status`
   avant de commiter), soit lister explicitement CHAQUE fichier modifié/
   supprimé/ajouté.
+- **Avant de créer un nouveau worktree avec `git worktree add ... main`,
+  vérifier que le checkout principal est vraiment SUR `main`** (`git
+  branch --show-current`), pas juste faire confiance au nom de branche
+  passé en argument. Bug réel vécu : le checkout principal s'est
+  retrouvé basculé sur une autre branche locale (`franglais-poc`, créée
+  par un agent externe) sans que personne ne le remarque -- tous les
+  merges ont continué à landing sur cette branche, `main` est resté figé
+  ~19 commits en arrière pendant plusieurs heures, et deux nouveaux
+  worktrees ont été créés par erreur depuis ce `main` périmé (détecté
+  seulement en comparant `git log --oneline -3` du nouveau worktree
+  contre le checkout principal -- décalage flagrant). Fixé par fast-
+  forward (`git branch -f main franglais-poc && git checkout main`) une
+  fois confirmé que les deux branches n'avaient pas divergé
+  (`git merge-base --is-ancestor main franglais-poc`). Réflexe : après
+  toute intervention d'un agent externe sur ce dépôt, revérifier
+  `git branch --show-current` avant de continuer à merger/créer des
+  worktrees.
 - **Après un merge, même sans conflit signalé par git : chercher les
   doublons silencieux.** Bug réel vécu (merge `parallel-18`, commit
   documenté dans `git log`) : deux worktrees indépendants peuvent chacun
@@ -249,6 +284,40 @@ supposer que c'est la pièce manquante d'un near-miss sans l'avoir vérifié
 (confusion vécue round 9/w21, corrigée : le `// TODO` du header porte
 sur autre chose).
 
+### 10. Taille d'une allocation (`operator new(SIZE)`) : toujours un
+littéral hex simple, jamais la décomposition `movs #k; lsls #n` à la main
+
+Quand le désassemblage montre une taille d'allocation matérialisée via
+`movs #k; lsls #n` (ex. `0xe2 << 3` pour `0x710`), écrire directement le
+littéral final en C (`operator new(0x710)`) -- **ne pas** essayer de
+reproduire la décomposition shift à la main. agbcp choisit lui-même
+l'encodage depuis la valeur littérale simple, aussi bien pour les tailles
+shift-décomposables (`k<<n`, `k` tenant sur 8 bits) que pour celles qui
+retombent sur un vrai chargement depuis le pool littéral (aucune
+décomposition `k<<n` possible, ex. `0xB78`/`0x98C`) -- vérifié bit-exact
+sur 18 sites round 10 sans qu'aucun n'ait nécessité d'écriture manuelle
+de la constante. Généralisation directe de l'anti-pattern #1 (masques) à
+un autre contexte de matérialisation de littéral : laisser le
+compilateur choisir la forme, ne pas la deviner depuis le désassemblage.
+
+### 11. Un "spill" apparent avant un mur de pression de registres peut
+être une variable-copie explicite de la source, pas un artefact
+d'allocateur
+
+Avant de conclure qu'un near-miss d'1 instruction sur une fonction à
+forte pression de registres est un mur d'allocateur (irrécupérable) :
+vérifier si le désassemblage relit une valeur depuis un emplacement
+mémoire/registre DIFFÉRENT de celui où elle vient d'être écrite. Si oui,
+c'est probablement une VARIABLE-COPIE explicite dans la source C
+originale (`u32 br_tile_x = tile_x;` -- l'écriture initiale EST le
+"spill" apparent, sa seule relecture plus tard EST le "reload" apparent),
+pas un artefact de l'allocateur. A débloqué `DrawGlyphAt`/`func_0804E4AC`
+(round 9, agent `fable`) après 4 tentatives fermées à tort comme "mur
+d'allocateur agbcp" -- voir `DECOMP_ARCHIVE.md` pour le détail complet
+(4 variantes du même idiome dans une seule fonction). Généralise à toute
+future cible de la classe "pression de registres" : chercher l'aliasing
+explicite avant d'abandonner.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
@@ -268,6 +337,22 @@ utilise déjà `r8`/`sb`/`sl`/`ip` simultanément dans le corps (pas juste au
 prologue/épilogue), ou si un registre `r0`-`r3` est réutilisé après un
 `bl` sans rechargement visible, s'arrêter et lire `DECOMP_ARCHIVE.md`
 avant de continuer.
+
+**Stratégie d'escalade sur une cible bloquée (préférence de Mathias)** :
+`DrawGlyphAt` (round 9, worktree `w22`) a montré qu'un modèle `fable`
+peut débloquer une cible "pression de registres" fermée après plusieurs
+échecs `sonnet` -- l'idée neuve manquait, pas l'exécution. Deux options
+d'escalade, dans cet ordre de préférence :
+1. **Plus économe (préférée)** : demander à un agent `fable` seulement
+   des PISTES/hypothèses neuves sur la cible bloquée (pas d'exécution),
+   puis confier ces pistes à un agent `sonnet` pour les tenter. La valeur
+   de `fable` ici est l'angle créatif, pas le travail d'exécution brut.
+2. **Plus coûteuse (repli)** : dédier un agent `fable` complet à
+   l'attaque de bout en bout (ce qui a été fait pour `DrawGlyphAt`,
+   justifié par 4 échecs `sonnet` déjà accumulés sur exactement le même
+   écart).
+Par défaut, préférer l'option 1 sauf si la cible a déjà échoué plusieurs
+rounds ou bloque un bug ouvert (justifiant le coût de l'option 2).
 
 ## Méthode de découpage d'un fichier `asm/*.s` monolithique
 

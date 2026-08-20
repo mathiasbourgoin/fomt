@@ -8723,24 +8723,3 @@ func_080C0CA4: @ 0x080C0CA4
 	pop {r0}
 	bx r0
 	.align 2, 0
-
-	thumb_func_start func_080C0D1C
-func_080C0D1C: @ 0x080C0D1C
-	push {r4, r5, lr}
-	adds r4, r0, #0
-	adds r5, r1, #0
-	ldr r0, .L080C0D40 @ =vtable_unk_080E8544
-	str r0, [r4]
-	movs r0, #0xc4
-	lsls r0, r0, #3
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_080BC938
-	str r0, [r4, #4]
-	adds r0, r4, #0
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L080C0D40: .4byte vtable_unk_080E8544
-

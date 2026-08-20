@@ -45,6 +45,15 @@ gardée ici.
 | `func_080099EC`, `func_08009A04`, `func_08009A2C`, `func_08009A38` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_080099D4` : 2 constructeurs qui stampent des vtables déjà connues, 1 prédicat "sentinelle vide" assorti, 1 utilitaire sans rapport | 9 (w18) | `d417e87` |
 | `func_080100F0`, `func_08010104`, `func_08010118`, `func_08010128`, `func_08010138`, `func_08010148`, `func_0801014C` | 7 accesseurs NON catalogués, ex-`.byte` bruts après `func_0801004C` : 6 lisent le global déjà connu `gUnk_0300040C`, 1 retourne une constante entière brute | 9 (w18) | `dc8fd26` |
 | `func_08008A68` | teardown de `func_08008980` (registre du root object démarrage, `AgbMain`/`func_0801004C`) | 9 (w21) | `2bab4c4` |
+| `func_0807EE14` | constructeur de placement, contrepartie du destructeur "riche" 2-enfants `func_0807EE44` déjà matché (`vtable_unk_080E7C4C`) : alloc+init opaque du champ MI à self+4, "move-in" du champ plain à self+8 depuis un out-param | 10 (w24) | `55821f1` |
+| `func_0805218C`, `func_080755EC`, `func_0807DD38`, `func_0807F580`, `func_0808045C`, `func_08080D94`, `func_08081A40`, `func_08082114`, `func_0808AB38`, `func_0808C56C`, `func_0808ECD8`, `func_08090E54`, `func_080931B0`, `func_08093A58` | 14 sœurs de `func_0807EE14` (même forme exacte), une par site restant de la famille "riche" 2-enfants déjà cataloguée | 10 (w24) | `42960fa` |
+| `func_080A3744` | 15e sœur de `func_0807EE14`, mais AUCUN destructeur stampant `vtable_unk_080E8278` trouvé dans le dépôt -- porté par pure similarité de forme | 10 (w24) | `16aac6b` |
+| `func_080BC898`, `func_080C7EA8`, `func_080C0D1C` | 3 constructeurs de placement, variante 1-enfant (sans move-in), contreparties des destructeurs "riches" 1-enfant `func_080BC8C0`/`func_080C7ED0`/`func_080C0D44` déjà matchés | 10 (w24) | `3e23c90` |
+| `func_08004C48` | constructeur de base sœur de `func_08004C54` (destructeur "riche" round 4), même vtable `vtable_unk_080E5A88` | 10 (w26) | `25ff995` |
+| `func_080098DC` | init-step sœur de la classe documentée dans `src/code_080099EC.cc` (blob caché round 9) | 10 (w26) | `6f788cc` |
+| `func_080D79CC`, `func_080D7AD4` | paire de constructeurs du sous-objet dont le teardown est dans `func_08008A68` (round 9/w21), même paire de vtables `vtable_unk_080E5B0C`/`080E5B18` | 10 (w26) | `7201ee1` |
+| `func_0803A804`, `func_0803A80C`, `func_0803A814`, `func_0803A820`, `func_0803A840`, `func_0803A870`, `func_0803A8A0` | 7 fonctions NON cataloguées, ex-`.byte` bruts (160 octets) après `func_0803A798` : accesseurs/prédicat/wrapper sur `UnknownEntityThing::sprite_animator`, helper `SetAnim` dédupliqué (sœur de `AActorEntity::RefreshSprite`), getter trivial `UnknownEntityThingBase::dummy` | 10 (w23) | `0ae8f12` |
+| `func_08011ED8` | 2e overload du constructeur de la classe bâtie par `func_08011DC4` (asm, non porté) -- construit une `Location` locale avec un seul champ initialisé (les 2 autres restent non-initialisés, comme l'original), ex-`.byte` bruts (272 octets) après `func_08011DC4` | 10 (w23) | `51cbacc` |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
@@ -77,33 +86,37 @@ même pic de pression de registres.
   toujours inliné par agbcp, son élimination du branchement redondant
   opère sur l'IDENTITÉ DE REGISTRE, pas l'identité de variable source --
   aucune des 5 formulations testées n'a préservé le second check).
-- `func_0804E4AC` (`DrawGlyphAt`, plain) -- **RETIRÉE de la liste des
-  cibles priorisées (round 8), pas juste dépriorisée.** Historique
-  complet : round 3, échec total (20 octets d'écart dès la 1re
-  instruction) ; round 6, shape-hunt systématique convergé à un
-  near-miss d'UNE instruction de 2 octets (250/252 octets, spill+reload
-  redondant de `tile_x` avant le blit BR) ; round 7, piste "profondeur
-  d'imbrication des `if`" testée et fermée (aucun effet isolable, confondu
-  avec la pression de registres réelle) ; round 8, piste "ce qui se passe
-  entre les appels `CpuFastSet` de BL et TR" testée et fermée -- tracé
-  instruction par instruction, aucune des deux zones ne touche
-  `r4`(`tile_x`)/`r5`/`r8`, donc aucun effet de bord n'explique le spill.
-  **4 tentatives sérieuses, 3 reconstructions C indépendantes retombant
-  sur EXACTEMENT le même écart d'1 instruction** -- signal net d'un mur
-  d'allocateur de registres réel (probablement un artefact interne à
-  `agbcp`, slot de spill réservé tôt par une passe puis consommé
-  opportunément par une passe ultérieure au site d'usage textuellement le
-  plus tardif, indépendant de toute restructuration C testée). 2 probes
-  empiriques supplémentaires testées et négatives : ordre de déclaration
-  inversé -> écart PIRE (118/121) ; lecture forcée via pointeur `volatile`
-  de `tile_x` juste au site BR -> bien pire (132 instructions). **Round 9
-  (agent modèle "fable", worktree w22) : lancé en pari ("on ne sait
-  jamais") -- voir `SESSION_NOTES.md` round 9/w22 pour le résultat.**
-  `func_0804E5AC` (variante recoloration, même forme attendue) n'a jamais
-  été tentée -- pas la peine avant que le corps plain ne matche. Si
-  retenté un jour au-delà du pari round 9 : la seule piste non essayée
-  identifiée est de comparer avec la décompilation Ghidra amont de
-  `StanHash/fomt` pour cette adresse, si elle existe.
+- ~~`func_0804E4AC` (`DrawGlyphAt`, plain)~~ -- **MATCHÉE round 9 (agent
+  modèle "fable", worktree `w22`, commit `247e6f3`), le mur de 2 octets
+  est tombé.** Rounds 3/6/7/8 avaient tous convergé sur le même écart
+  irréductible d'1 instruction (un "spill fantôme" de `tile_x` juste
+  avant le blit BR), attribué à un artefact de l'allocateur `agbcp` --
+  **ce diagnostic était FAUX**. La vraie cause : l'original C source
+  **alias les valeurs dans des variables COPIES redondantes, et c'est la
+  copie -- pas l'original -- que le blit suivant relit** :
+  ```c
+  u32 tile_x = x >> 3;
+  u32 br_tile_x = tile_x;   // aucun registre en moins : l'init EST le str,
+                            // son seul usage BR EST le ldr
+  ```
+  Le même idiome se répète 4 fois dans la fonction avec des variantes :
+  `grid_rows` copie `height_tiles` (le clip guard relit le temp `r0`
+  chaud, `has_bottom` relit la copie chez `ip`) ; une variable
+  `right_addr` unique partagée par les blits TR et BR (pseudo-globale,
+  aucune liaison locale -> séquence `mov`/`adds` à 3 opérandes) ;
+  l'adresse BR construite par trois réassignations successives ; un seul
+  `return kind` atteint via `goto` (inverse la course d'allocation
+  `sb`/`sl` entre `kind` et `dest`) ; ordre initialisé-avant-déclaration-
+  nue (slot de pile `0x84` vs `0x88`). **Généralisation pour toute future
+  cible "pression de registres"** : avant de conclure à un mur
+  d'allocateur, chercher si le désassemblage relit une valeur depuis un
+  emplacement mémoire/registre DIFFÉRENT de celui où elle vient d'être
+  écrite -- si oui, c'est probablement une variable-copie explicite dans
+  la source, pas un artefact. Vérifié bit-exact (harnais rapide 256/256,
+  seul le padding final de 2 octets diffère -- zéro-rempli par
+  `align_sections.sh` dans le vrai build -- puis `make compare` complet).
+  Pas encore mergé dans `main` (worktree `w22` toujours actif, poursuit
+  sur `func_0804E5AC` la variante recoloration).
 - `func_08008980` (callee bloquant de `func_08004C68`) -- **caractérisée
   en détail round 9/w21**, confirmée classe "pression de registres" par
   inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur
@@ -254,6 +267,61 @@ pris les 4 premiers par adresse croissante (`0800371C`, `08004BDC`,
 `080B3C0C` ; w11 a pris 11+3 sites (2-enfants et 1-enfant) ; round 7/w12
 a pris les 15 derniers (`08080DC4` -> `080E41B0`), tous matchés du
 premier coup en suivant l'un des 3 corps déjà connus.
+
+## Les constructeurs de placement, contreparties de la famille "riche" des destructeurs (round 10, w24)
+
+Trouvés par méthode sœur pure (round 10) : chaque destructeur "riche" déjà
+matché (vtable + teardown d'un ou deux champs enfant, section précédente)
+a un CONSTRUCTEUR jumeau ailleurs dans `asm/*.s`, jamais répertorié tant
+qu'on ne cherchait que le côté destructeur. Signature grep pour les
+retrouver : un bloc `thumb_func_start` qui contient À LA FOIS un littéral
+`vtable_unk_ADDR` ET un `bl __builtin_new` -- un script Python parcourant
+tous les blocs de `asm/*.s` avec ce double critère, croisé avec
+`arm-none-eabi-nm build/src/*.o | grep ' T func_'` pour exclure les
+fonctions déjà portées, suffit à les lister tous d'un coup (script laissé
+en scratch, non commité -- à refaire au besoin ; attention à un piège
+vécu round 10 : un `grep func_ADDR src/*.cc` naïf produit de faux
+positifs "déjà porté" car il matche aussi les déclarations `extern` de
+callés encore opaques, pas seulement les vraies définitions -- `nm` sur
+le build réel est le seul oracle fiable).
+
+Deux variantes vues, toutes deux avec EXACTEMENT le même corps d'un site
+à l'autre (seuls la constante `vtable_unk_ADDR`, la taille d'allocation,
+et le nom de la fonction d'init opaque changent) :
+
+**Variante 2-enfants** (contrepartie de la famille "riche" 2-enfants,
+`self+4` MI / `self+8` plain) -- `func_0807EE14` et 14 sœurs :
+```c
+void *ctor(void *self, void **a1, void *a2)
+{
+    *(void **)self = vtable_unk_ADDR;
+    void *obj = operator new(SIZE);
+    obj = init_opaque(obj, a2);
+    *(void **)((char *)self + 4) = obj;      // champ MI (self+4)
+    void *stolen = *a1;                       // "move-in" du champ plain
+    *a1 = nullptr;                             // (self+8) depuis un
+    *(void **)((char *)self + 8) = stolen;    // out-param appelant
+    return self;
+}
+```
+Le second champ (`self+8`) n'est PAS alloué ici -- il est "volé" à un
+pointeur passé par le CALLEUR (`void **a1`) : lecture, mise à zéro de la
+case appelante, puis stockage dans l'objet neuf. 14 des 15 sites stampent
+une vtable déjà vue dans un destructeur "riche" 2-enfants déjà matché
+(vérifiable par `grep -l vtable_unk_ADDR src/*.cc`) -- confirme le lien
+constructeur/destructeur avant même de compiler. Le 15e (`func_080A3744`,
+`vtable_unk_080E8278`) n'a aucun destructeur correspondant matché dans ce
+dépôt à ce jour -- probablement encore en asm quelque part, non recherché
+plus loin -- mais a été porté quand même par pure similarité de forme,
+bit-exact confirmé comme les 14 autres.
+
+**Variante 1-enfant** (contrepartie de la famille "riche" 1-enfant,
+`self+4` seulement, pas de champ plain à `self+8`) -- `func_080BC898`,
+`func_080C7EA8`, `func_080C0D1C`, contreparties de `func_080BC8C0`/
+`func_080C7ED0`/`func_080C0D44` : corps identique au constructeur de
+placement déjà connu depuis le round 8 (`func_08007078`/`func_0800598C`),
+pas de move-in, juste vtable + alloc + init + store à self+4 + return
+self.
 
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
