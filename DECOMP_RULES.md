@@ -103,24 +103,75 @@ sémantiquement équivalent. agbcp ne réordonne quasiment rien -- le
 statement order EST l'instruction order, décalé par le register
 allocation.
 
+### 5. Guard clause précoce vs `if (valide) { ... } return invalide;`
+en fin de fonction
+
+Un `if (cond_invalide) return valeur_par_défaut;` placé EN PREMIER dans une
+lecture naturelle du C n'est pas forcément placé en premier dans la vraie
+source. Si le désassemblage montre le stub "cas invalide" collé juste
+AVANT l'épilogue (fall-through direct, aucun branchement nécessaire pour
+lui), et le chemin valide se terminant par un branchement explicite qui
+saute PAR-DESSUS ce stub pour atteindre l'épilogue, c'est le signe que la
+vraie source enveloppe le chemin valide dans un bloc et laisse le retour
+par défaut en DERNIER : `if (valide) { ...corps entier...; return kind; }
+return 0;`, pas `if (!valide) return 0; ...corps...`. Vu 2 fois dans la
+même fonction (round 6, `func_0804E4AC`) : une fois pour la validité du
+code de retour de `ResolveGlyph`, une fois pour le dispatch aligné/non
+aligné (le bloc "non aligné" est physiquement en fin de fonction, pas
+inline après le test).
+
+### 6. Comparaisons/tests booléens répétés -> variables de drapeau
+séparées, jamais un `&&` combiné
+
+Généralisation du motif déjà noté pour `func_0800736C` (round 2) : quand
+le désassemblage montre un test booléen construit explicitement en deux
+temps (`movs r,#0; ...cmp/branche...; movs r,#1;` PUIS un second test
+séparé sur ce registre, `cmp r,#0; beq`), la source C réelle a très
+probablement deux VARIABLES DE DRAPEAU distinctes testées l'une après
+l'autre (`x_ok = (x&7)==0; if (x_ok) { y_ok = (y&7)==0; if (y_ok) {...} }`),
+pas un unique `if (cond1 && cond2)` combiné -- même si sémantiquement
+identique sous évaluation court-circuit, la forme combinée compile sans
+la construction explicite de drapeau (juste `ands`+`cmp`+`bne` direct par
+condition, sans le double `movs`). Vu sur `func_0804E4AC` round 6 (test
+d'alignement x/y) en plus du cas round 2 déjà connu.
+
+### 7. Type des variables de "code retour discriminant" (`kind`,
+`résultat`, etc.) = TOUJOURS unsigned si comparé avec un idiome de
+range-check
+
+Si le désassemblage utilise une comparaison UNSIGNED (`bls`/`bhi`/`bcs`/
+`bcc`) sur une variable qui contient un petit résultat discriminant
+(0/1/2, jamais négatif), la typer `int` produit un `ble`/`bgt` SIGNÉ à la
+place -- byte-identique en taille, mais un mnémonique différent, donc pas
+bit-exact. Toujours typer ces variables `u32`/`unsigned`, jamais `int`,
+dès que UNE SEULE comparaison sur elles est unsigned dans le
+désassemblage (round 6, `func_0804E4AC`, `kind`).
+
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 gros budget
 
-**3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
-(round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
-**beaucoup de valeurs simultanément vivantes** (dépilement de liste
-libre, parcours de section déroulée, ou ici un blit conditionnel à 4
-tuiles avec flags), qui sature `r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où
-CHAQUE reformulation C testée garde une valeur de moins en vie
-simultanément que l'original à un point donné -- ce qui n'est pas
-récupérable juste en relisant l'ordre des instructions, il faut deviner
-la forme EXACTE de l'expression C source pour forcer le même pic de
-pression de registres. **Ne pas re-tenter cette classe sans budget de
-plusieurs rounds dédiés.** Signal d'alerte AVANT de commencer une
+**3 échecs sur 3 tentatives, puis un near-miss serré au round 6** sur
+cette classe précise : `func_0805E790` (round 1), `func_0800736C`
+(round 2), `func_0804E4AC` (round 3 : échec total ; round 6 : shape-hunt
+systématique, near-miss à UNE instruction de 2 octets près, toujours pas
+matché -- voir `SESSION_NOTES.md` round 6 pour le détail complet et
+l'hypothèse de piste la plus prometteuse, la profondeur d'imbrication des
+`if`). Signature du problème : une fonction avec **beaucoup de valeurs
+simultanément vivantes** (dépilement de liste libre, parcours de section
+déroulée, ou ici un blit conditionnel à 4 tuiles avec flags), qui sature
+`r4`-`r7` + `r8`/`sb`/`sl`/`ip`, et où CHAQUE reformulation C testée garde
+une valeur de moins en vie simultanément que l'original à un point donné
+-- ce qui n'est pas récupérable juste en relisant l'ordre des
+instructions, il faut deviner la forme EXACTE de l'expression C source
+pour forcer le même pic de pression de registres. **Ne pas re-tenter
+cette classe sans budget dédié.** Signal d'alerte AVANT de commencer une
 tentative : si le désassemblage utilise déjà `r8`+`sb`+`sl`+`ip`
 simultanément dans le corps (pas juste au prologue/épilogue), c'est
-probablement cette classe.
+probablement cette classe -- mais round 6 montre qu'un shape-hunt
+systématique (règles 5-7 ci-dessus + les règles 1-2 déjà connues) peut
+fermer l'essentiel de l'écart même sur cette classe, donc ça reste
+rentable d'essayer avec la bonne méthode plutôt que de l'écarter
+d'office.
 
 À l'inverse, la classe "boucle simple, peu de valeurs vivantes,
 délègue le gros du travail à un appel `bl` opaque" (les 2 boucles
@@ -315,14 +366,19 @@ sur un build propre AVANT de toucher au fichier.
    d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
    enfant à l'offset +4 avant de le caractériser côté dépôt patch**
    (Ghidra sur 2-3 exemples).
-3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
+3. `func_0804E4AC` (`DrawGlyphAt`, plain) -- round 6 : near-miss à UNE
+   instruction de 2 octets près (250/252 octets), tout le reste du
+   contrôle de flux et des rôles de registres matché. Piste la plus
+   prometteuse non testée : profondeur d'imbrication des `if` autour du
+   bloc TR/BR (cf. `SESSION_NOTES.md` round 6, section "what to try
+   next"). Porter `func_0804E5AC` (variante recoloration, même forme)
+   juste après si celle-ci matche.
+4. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
    pointeur de recherche -- si/quand cette fonction est portée ICI,
    lui donner un nom neutre côté vanilla, pas ce nom-là littéralement,
    cf. règle "point de vue vanilla" ci-dessus), `Unpack` (`0x080D102C`,
    référence Python déjà disponible côté patch repo), table de dispatch
-   script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
-   "pression de registres", cf. section dédiée ci-dessus -- pas sans
-   gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
+   script (`0x0803F900`), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
    `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
