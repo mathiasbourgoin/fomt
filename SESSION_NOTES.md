@@ -233,3 +233,134 @@ documented in `/home/mathias/dev/jeux-langues/harvest-moon-franglais/docs/`:
 - One new commit on top of `9636a71`: `648d15f` (func_0805E6CC).
 - `origin` push URL untouched (`DISABLED-local-only-see-CLAUDE-md`),
   nothing pushed, no PR opened, no network action taken against origin.
+
+## 2026-08-20, round 2 -- OBJ-palette allocator attempted, no new matches
+
+Scope for this round (per a parallel session's request): stop limiting to
+the original 5 candidates, sweep the *whole* franglais-patch docs tree
+(`docs/VWF.md`, `docs/HUD.md`, `docs/PALETTE.md`, `docs/ENGINE.md`,
+`docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
+`docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`, the
+`docs/CHARACTER_SELECT.md`/`docs/LANGUAGE_LEVEL.md` pair that only exist
+in the `character-select`/`lang-level` worktrees, not `main`) and port
+whatever's well-established. Honest result: **zero new matches this
+round** -- two different functions were attempted, both got close
+(same total byte count as the original in one case) but neither
+converged, and both were cleanly reverted. Time went into reading through
+the docs to find well-specified candidates and iterating on register
+allocation, which turned out to be the wrong axis to spend a short round
+on (see "what to do differently" at the end of this section).
+
+### Read in full or in relevant part this round
+
+`docs/VWF.md` (full, 291 lines), `docs/HUD.md` (\~300 lines around the
+OBJ-palette allocator section, not the full 900), `docs/PALETTE.md`
+(the allocator-related second half). Not reached this round:
+`docs/ENGINE.md`, `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
+`docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`, the
+worktree-only `CHARACTER_SELECT.md`/`LANGUAGE_LEVEL.md`.
+
+### Function attempted and reverted: `func_0800736C` (`franglais_objpal_alloc`)
+
+`docs/HUD.md` ("L'allocateur de banques de palette OBJ (0x03000404)")
+fully specifies this family: a 16-slot free-list allocator at
+`gUnk_03000404` (already has a partial C++ struct in `src/hardware.cc`,
+`Unk_hardware_03000404`, with helper methods `AllocEntry`/`FreeEntry`/
+`GetEntry`/`IndexOf`/`inl_pred_0`/`inl_func_0`/`inl_func_1` that
+`func_080071BC` right above it in the same file already uses **and
+matches** -- a very promising precedent). `func_0800736C` pops the free
+list, sets `refcount=1`, stamps a fresh generation (wrapping to 1, never
+0, past `0xFFFF`), and returns the packed handle
+`(generation << 4) | (bank_index & 0xF)`, or `0` if the free list was
+empty. Mechanically much cheaper to attempt than the `asm/code_0803EE94.s`
+family from round 1: `asm/hardware.s`'s first function starts exactly
+where `src/hardware.cc`'s last function (`func_080071BC`) ends, so no
+new split-file/`.lds` surgery was needed at all -- just trim
+`func_0800736C`'s block off the top of `asm/hardware.s` and append the C
+port to the bottom of `src/hardware.cc`.
+
+Two attempts, both reverted:
+
+1. **Using the existing `AllocEntry` helper** (`ent =
+   h->AllocEntry(h->unk_00); if (ent == nullptr) return 0;` then the rest
+   of the logic straight-line): total size **8 bytes short** of the
+   original. Disassembly diff shows agbcp collapsed what the original
+   keeps as **two separate, redundant null checks** (one guarding the
+   free-list-head dereference, one on the allocated pointer afterward --
+   the same value, tested twice) into a single shared branch via basic
+   CSE/value-numbering, something the original compiled output does
+   *not* do (it keeps the dead second check). Net effect: my version
+   takes a different, shorter early-exit path and the two builds
+   permanently diverge in instruction count from there on.
+2. **Writing the free-list pop out literally** (no `AllocEntry` call --
+   `ent = h->unk_00; if (ent == nullptr) return 0; h->unk_00 =
+   ent->next_free; if (ent == nullptr) return 0;`, i.e. the exact
+   textual double-check the disassembly implies) to try to force agbcp
+   to keep both checks distinct: **worse**, 16 bytes short and a
+   different register footprint entirely (`push {r4,lr}` instead of
+   `push {r4,r5,lr}` -- the compiler stopped keeping `ent` alive in a
+   dedicated register altogether for the later bitmap-index/generation
+   code, diverging even harder).
+
+Reverted cleanly (`git checkout -- src/hardware.cc asm/hardware.s`),
+re-verified `make compare` passes before stopping.
+
+**Lesson for whoever retries this**: neither the "call the shared
+helper" nor the "write it out literal" version reproduces the original's
+specific pattern of *keeping a provably-redundant branch*. That's a
+strong signal the ORIGINAL SOURCE genuinely had two textually-different
+conditions that happen to test the same runtime value only by
+coincidence of this call site (e.g. a macro or a different helper than
+`AllocEntry`/`FreeEntry`, not obviously equal to the compiler at the
+IR level) -- not that the C here is fundamentally wrong, just that the
+literal expression shape matters more than the semantics for whether
+agbcp's (fairly weak, egcs-1999-era) optimizer proves the redundancy.
+Worth trying: a version that reads `h->unk_00` into a *second, distinct*
+local variable for the second check (so the two tests are on two
+different C variables that happen to hold equal values, rather than the
+same variable/expression re-tested) -- that's the one combination not
+yet tried.
+
+### Not attempted this round (same reasons as `func_0805E790` in round 1)
+
+The scope-expansion list from the parallel session is real and still
+open: `franglais_transition_ctl_query` (`0x08050DF0`), `Unpack`
+(`0x080D102C`, Python reference already exists), the script dispatch
+table (`0x0803F900`), the scene/screen table (`0x080E59D4`-`0x080E8618`),
+`franglais_known_vwf_resolve_glyph` (`0x080D0D28` -- has a genuine jump
+table for the `0xB1`-`0xC3` range, likely harder, but the two
+`DrawGlyphAt` variants at `0x0804E4AC`/`0x0804E5AC` and the two
+`DrawString` loops at `0x0804E8F0`/`0x0804E958` in `docs/VWF.md` are all
+fully specified and *don't* have the register-pressure/CSE pathology hit
+this round or in round 1 -- untested, but structurally simpler
+(sequential reads + one alignment branch, no 7-way unrolled section walk
+and no free-list pop) and worth trying first next round -- plus
+everything else flagged in round 1's priority list (`docs/ENGINE.md`,
+`docs/DIALOGUE.md` in full, `docs/BACKGROUNDS_INVENTORY.md`,
+`docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`,
+`docs/CHARACTER_SELECT.md`/`docs/LANGUAGE_LEVEL.md` -- the latter two
+only exist in the `character-select`/`lang-level` worktrees under
+`~/dev/jeux-langues/worktrees/`, not in `harvest-moon-franglais/docs/`
+on `main`, so fetch them from there).
+
+### What to do differently next round
+
+Two rounds in a row have now spent most of their budget on
+register-allocation/CSE archaeology for 1-2 functions rather than
+sweeping breadth. For a short round, prefer candidates from
+`docs/VWF.md`'s `DrawGlyphAt`/`DrawString` family (straight-line reads
+and simple alignment branches, no free-list/section-walk register
+pressure) over anything that pops a free list or walks N unrolled
+sections -- the latter category has now failed to converge twice running
+(`func_0805E790` in round 1, `func_0800736C` this round) and should be
+treated as genuinely harder, not attempted again without a larger
+iteration budget than a single short round provides.
+
+### Repo state at end of round 2
+
+- Working tree clean, `make compare` passes bit-exact.
+- No new commits this round (both attempts reverted before commit).
+- Still just `648d15f` (func_0805E6CC) + `63da4d6` (SESSION_NOTES.md) on
+  top of `9636a71`.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
