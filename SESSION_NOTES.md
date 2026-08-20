@@ -3854,3 +3854,193 @@ re-attempted.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin. Worked alone in the isolated `w18` worktree per the
   round brief; did not touch anything outside the blobs listed above.
+
+## Round 9 (worktree w21) -- func_08008980/func_08008A68 triage, 3 fresh
+hypotheses on the "SmartPtr field assignment" shape (still not converged)
+
+### Goal
+
+Assigned mission (isolated worktree, solo on this repo): attack
+`func_08008980`/`func_08008A68` (never disassembled before this round),
+then bring genuinely new ideas to the `func_080070D4`/`func_08005A00`
+"SmartPtr field assignment" shape blocked since round 8 -- re-reading
+round 8's 4 documented hypotheses first, not repeating any of them.
+
+### 1 new match: `func_08008A68`
+
+Disassembled both hardware.s targets first to gauge complexity before
+committing effort (per mission instructions):
+
+- `func_08008980` (0x08008980): a big placement-style constructor --
+  allocates a fresh 0x6c-byte object, wires up 6 sub-objects at offsets
+  0x00/0x0c/0x1c/0x28/0x34/0x44 (each a `{0, 0, vtable}` triple, several
+  cross-linked via pointers to each other), calls `func_080D78F8`,
+  `func_08008D9C`/`func_08008D84`, and 3x `func_080095C0`, then stores
+  the result at `*param0` and returns `param0`. **Confirmed
+  register-pressure class**: uses `r4,r5,r6,r7,r8,sb,ip` simultaneously
+  through the whole body (`mov sb,r0` and `mov r8,r1` both alive well
+  into the function, `ip` also holds a live vtable constant across ~15
+  instructions) -- matches `DECOMP_RULES.md`'s existing "pression de
+  registres" class signature exactly. Also has a genuine, unexplained
+  **double-vtable-stamp** on the sub-object at offset 0x0c (temp-stamped
+  `vtable_unk_080E5BB4` via `ip`, then overwritten with
+  `vtable_unk_080E5B90` before the object is otherwise touched) -- the
+  same open "subclass override of a pure virtual method" question
+  flagged in round 8 for `func_08004C68` itself, not resolved here
+  either. **Not attempted this round** -- correctly flagged as
+  high-difficulty in round 8, confirmed by direct inspection, out of
+  reach without dedicated budget. Notably this function (and its 3
+  siblings `func_08008444`/`func_080084DC`/`func_08008574`, all also
+  still asm, all embedding a `bl func_08008980` at a fixed sub-offset
+  0x490 inside their own even-bigger ~0x9B0-byte objects) is the true
+  root allocator behind `AgbMain`'s and `func_0801004C`'s (a scene
+  constructor, likely the game's top-level engine/HUD object) startup
+  sequence -- a significant target, but not a quick one.
+
+- `func_08008A68` (0x08008A68): teardown counterpart of `func_08008980`,
+  called from the same 3 sites (`AgbMain`, `func_0801004C`,
+  `asm/hardware.s` internally). Uses only `r4-r7`, **no `r8`/`sb`/`ip`**
+  -- genuinely simpler, exactly as round 8's closing note predicted
+  ("looked short in a first glance and may be tractable"). Matched on
+  the first quicktest iteration: raw pointer-arithmetic port (no class
+  invented, mirroring the "richer destructor" family's discipline),
+  `void func_08008A68(void *field, unsigned int flags)` -- tears down
+  the sub-object at `obj+0x34` (re-stamping the same two vtables
+  `func_08008980` used there), calls the teardown counterparts of
+  `func_08008980`'s own callees (`func_080D7944`, 2x`func_0800959C`,
+  2x`func_080098AC`), deletes the object, and conditionally deletes
+  `field` itself if `flags & 1`. Split out of `asm/hardware.s` (now
+  ending at `func_08008DA8`, right before the already-split
+  `code_08008DE8.s`); the tail becomes `asm/code_08008AE0.s`. One
+  incidental fix needed: `__builtin_delete` isn't declared anywhere in
+  this repo's headers (grep confirms zero prior use) -- `operator
+  delete` (declared in `src/new.cc`) is the correct spelling, used
+  instead. Verified bit-exact via clean rebuild + `make compare`,
+  commit `2bab4c4`.
+
+### `func_0806EA30` re-examined: confirmed to be the SAME "SmartPtr field
+assignment" shape, not a separate register-pressure case
+
+Round 8 filed `func_0806EA30` under "calls `func_0806DB38`, register
+pressure class, not yet attempted" -- as a DIFFERENT open item from the
+`func_080070D4`/`func_08005A00` "SmartPtr field assignment" class.
+Disassembling it this round (`asm/code_0806EA30.s`, 33 instructions)
+shows it is **byte-for-byte the identical instruction shape** as
+`func_080070D4`/`func_08005A00`, only the opaque callee name differs
+(`func_0806DB38` instead of `func_08005B68`/`func_080050F8`). **This is
+not a 3rd, independent blocked function -- it's a 3rd confirmed instance
+of the exact same unsolved class.** `func_0806DB38` itself (the
+callee) IS a genuine register-pressure function (confirmed
+separately, `r8`/`sb`/`sl` used, ~180 lines) -- but that's irrelevant to
+matching `func_0806EA30` ITSELF, which (like the other two) only needs
+`func_0806DB38` treated as an opaque black box. **Correcting
+`DECOMP_RULES.md`'s classification**: 3 blocked sites share the
+"SmartPtr field assignment" wall, not "2 blocked + 1 separate
+register-pressure-callee case."
+
+### 3 fresh hypotheses tested on the "SmartPtr field assignment" shape --
+all negative, but each adds real information
+
+Re-read round 8's 4 documented attempts in full before starting (dead
+give-away peephole on same-scope locals; `.Move()` chaining; direct-init
+`SmartPtr<T> tmp(ReturnByValue())` hits the private copy-ctor; reference
+binding to an rvalue doesn't compile). None of the 3 tested below repeat
+those exactly.
+
+1. **Copy-initialization syntax (`=`) instead of direct-initialization
+   (`()`)**: `SmartPtr<Widget> tmp = func_08005B68(arg);` instead of
+   round 8's `SmartPtr<T> tmp(func_08005B68(arg));`. Old CFront-derived
+   compilers are documented to sometimes treat these two forms via
+   different code paths even though the standard treats them as
+   equivalent for same-type initializers. **Result: identical failure**
+   -- `agbcp` still routes this through
+   `SmartPtr<Widget>::SmartPtr(SmartPtr<Widget>&)` (the private copy
+   ctor) and rejects it with the same "invalid... initialization of
+   non-const reference type" error as the `()` form. **Closes this
+   specific avenue for good** -- the `=`/`()` syntax distinction is a
+   dead end in this compiler, no need to try it again on any future
+   `SmartPtr<T>` case.
+2. **Explicit out-param convention instead of hidden-return-value
+   convention**: hypothesis that `func_08005B68`'s real prototype takes
+   `SmartPtr<Widget> *out` as an explicit first argument (default-
+   construct `tmp` locally, pass `&tmp`, no by-value return at all) --
+   this sidesteps the private-copy-ctor wall entirely (no copy/return
+   involved) since `tmp` is default-constructed, not initialized from a
+   call result. **Compiles**, but produces a **verifiably different,
+   non-matching shape**: an extra pre-zero of `tmp` before the call (the
+   default ctor), and critically `*field = tmp.Move()` invokes the REAL
+   `SmartPtr<T>::operator=(T*)` on `field` -- which reads and compares
+   against `field`'s OLD value before conditionally deleting it. The
+   target disassembly never reads `field`'s old value at all. **This
+   is useful negative confirmation, not just a dead end**: it proves
+   `field` in the true source is NOT `SmartPtr<T>*` going through
+   `operator=(T*)` -- whatever `field`'s real declared type is, the
+   assignment must be a raw memberwise pointer write, not a method
+   call. Ruled out for good: the out-param convention on the callee.
+3. **Manual pointer-alias reproduction of the exact disassembled
+   sequence** (read `tmp` through a separately-named alias pointer,
+   null it through the alias, `if (dying) dying->Method2(dying, 3);`
+   phrased as a 4th, distinct local rather than round 8's "hand-rolled
+   struct" or the real `SmartPtr<T>` type): **agbcp promotes the entire
+   thing to registers and eliminates it MORE aggressively than round
+   8's attempt #1** -- collapses to `*field = func_08005B68(arg);` (8
+   instructions, no stack slot at all, `tmp` never spills). **New,
+   generalizable finding**: agbcp's same-scope dead-store/dead-load
+   elimination (round 8, DECOMP_RULES.md anti-pattern list) is not in
+   fact narrow to "single local, same expression" as round 8 tentatively
+   qualified it -- empirically, it applies to **any address-taken local
+   whose full lifetime (write, read, all aliasing) is visible within one
+   function with no address ever escaping to an opaque external call**.
+   Test 2 above (where `&tmp` DOES escape to the opaque `func_08005B68`
+   call, forcing genuine stack residency) is the one case among all 7
+   attempts across both rounds that does NOT get folded away -- pointing
+   at escape-to-opaque-call as the one mechanism that reliably defeats
+   the peephole, but combining that mechanism with a shape that also
+   matches the target's field-write semantics (raw pointer write, not
+   `operator=(T*)`) has not yet been found.
+
+**Honest state, unchanged in substance from round 8**: still not
+converged. 7 hypotheses tested across 2 rounds, all either fail to
+compile (private copy-ctor wall) or produce a shape agbcp folds/reshapes
+away from the 33-instruction target. The empirical rule discovered this
+round (peephole applies broadly unless the address escapes to an opaque
+call) narrows the search space usefully: any future hypothesis needs
+`&tmp`'s address to escape to exactly one opaque call (matching
+`bl func_08005B68`/`func_0806DB38` itself, since THAT's the only `bl` in
+the target diassembly that could plausibly be "the escape") while still
+producing a raw (non-`operator=`) field write with no compare against
+the field's old value. **Not tried**: constructing `tmp` via the
+hidden-return convention from `func_08005B68(arg)` (avoiding the
+private-copy-ctor and out-param-shape problems, matching the no-pre-zero
+disassembly) while ALSO ensuring the field write happens through an
+explicit `*(RawT**)field = ...;` cast rather than any typed
+`SmartPtr<T>*` -- i.e. combine the hidden-return convention (only
+working construction idiom found in either round) with a `field`
+parameter typed as a raw `T**`/`void**`, never `SmartPtr<T>*`, so no
+`operator=` overload can ever be selected regardless of what the
+compiler's overload resolution would otherwise pick. This exact
+combination has not been tried by either round -- flagged as the
+concrete next thing to try, not just "try harder."
+
+### Not attempted this round (budget / correctly out of scope)
+
+- `func_08008980` itself: confirmed register-pressure class by direct
+  inspection (see above) -- not attempted, consistent with
+  `DECOMP_RULES.md`'s existing guidance not to retry that class without
+  dedicated budget. This is the first real look at it (not a retry), so
+  it's now properly characterized rather than just flagged secondhand.
+- `func_08004C68` itself: still not attempted. 11/15 callees now
+  resolved (`func_08008A68` new this round); the 4 remaining
+  (`func_080070D4`, `func_08005A00`, `func_0806EA30` -- all 3 confirmed
+  same unsolved shape this round -- and `func_08008980`) are all
+  genuinely hard, not just unattempted. Recommend the next round try the
+  combined hypothesis above before re-attempting `func_08004C68`.
+
+### Repo state at end of round 9
+
+- 1 new commit (`2bab4c4`, `func_08008A68`).
+- `make compare` bit-exact (`sha1sum -c fomt.sha1` -> `Réussi`) on a
+  full clean rebuild after the commit.
+- `origin` push URL untouched, nothing pushed, no PR, no network action.
+  Solo worktree (`w21`/`parallel-21`), no concurrent-session interference
+  observed.
