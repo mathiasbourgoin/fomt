@@ -5741,3 +5741,92 @@ dead-end confirmé ci-dessus).
   `self+0x594`, 8 sites d'appel symboliques dans
   `asm/code_08070A08.s` -- candidat sérieux pour un futur round dédié,
   contexte d'appel abondant contrairement à `func_0809E1B4`).
+
+## Round w37 (worktree `parallel-37`) -- ménage `DECOMP_ARCHIVE.md`, scan frais épuisé, `func_08075334` évalué et écarté (pression de registres)
+
+Consigne : (1) nettoyer `DECOMP_ARCHIVE.md` section "Autres cibles
+ouvertes" entrée par entrée, (2) relancer `scan_hidden_code_blobs.py` sur
+tout `asm/*.s` frais (plusieurs rounds de découpage de fichiers depuis le
+dernier scan complet), (3) si épuisé, piocher une cible fraîche.
+
+### 1. Ménage `DECOMP_ARCHIVE.md`
+
+Vérification indépendante de chaque entrée (recoupe l'audit déjà fait par
+w36) :
+- `franglais_transition_ctl_query` : déjà matché (round "3 angles
+  neufs"/w32) -- **retiré**.
+- `asm/code_entities_08034CEC.s` : déjà matché (round 10/w23, commit
+  `0ae8f12`) -- **retiré**.
+- `asm/code_actor_0809BFE8.s`/`.L0809E1B4` : dead-end confirmé deux fois
+  (round 10/w23 : ~10 réécritures C, swap `r4`/`r5` irréductible ;
+  recontrôlé w36 : rien de neuf) -- **retiré de la liste des cibles**,
+  gardé comme note historique dans le texte d'intro de la section.
+- Table de dispatch script (`0x0803F900`) : **gardée**, marquée
+  explicitement "en recoupement avec w35" (consigne w36).
+- `func_08010F14` : **gardée**, marquée explicitement "documentaire, pas
+  une cible" (déjà matché round 8/w17).
+- `asm/code_08010F54.s` : **gardée**, marquée "écartée, risque
+  chevauchement `franglais_boot_fsm_run`/pression de registres".
+- `func_08075334` (nouvelle cible signalée par w36) : **ajoutée**.
+
+Commit `35a3068`.
+
+### 2. Scan frais de blobs cachés
+
+`python3 tools/scripts/scan_hidden_code_blobs.py` sur les 85 fichiers
+`asm/*.s` actuels :
+- **0 nouveau blob court (4-40 octets)** trouvé -- le découpage de
+  fichiers des rounds récents n'a créé aucune nouvelle frontière
+  `thumb_func_start`/`.byte` exploitable.
+- 1 seul blob "medium" (>40 octets) toujours signalé :
+  `.L0809E1B4` (288 octets) -- déjà dead-end confirmé (voir ci-dessus),
+  pas retenté.
+- 3 fichiers 100% `.byte` brut sans aucun `thumb_func_start`
+  (`asm/code_080101A0.s`, `asm/code_080D7990.s`, `asm/code_080D7AAC.s`) :
+  **pas une découverte neuve** -- ce sont des résidus déjà documentés de
+  fonctions déjà portées (`func_080D7AAC`/`func_080D7B04`/`func_080D7944`,
+  commit `076eb72` et suivants) ou un cas déjà noté round antérieur
+  (`code_080101A0.s`, cf. plus haut dans ce fichier, ligne ~3834) --
+  vérifié par grep, aucune mention neuve à ajouter.
+
+**Verdict : scan épuisé, rien à committer côté blobs ce round.**
+
+### 3. Cible fraîche piochée : `func_08075334` -- évaluée, PAS engagée
+
+Désassemblage (`asm/code_08070A08.s:9622-9779`, 284 octets) : vrai helper
+de push dans un tableau dynamique croissant par bloc de 16 octets
+(`malloc`/`free`, champs `self+0x594/0x598/0x5A0` = base/fin/capacité,
+memcpy manuel par blocs de 12+4 octets). 8 appelants symboliques déjà
+présents dans `asm/code_08070A08.s` (contexte d'appel réel, contrairement
+à `.L0809E1B4`).
+
+**Signal d'alerte de la classe "pression de registres" (`DECOMP_RULES.md`)
+confirmé à la lecture** : le corps utilise SIMULTANÉMENT `r4`-`r7` ET
+`sb`/`sl`/`r8` (pas seulement au prologue/épilogue -- `sb` sert de
+sauvegarde de `sp` initial pendant tout le corps, `sl` porte la borne
+haute du memmove pendant la boucle de compaction, `r8` porte le
+compteur d'éléments ajoutés à travers 2 appels `malloc`/`free`). Plus une
+"pression" additionnelle : 3 boucles de copie 16 octets distinctes
+(insertion en milieu de tableau, réallocation, compaction), chacune avec
+son propre jeu de registres vivants qui se chevauchent aux bornes.
+
+Conformément à la règle explicite de `DECOMP_RULES.md` ("ne pas s'engager
+sans budget dédié et une idée réellement neuve") et à la discipline déjà
+appliquée par w36 sur `func_08092570` (cible similaire, pas engagée sans
+budget dédié) : **pas de tentative ce round**, faute d'idée neuve
+identifiée sur le pic de pression de registres (3 boucles memcpy
+imbriquées). Aucun fichier modifié pour cette cible.
+
+Reste candidat sérieux pour un futur round dédié "pression de registres"
+avec budget explicite (éventuellement escaladé à un agent `fable` pour
+piste neuve, cf. stratégie documentée dans `DECOMP_RULES.md`) : contexte
+d'appel abondant (8 sites), rôle bien compris, seule la forme C exacte
+des 3 boucles de copie reste à deviner.
+
+### Repo state en fin de round
+
+- 1 commit (`35a3068`, doc seulement).
+- `git status --short` vide.
+- `origin` intact, rien poussé, aucune PR.
+- Sweep anti-doublon (`grep -rl -- ".LADDRESS" asm/*.s`) : sans objet,
+  aucun match nouveau committé ce round.
