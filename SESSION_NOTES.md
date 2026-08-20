@@ -8467,3 +8467,69 @@ référence croisée vers `FRANGLAIS_TRAMPOLINE`.
   "trampoline-partout") peut être mise à jour pour refléter que le
   résidu de décalage documenté (+8, puis -32 selon les rounds) n'existe
   plus, une fois ce round mergé sur `main`.
+
+## Round -- sync de ce worktree (`franglais-glyph-source-port`) avec
+`fomt-decomp:main` post-fix crash au boot, build réel + QA dynamique
+
+Contexte : ce worktree (utilisé par le pipeline `--source-port` de
+`harvest-moon-franglais`) était resté sur un vieux commit (`64d1598`),
+loin derrière `main` qui venait de recevoir la symbolisation complète
+de `asm/vtables.s` (320 vtables) et la conversion des 4 hooks Franglais
+en trampolines à taille fixe (fix du crash au boot documenté ci-dessus
+et dans les rounds précédents).
+
+### Nettoyage des modifs locales non commitées
+
+2 fichiers modifiés mais non commités (`asm/code_08008DE8.s`,
+`fomt.lds`) : diff comparé octet pour octet avec `fomt-decomp:main`.
+Confirmé identique au commit `f718114` de `main` (mêmes commentaires en
+français, même padding `nop`, même pad `.lds` calculé) -- une version
+antérieure et partielle du même fix, déjà remplacée sur `main` par
+`4f55c43` (traduction anglaise) puis `2b0e5bb` (conversion du hook
+`GetString` en trampoline + suppression du pad `.lds` devenu inutile).
+Jetées via `git checkout -- asm/code_08008DE8.s fomt.lds` : aucune perte
+de logique, `main` a une version strictement plus complète.
+
+### Synchronisation
+
+Remote local temporaire `decomp-main` -> `/home/mathias/dev/jeux-langues-assets/fomt-decomp`
+(jamais poussé, jamais gardé de façon permanente -- à supprimer si ce
+worktree n'en a plus besoin). `git merge decomp-main/main` : merge
+propre, **aucun conflit** (25 commits de `main` en avance, 1 seul commit
+propre à cette branche -- `franglais: include generated glyph assets` --
+ne touchait pas les mêmes fichiers). Les hooks Franglais
+(`script_engine.cc`, `farmer.cc`, `item.cc`) sont tous restés intacts et
+à jour après merge (vérifié par grep).
+
+### Build réel (pas de stub factice cette fois)
+
+`make fomt.gba` seul échoue (attend `build/franglais_stub.bin` et
+`build/franglais_font_*.bin`, générés par le pipeline
+`fomt_patch_pipeline.py`, pas par `make` seul -- comportement normal,
+pas un bug). Le vrai pipeline (`--source-port`, lancé depuis
+`harvest-moon-franglais`) a réussi de bout en bout : link propre, aucun
+symbole indéfini, aucune définition multiple, `arm-none-eabi-ld`
+signale seulement l'avertissement habituel RWX (non bloquant). ROM
+produite et 29/29 vérifications de `tests/test_patched_rom.py`
+passent. Détail complet du build/pipeline et de la QA dynamique mGBA :
+voir `harvest-moon-franglais/docs/FOMT_PATCH_PIPELINE_POC.md`, section
+"Session du 20-21/08/2026".
+
+Résumé QA dynamique : le crash au boot (écran blanc dès la frame 1) est
+**confirmé corrigé** -- plus de 54 000 frames simulées sans écran blanc
+ni gel, intro/écrans de saisie de nom lisibles. Un point reste ouvert
+et non résolu (probablement un problème de calibrage de la recette de
+script d'entrée `capture_options.py`, pas nécessairement un bug de jeu) :
+la recette automatisée n'atteint plus l'intérieur de la ferme dans le
+budget de frames testé. Pas de tentative de fix à chaud -- voir le doc
+ci-dessus pour la recommandation (rejouer en pas-à-pas pour trancher).
+
+### État du worktree en fin de round
+
+- `git status` propre après merge (rien à commiter en trop), 1 commit
+  de merge créé.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant le build réel
+  du pipeline.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+  Remote `decomp-main` ajouté localement pour la synchro -- purement
+  interne, jamais poussé non plus.
