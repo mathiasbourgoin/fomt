@@ -276,6 +276,7 @@ converger plus vite pendant la phase de tâtonnement.
 | `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
 | `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
+| `func_0800371C`, `func_08004BDC`, `func_080059D0`, `func_080070A4` | famille "riche" : destructeur dérivé + teardown conditionnel d'un champ enfant à `self+4` | 6 | `ef58287` |
 
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
@@ -308,13 +309,64 @@ wildcard `*(.gnu.linkonce.t...)` qui suivait déjà cette entrée dans le
 vestige inerte sans avoir vérifié son adresse assignée dans `fomt.map`
 sur un build propre AVANT de toucher au fichier.
 
-## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
+## La famille "riche" des ~37 destructeurs à teardown d'enfant (round 6)
+
+Layout désormais caractérisé (voir commit `ef58287`, 4 matchs) : `self+4`
+contient un pointeur brut vers un objet enfant (alloué par
+`__builtin_new`, ex. 0x1A0 octets pour la famille de `func_08004BDC`,
+construit par `func_080041DC`). **Le pointeur de dispatch de cet enfant
+vit à l'offset +4 DE LUI-MÊME, pas +0** -- confirmé en lisant
+`func_080041DC` : elle appelle `func_08008574` sur l'objet neuf AVANT de
+stamper `vtable_unk_080E5A5C` à `[r7, #4]`, cohérent avec un sous-objet
+non-polymorphe de 4 octets en tête (offset 0) suivi de la partie
+polymorphe (vtable à +4) -- typique d'un héritage multiple où la base
+polymorphe n'est pas listée en premier. Le rôle exact de ce sous-objet
+de 4 octets (`func_08008574`) n'est PAS caractérisé -- **ne pas
+inventer sa classe C++** : porter ces destructeurs comme pointeur brut
+(`void**`/arithmétique d'adresses), pas comme appel de méthode C++,
+exactement le corps utilisé dans `src/code_0800371C.cc` (et ses 3
+soeurs) :
+```c
+void *child = *(void **)((char *)self + 4);
+if (child != nullptr) {
+    void **vt = *(void ***)((char *)child + 4);
+    void (*fn)(void *, int) = (void (*)(void *, int))vt[2];
+    fn(child, 3);
+}
+```
+Toutes les fonctions de cette famille partagent EXACTEMENT ce corps,
+seule la constante `vtable_unk_ADDR` propre change -- vérifié bit-exact
+sur les 4 premiers cas via harnais rapide (compilateur+assembleur, sans
+lien) puis `make compare` en rebuild propre (x2).
+
+**Scan complet des 47 sites `bl func_080007EC`** (script en
+`/tmp/.../scratchpad/callsites.txt` de la session round 6, non commité,
+à refaire au besoin) : 37 sur 47 matchent ce patron "riche" (les 10
+autres restent la variante "vide" de `func_08004C54`/`func_080E09B0`,
+ou un autre patron pas encore vu). Triés par adresse croissante :
+0800371C, 08004BDC (**4 premiers, matchés round 6**), 080059D0,
+080070A4, puis 080521BC, 08057E1C, 0805CEFC, 0805E658, 0805FD04,
+08069E58, 0806D918, 0806EA00, 080709D8, 0807561C, 0807DD68, 0807EE44,
+0807F5B0, 0808048C, 08080DC4, 08081A70, 08082144, 08083AEC, 08085528,
+080881AC, 0808AB68, 0808C59C, 0808ED08, 08090E84, 080925C4, 080931E0,
+08093A88, 0809A518, 080B3C0C, 080BC8C0, 080C0D44, 080C7ED0, 080E41B0.
+**Round 6 (worktree w3) a pris les 4 premiers par adresse croissante** ;
+un worktree parallèle (w7) travaille la seconde moitié -- pas de
+recoupement possible, worktrees git séparés.
+
+## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-6 pour le détail complet)
 
 1. ~~`func_080E09B0`~~ -- matché round 5.
-2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
-   d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
-   enfant à l'offset +4 avant de le caractériser côté dépôt patch**
-   (Ghidra sur 2-3 exemples).
+2. ~~4 premiers de la famille "riche"~~ -- matchés round 6
+   (`func_0800371C`, `func_08004BDC`, `func_080059D0`, `func_080070A4`,
+   commit `ef58287`). **Reste ~33 sites de la même famille** (liste
+   complète ci-dessus) -- même corps exact, changer seulement la
+   constante `vtable_unk_ADDR` par site ; mécanique de découpage `.s`
+   déjà rodée sur 4 exemples (dont un découpage triple dans un même
+   fichier, `asm/code_08004C68.s` -- attention au piège vécu round 6 :
+   NE PAS oublier une fonction non-portée intercalée entre deux
+   découpages dans le même fichier, cf. `func_080070D4` oubliée puis
+   retrouvée via `undefined reference` au link).
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme

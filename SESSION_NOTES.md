@@ -971,3 +971,108 @@ nommage" section for future rounds.
   without a bigger dedicated budget; `docs/DIALOGUE.md`,
   `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
   `docs/MFOMT_ADDITIONS.md`).
+
+## Round 6 (worktree w3, parallel-3) -- first half of the "richer" AScene-derived destructor family matched
+
+### Mission
+
+Continue directly from round 5's priority list, item 2: characterize
+the child-object field layout for the ~23 (turned out to be 37, see
+below) "richer" derived-scene destructors sharing `func_08004C54`'s
+shape but with an extra conditional teardown of a child object at
+`self+4`. Assigned the FIRST HALF (by ascending address) of the family,
+in an isolated worktree (`w3`); a second worktree (`w7`) works the
+second half concurrently -- no collision possible, separate git
+worktrees.
+
+### Full site scan
+
+Grepped all 47 `bl func_080007EC` call sites across `asm/*.s`, matched
+each to its enclosing `thumb_func_start`, sorted by address, then
+classified each body (from function start to the call site) for the
+"rich" signature (`_call_via_r2` + `ldr r0, [r1, #4]` pattern). Result:
+37 of 47 are "rich"; the other 10 are the already-known "empty" variant
+(`func_08004C54`/`func_080E09B0`'s shape) or something else not
+investigated further this round. Full list recorded in
+`DECOMP_RULES.md`'s new "famille riche" section.
+
+### Layout characterization (the actual blocker from round 5)
+
+Round 5 flagged: `ldr r0, [r1, #4]` reads the presumed child object's
+vtable pointer from offset **+4**, not the standard +0 -- unexplained.
+Resolved by reading the MATCHING CONSTRUCTOR for one instance,
+`func_080041DC` (`asm/new_game.s`, not ported, still asm): it
+`__builtin_new`s a 0x1A0-byte block, calls `func_08008574` on the fresh
+object FIRST, THEN stamps `vtable_unk_080E5A5C` at `[r7, #4]` (r7 =
+self). This is exactly consistent with a 4-byte non-polymorphic
+leading base subobject (built by `func_08008574`, role not
+characterized) followed by a polymorphic part whose vtable naturally
+lands at offset +4 -- the classic Itanium-ABI shape for multiple
+inheritance where the polymorphic base isn't listed first.
+
+**Decision: do NOT invent a C++ class for this leading 4-byte base or
+the child's full type.** Per `DECOMP_RULES.md`'s C-vs-C++ rule (case
+where the binary's real shape is under-characterized), all four
+functions this round are ported as plain pointer arithmetic:
+
+```c
+void *child = *(void **)((char *)self + 4);
+if (child != nullptr) {
+    void **vt = *(void ***)((char *)child + 4);
+    void (*fn)(void *, int) = (void (*)(void *, int))vt[2];
+    fn(child, 3);
+}
+```
+
+Verified this shape compiles to IDENTICAL bytes to the original via the
+fast quicktest harness (compiler+assembler, no link) against
+`func_08004BDC` BEFORE touching any `asm/*.s` file -- de-risked the
+whole family before spending time on the file-split mechanics.
+
+### Four matches this round (commit `ef58287`)
+
+`func_0800371C` (`asm/intro_scene.s`), `func_08004BDC`
+(`asm/new_game.s`), `func_080059D0` and `func_080070A4` (both in
+`asm/code_08004C68.s`) -- the four lowest-address "rich" sites. All
+four share the EXACT same body, differing only in their own
+`vtable_unk_ADDR` constant.
+
+**Split mechanics, one real mistake caught before commit**: splitting
+`asm/code_08004C68.s` required THREE pieces (it contains two of the
+four target functions, `080059D0` and `080070A4`, with ~2900 lines of
+untouched functions between them). First attempt at the third split
+boundary (after `080070A4`) accidentally set the new tail asm file's
+start to the NEXT-NEXT function (`func_08007110`) instead of the
+function immediately following the ported one (`func_080070D4`) --
+silently dropped `func_080070D4`'s body entirely (it fell in neither
+the `.cc` file nor either of the two new `.s` chunks). Caught
+immediately at link time (`undefined reference to func_080070D4`, not
+a silent corruption) -- fixed by recomputing the exact
+`thumb_func_start` boundaries from a clean `git show HEAD:<file>` copy
+rather than trusting line numbers computed before the file existed in
+its edited form. **General lesson for the next round attacking more of
+this family**: when a single `asm/*.s` file needs multiple splits (more
+than one target function in the same file), compute ALL boundaries
+from the ORIGINAL (unmodified) file content in one pass, and double
+check the boundary between two `src/code_ADDR.cc` extractions isn't
+skipping an un-ported function sitting between them.
+
+Verified bit-exact via two independent full clean rebuilds
+(`rm -rf build fomt.gba fomt.elf fomt.map && make compare`,
+`sha1sum -c fomt.sha1` -> `Réussi` both times) before committing.
+
+### Repo state at end of round 6
+
+- One new commit: `ef58287`. Working tree clean afterward
+  (`git status --short` empty).
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. No sub-agents launched, all work done directly in
+  this worktree as instructed.
+- `DECOMP_RULES.md` updated with the full 37-site list (sorted by
+  address) and the resolved layout/porting recipe for the whole family.
+- **~33 sites of the same family remain** (see `DECOMP_RULES.md` for
+  the full address list) -- second half assigned to worktree `w7`
+  concurrently; whoever picks up the rest of THIS half (or verifies w7
+  didn't already cover it) can reuse the exact same body template,
+  changing only the `vtable_unk_ADDR` constant per site, and the same
+  quicktest-first-then-split workflow documented above.
