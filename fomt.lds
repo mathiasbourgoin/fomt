@@ -236,10 +236,13 @@ SECTIONS
         asm/code_080A3774.o(.text);
         src/code_080B3C0C.o(.text);
         asm/code_080B3C3C.o(.text);
+        src/code_080BC898.o(.text);
         src/code_080BC8C0.o(.text);
         asm/code_080BC8F0.o(.text);
+        src/code_080C0D1C.o(.text);
         src/code_080C0D44.o(.text);
         asm/code_080C0D74.o(.text);
+        src/code_080C7EA8.o(.text);
         src/code_080C7ED0.o(.text);
         asm/code_080C7F00.o(.text);
 
