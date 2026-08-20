@@ -72,6 +72,32 @@ vieilles notes.
   soit utiliser `git add -A` sans restriction (puis vérifier `git status`
   avant de commiter), soit lister explicitement CHAQUE fichier modifié/
   supprimé/ajouté.
+- **Règle standing de Mathias (confirmée) : tout hook doit être un
+  trampoline à taille FIXE (identique à la fonction vanilla remplacée),
+  jamais un remplacement de corps à taille libre.** La vraie logique
+  (aussi complexe que nécessaire) vit dans `.franglais_payload`, une
+  section séparée en fin de ROM que rien ne référence par adresse brute
+  -- elle peut grossir/rétrécir librement. Le point d'accroche dans le
+  code vanilla, lui, doit rester un saut à taille identique à l'original
+  (padding `nop` si besoin), sinon toute fonction en aval décale et
+  n'importe quel pointeur brut existant ailleurs dans la ROM (vtables.s
+  ou une autre table jamais repérée) devient faux -- exactement le bug
+  qui a cassé le boot (`func_0800912C`/`f718114`) et qui reste ACTIF
+  aujourd'hui : mesuré (`nm` sur `fomt.elf`) un décalage résiduel
+  constant de **+8 octets** sur tout le binaire à partir de
+  `func_08050EE4` jusqu'à la fin de la ROM, causé par le fait que les
+  hooks C++ existants (`GetString`/`GetName`/`GetDesc` x3/
+  `franglais_season_of`/`franglais_farmer_stamina`, tous des
+  remplacements de corps à taille libre, pas des trampolines) ne
+  s'annulent PAS exactement à zéro comme on le pensait. Conversion de
+  ces hooks en trampolines à taille fixe = priorité actuelle des agents
+  parallèles avec la symbolisation de `vtables.s` (les deux éliminent la
+  même classe de bug, par les deux bouts). Le trampoline n'est PAS la
+  destination finale (Mathias : "il complique le code et garde du code
+  mort partout") -- une fois `vtables.s` et le reste des tables
+  d'adresses brutes symbolisés, le linker peut reloger librement chaque
+  fonction et le remplacement à taille libre redevient sûr sans
+  trampoline ni padding mort. Discipline transitoire, pas permanente.
 - **Avant de créer un nouveau worktree avec `git worktree add ... main`,
   vérifier que le checkout principal est vraiment SUR `main`** (`git
   branch --show-current`), pas juste faire confiance au nom de branche
