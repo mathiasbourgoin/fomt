@@ -249,6 +249,22 @@ supposer que c'est la pièce manquante d'un near-miss sans l'avoir vérifié
 (confusion vécue round 9/w21, corrigée : le `// TODO` du header porte
 sur autre chose).
 
+### 10. Taille d'une allocation (`operator new(SIZE)`) : toujours un
+littéral hex simple, jamais la décomposition `movs #k; lsls #n` à la main
+
+Quand le désassemblage montre une taille d'allocation matérialisée via
+`movs #k; lsls #n` (ex. `0xe2 << 3` pour `0x710`), écrire directement le
+littéral final en C (`operator new(0x710)`) -- **ne pas** essayer de
+reproduire la décomposition shift à la main. agbcp choisit lui-même
+l'encodage depuis la valeur littérale simple, aussi bien pour les tailles
+shift-décomposables (`k<<n`, `k` tenant sur 8 bits) que pour celles qui
+retombent sur un vrai chargement depuis le pool littéral (aucune
+décomposition `k<<n` possible, ex. `0xB78`/`0x98C`) -- vérifié bit-exact
+sur 18 sites round 10 sans qu'aucun n'ait nécessité d'écriture manuelle
+de la constante. Généralisation directe de l'anti-pattern #1 (masques) à
+un autre contexte de matérialisation de littéral : laisser le
+compilateur choisir la forme, ne pas la deviner depuis le désassemblage.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
