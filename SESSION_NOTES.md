@@ -6627,3 +6627,101 @@ aucun résidu.
   utilisés tout du long -- signal "pression de registres", pas attaqué).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `git status --short` vide après commit.
+
+## Round (worktree w42, branche `parallel-42`) -- follow-up sur les 3 sites
+restants de la famille "entity factory" `func_080324BC`
+
+Mission : continuer le scan sur les 3 sites de call `func_080324BC` restants
+identifiés round w40 (`asm/code_080E41E8.s`, `asm/code_entities_080320DC.s`
+x2, `asm/code_entities.s`), pour vérifier s'il existe d'autres wrappers
+"entity factory" NON catalogués de la même forme exacte (`bl __builtin_new`
+0x8c octets + délégation à `func_080324BC` + AUCUN littéral `vtable_unk_ADDR`
+dans le bloc).
+
+### Méthode
+
+Script Python (scratch, non commité) parcourant les blocs `thumb_func_start`
+des 3 fichiers concernés, cherchant `bl __builtin_new` ET `bl func_080324BC`
+(ou le nom mangle `__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi` que
+l'assembleur original résout parfois au même symbole -- vérifié sans
+incidence, une fausse piste initiale : `asm/code_08035B64.s`/
+`asm/code_08036048.s` sont en fait les fragments RESTANTS après le
+découpage round w40, contenant une fonction NPC ctor sans rapport qui
+partage juste un nom mangle proche).
+
+### Constat : 1 seul vrai match sur les 4 sites `bl func_080324BC` recensés
+
+- **`func_080E44E4`** (`asm/code_080E41E8.s`, ligne 420) : instance EXACTE
+  du shape des 38 déjà matchés -- `movs r0,#0x8c; bl __builtin_new`, puis
+  4 stores sur pile (f0=1,f4=0,f8=0,fc=false via add+strb), puis
+  `func_080324BC(obj, ctx, 5, 27, 1, 0, 0, false)`, AUCUN littéral vtable.
+  **Matché.** Vérifié :
+  1. taille `.text` du `.o` compilé (`readelf -S`) = 0x2c = 44 octets =
+     `next_addr(0x080E4510) - this_addr(0x080E44E4)` exact.
+  2. harnais rapide : désassemblage du C compilé identique octet-à-octet
+     au désassemblage du bloc ORIGINAL réextrait de `git show HEAD:...`
+     et réassemblé avec les MÊMES outils (`arm-none-eabi-as` même flags) --
+     `diff` des deux désassemblages : aucune différence.
+  3. rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map` +
+     stub `franglais_stub.bin` factice) : lien réussi, aucune référence non
+     définie, `arm-none-eabi-nm fomt.elf | grep func_080E44E4` : 1 seule
+     occurrence. `sha1sum -c fomt.sha1` échoue comme attendu (payload
+     franglais non-vanilla, confirmé aussi que la comparaison OCTET À OCTET
+     `baserom.gba` vs `fomt.gba` linéaire n'est PAS utilisable pour
+     vérifier une fonction isolée : ~220k octets diffèrent sur toute la ROM
+     à cause du payload franglais qui réécrit des pointeurs/adresses très
+     largement -- seul le harnais isolé (readelf + désassemblage borné)
+     fait foi, conforme à la discipline `DECOMP_RULES.md`).
+  Découpage : `asm/code_080E41E8.s` tronqué avant la fonction (419 lignes
+  restantes), reste réinjecté dans un nouveau fragment
+  `asm/code_080E4510.s` (header standard + corps depuis
+  `thumb_func_start func_080E4510`, pas de `.align` de frontière à migrer
+  ici -- le bloc cible ne se termine pas par un `.align` explicite, règle
+  #14 non applicable ce site). `fomt.lds` : 1 ancienne ligne
+  (`asm/code_080E41E8.o(.text);`) remplacée par 3
+  (`asm/code_080E41E8.o` ; `src/code_080E44E4.o` ; `asm/code_080E4510.o`).
+
+- **`func_08032A00`** (`asm/code_entities_080320DC.s`, ligne 796) : PAS le
+  même shape. `self` est déjà passé en paramètre (r0, pas de
+  `bl __builtin_new` dans le bloc), le bloc construit les 4 arguments-pile
+  (tous nuls sauf kind=6/subkind=0x20 en r2/r3), appelle `func_080324BC`,
+  PUIS stampe SA PROPRE vtable (`vtable_unk_080E6864`) à `[r4+4]` avant de
+  retourner `self`. Forme "constructeur qui délègue à func_080324BC",
+  sous-variante distincte, pas catalogué ce round (hors scope strict de la
+  mission -- shape différent, mérite son propre round).
+
+- **`func_080222A8`** (`asm/code_entities.s`, ligne 3271) : même
+  sous-variante que `func_08032A00` (self déjà passé, délégation puis
+  stamp vtable `vtable_unk_080E64B4` propre), mais en plus complexe :
+  utilise `r8` (push/pop dédié) et appelle 2 helpers opaques
+  (`func_08022320`, `func_08022334`) pour construire les 2 premiers
+  arguments-pile avant l'appel à `func_080324BC`. Pas catalogué ce round.
+
+- **`func_08034A14`** (`asm/code_entities_080320DC.s`, ligne 4219, 91
+  lignes) : fonction bien plus grosse, `r8`/`sb` vivants tout du long,
+  plusieurs `bl` vers des callees distincts (`_call_via_r1`,
+  `func_080A4A00`) en plus de `func_080324BC` -- signal "pression de
+  registres" au sens de la classe déjà documentée, PAS un simple wrapper.
+  Confirme que ce site n'est structurellement pas de la même famille.
+
+Scan exhaustif confirmé (avant ET après le port de `func_080E44E4`, sur le
+contenu `HEAD` d'origine des 3 fichiers) : aucun AUTRE bloc combinant
+`bl __builtin_new` + absence de littéral `vtable_unk_` + allocation 0x8c
+octets n'existe dans ces 3 fichiers au-delà de `func_080E44E4`.
+
+### État du worktree en fin de round
+
+- 1 fonction matchée (`func_080E44E4`), 1 commit (découpage +
+  `fomt.lds` + `src/code_080E44E4.cc`).
+- `func_08032A00`/`func_080222A8` : sous-variante "self déjà alloué +
+  stamp vtable propre après délégation" identifiée mais NON portée --
+  candidat pour un futur round dédié à cette forme précise, documenté
+  dans `DECOMP_ARCHIVE.md`.
+- `func_08034A14` : confirmé "pression de registres", pas un wrapper --
+  ne pas retenter sans budget dédié.
+- `func_080324BC` lui-même reste non porté (callee opaque, `r8`/`sb`
+  utilisés tout du long).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Sweep anti-doublon : `grep thumb_func_start` sur `func_080E44E4` dans
+  `asm/*.s` -- aucun résidu ; `nm fomt.elf` -- 1 seule occurrence.
+- `git status --short` vide après commit.
