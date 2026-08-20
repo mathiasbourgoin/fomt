@@ -5467,37 +5467,3 @@ sub_08087710: @ 0x08087710
 	bx r1
 	.align 2, 0
 
-	thumb_func_start func_08088168
-func_08088168: @ 0x08088168
-	push {r4, r5, r6, lr}
-	mov r6, r8
-	push {r6}
-	adds r4, r0, #0
-	adds r5, r1, #0
-	mov r8, r2
-	adds r6, r3, #0
-	ldr r0, .L080881A4 @ =vtable_unk_080E7D3C
-	str r0, [r4]
-	ldr r0, .L080881A8 @ =0x000043E0
-	bl __builtin_new
-	mov r1, r8
-	adds r2, r6, #0
-	bl func_08085584
-	str r0, [r4, #4]
-	ldr r1, [r5]
-	movs r0, #0
-	str r0, [r5]
-	str r1, [r4, #8]
-	str r6, [r4, #0xc]
-	mov r0, r8
-	str r0, [r4, #0x10]
-	adds r0, r4, #0
-	pop {r3}
-	mov r8, r3
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L080881A4: .4byte vtable_unk_080E7D3C
-.L080881A8: .4byte 0x000043E0
-

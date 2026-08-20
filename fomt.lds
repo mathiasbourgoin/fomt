@@ -70,6 +70,7 @@ SECTIONS
         src/scene.o(.text);
         asm/scene.o(.text);
         asm/intro_scene.o(.text);
+        src/code_080036F8.o(.text);
         src/code_0800371C.o(.text);
         asm/code_0800374C.o(.text);
         asm/new_game.o(.text);
@@ -149,16 +150,21 @@ SECTIONS
         src/code_0805218C.o(.text);
         src/code_080521BC.o(.text);
         asm/code_080521FC.o(.text);
+        src/code_08057DD8.o(.text);
         src/code_08057E1C.o(.text);
         asm/code_08057E5C.o(.text);
+        src/code_0805CEB8.o(.text);
         src/code_0805CEFC.o(.text);
         asm/code_0805CF3C.o(.text);
+        src/code_0805E624.o(.text);
         src/code_0805E658.o(.text);
         asm/code_0805E698.o(.text);
         src/code_0805E6CC.o(.text);
         asm/code_0805E760.o(.text);
+        src/code_0805FCD0.o(.text);
         src/code_0805FD04.o(.text);
         asm/code_0805FD44.o(.text);
+        src/code_08069E14.o(.text);
         src/code_08069E58.o(.text);
         asm/code_08069E98.o(.text);
         src/code_0806D918.o(.text);
@@ -173,9 +179,19 @@ SECTIONS
         src/code_080755EC.o(.text);
         src/code_0807561C.o(.text);
         asm/code_0807565C.o(.text);
+        src/code_080756B0.o(.text);
+        asm/code_080756D0.o(.text);
+        src/code_08077C40.o(.text);
+        asm/code_08077CE0.o(.text);
+        src/code_0807B038.o(.text);
+        asm/code_0807B0F0.o(.text);
+        src/code_0807D070.o(.text);
+        asm/code_0807D194.o(.text);
         src/code_0807DD38.o(.text);
         src/code_0807DD68.o(.text);
         asm/code_0807DDA8.o(.text);
+        src/code_0807E438.o(.text);
+        asm/code_0807E4B8.o(.text);
         src/code_0807EE14.o(.text);
         src/code_0807EE44.o(.text);
         asm/code_0807EE84.o(.text);
@@ -196,8 +212,10 @@ SECTIONS
         asm/code_08082184.o(.text);
         src/code_08083AEC.o(.text);
         asm/code_08083B2C.o(.text);
+        src/code_080854F4.o(.text);
         src/code_08085528.o(.text);
         asm/code_08085568.o(.text);
+        src/code_08088168.o(.text);
         src/code_080881AC.o(.text);
         asm/code_080881EC.o(.text);
         src/code_0808AB38.o(.text);
@@ -220,6 +238,7 @@ SECTIONS
         src/code_08093A58.o(.text);
         src/code_08093A88.o(.text);
         asm/code_08093AC8.o(.text);
+        src/code_0809A4D4.o(.text);
         src/code_0809A518.o(.text);
         asm/code_0809A558.o(.text);
 
@@ -242,6 +261,7 @@ SECTIONS
         asm/code_809E804.o(.text);
         src/code_080A3744.o(.text);
         asm/code_080A3774.o(.text);
+        src/code_080B3BE4.o(.text);
         src/code_080B3C0C.o(.text);
         asm/code_080B3C3C.o(.text);
         src/code_080BC898.o(.text);
