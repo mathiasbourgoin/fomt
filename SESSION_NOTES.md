@@ -1145,3 +1145,168 @@ succeeded) on the first attempt.
   in the `.s` file so needs its own small split) and `func_08010F1C`
   (getter on byte 3, needs the exact bitfield width worked out before
   writing the C, unlike the plain single-bit getters/setters).
+||||||| 43c9148
+
+## Round 6
+
+### Goal
+
+Assigned target from the franglais-patch repo's `docs/ENGINE.md` boot-FSM
+research: `franglais_boot_fsm_run` (`0x08093364`) and the scene/screen
+table it dispatches through. Per the round's brief, `func_080007EC`
+(the shared base `AScene` destructor) was already confirmed matched
+(rounds 4-5, `func_08004C54`/`func_080E09B0` both depend on it), so this
+round skipped straight to (a) sizing up `franglais_boot_fsm_run` itself
+and (b) other constructors/destructors in the same scene-table family.
+
+### `franglais_boot_fsm_run` (`func_08093364`) sized up, NOT attempted
+
+Located at `asm/code_0805E760.s:104359` (the same giant blob that holds
+the confirmed "register pressure" failures `func_0805E790`/
+`func_0804E4AC` from rounds 1/3). Body runs 0x08093364-0x08093A58
+(0x6F4 = 1780 bytes, ~800 lines of `.s`), and the prologue alone
+(`push {r4,r5,r6,r7,lr}; mov r7,sl; mov r6,sb`) shows the exact register-
+pressure signature `DECOMP_RULES.md` already flags as "do not re-attempt
+without a big dedicated budget" -- two 9-entry jump tables, calls into
+~10 different not-yet-decompiled subsystems per `docs/ENGINE.md`. **Not
+attempted this round**, consistent with the existing difficulty-class
+rule; would need its own multi-round budget same as `DrawGlyphAt`.
+
+### `func_08010158` matched (commit `a85f4b1`) -- a NEW, easier variant
+of the scene-destructor family
+
+Round 4/5 had classified the 47 `bl func_080007EC` call sites into two
+buckets: the trivial "no vtable, pure tail-forward" case
+(`func_080E09B0`, matched) and a "~23 richer, harder" bucket assumed to
+share ONE shape (`ldr r1,[r4,#4]; ldr r0,[r1,#4]; ldr r2,[r0,#8]; bl
+_call_via_r2` -- a VIRTUAL child-teardown call, blocked on
+characterizing the child object's layout). Looking for other
+scene-table constructors/destructors (the "table d'écrans/scènes" this
+round's brief pointed at) turned up `func_08010158` in `asm/game_scene.s`,
+which shares the vtable (`vtable_unk_080E5BF8`) and general shape but is
+a **third, simpler variant** not previously catalogued: both of its
+sub-object teardowns are **direct (non-virtual) calls**, not virtual
+dispatch:
+
+```
+push {r4, r5, lr}
+adds r4, r0, #0            @ r4 = self
+adds r5, r1, #0            @ r5 = in_chrg
+ldr  r0, =vtable_unk_080E5BF8
+str  r0, [r4]                @ self->vtable = &vt
+ldr  r1, =gUnk_0300040C
+movs r0, #0
+str  r0, [r1]                @ gUnk_0300040C = 0
+movs r1, #0xde
+lsls r1, r1, #2
+adds r0, r4, r1              @ r0 = self + 0x378
+movs r1, #2
+bl   func_080D7E64           @ tear down sub-object at self+0x378
+adds r0, r4, #0
+adds r0, #8                  @ r0 = self + 8  (embedded AScriptEngine)
+movs r1, #2
+bl   _._13AScriptEngine      @ DIRECT (non-virtual) dtor call
+ldr  r0, [r4, #4]            @ r0 = *(self+4)  (child pointer, no deref of ITS vtable)
+cmp  r0, #0
+beq  skip
+movs r1, #3
+bl   func_080D4480           @ DIRECT (non-virtual) call on the child
+skip:
+adds r0, r4, #0
+adds r1, r5, #0
+bl   func_080007EC           @ base AScene::~AScene(self, in_chrg)
+pop  {r4, r5}
+pop  {r0}
+bx   r0
+```
+
+Confirms this class (constructed by `func_080D3EF4`, `__builtin_new`
+of `0x554` bytes, embeds a `ScriptEngine` at +8 via `__12ScriptEnginePv`
+-- i.e. this is very likely the game-scene/"in-farm gameplay" screen
+object, matching `asm/game_scene.s`'s file name) is unrelated in shape
+to the "~23 richer, virtual child teardown" bucket -- **not every
+"richer than `func_080E09B0`" call site shares the same shape**, same
+lesson as the `DrawString`/`DrawGlyphAt` false-generalization from round
+3-4 (same doc section, same file, different difficulty). Worth
+re-scanning the remaining ~22-ish call sites for this SAME simpler
+"direct calls, no virtual dispatch" shape before assuming they all need
+the child-layout characterization work -- some may match on the first
+try like this one did.
+
+**One real near-miss found and fixed before landing**: `AScriptEngine`
+already has a `virtual ~AScriptEngine()` (`src/script_engine.cc`).
+Writing the natural-looking `((AScriptEngine*)(self+8))->~AScriptEngine()`
+compiles to a VIRTUAL call (`ldr` the embedded object's own vtable
+pointer at offset `+0x34C` within it, `ldr` slot 2, `bl _call_via_r2`)
+-- correct C++ semantics for an explicit destructor call through a
+polymorphic type, but NOT what the original binary does (the original
+calls `_._13AScriptEngine` directly, no vtable indirection at all, since
+statically-typed non-polymorphic teardown of a known-type member never
+needs virtual dispatch). Fixed by qualifying the call with the class
+name -- `->AScriptEngine::~AScriptEngine()` -- which forces agbcp/agbc++
+to emit the static, non-virtual call. **New generalizable rule**: when
+porting a class that owns (not just points to) a polymorphic member and
+the original disassembly shows a DIRECT `bl` to that member's mangled
+destructor symbol (not a virtual dispatch through its own vtable), the
+C++ source must use the **qualified** explicit destructor call
+(`obj.Base::~Base()`), never the plain `obj.~Base()` -- the plain form
+is semantically valid C++ but compiles to different (virtual) codegen
+whenever the member's static type has a virtual destructor. Added to
+`DECOMP_RULES.md`.
+
+Split mechanics: `func_08010158` was the last function in
+`asm/game_scene.s` with a `thumb_func_start` label -- everything after
+its own body + 2-word literal pool was **unlabeled raw `.byte` data**
+(presumably a not-yet-disassembled continuation of the same
+translation unit). Moved that unlabeled tail byte-for-byte into a new
+`asm/code_080101A0.s` (named after its start address, though nothing
+external references it by that name since it was never a symbol), with
+the trimmed `asm/game_scene.s` keeping everything before the target
+function untouched. Two new `fomt.lds` entries inserted at the old
+`asm/game_scene.o(.text)` line's position:
+`asm/game_scene.o(.text); src/code_08010158.o(.text);
+asm/code_080101A0.o(.text);`. Verified bit-exact via **two** independent
+full clean rebuilds (`rm -rf build fomt.gba fomt.elf fomt.map && make
+compare`), once right after landing and once again before this write-up.
+
+**Toolchain hazard found and worked around**: the quicktest harness's
+`/tmp/qt.s`/`/tmp/qt.o` paths from `DECOMP_RULES.md` are NOT
+session-isolated -- a first quicktest run in this session picked up a
+**stale `/tmp/qt.s` from an apparently unrelated concurrent process**
+(the `objdump` output showed 5 completely unrelated functions,
+`func_08007128` etc., nothing matching the input `.cc`). Re-ran the
+exact same pipeline with unique paths under this session's own scratch
+directory instead of bare `/tmp/qt.s`/`/tmp/qt.o` and got the expected,
+correct disassembly. **Rule for future rounds: never use the bare
+`/tmp/qt.s`/`/tmp/qt.o` paths from the quicktest recipe verbatim --
+always redirect to a session-unique path first**, since `/tmp` is
+shared across whatever else is running on the machine. Added to
+`DECOMP_RULES.md`.
+
+Also encountered again: `ls` (plain, unwrapped) produced silently empty
+output in this environment for directories that verifiably have content
+(confirmed via `python3 -c "os.listdir(...)"`) -- some shell-level
+interception (unlikely to be this repo's concern, environment-specific)
+swallows `ls`'s stdout without an error code. Not investigated further
+(out of scope), just noted: **if `ls` ever appears to report an empty
+directory unexpectedly in this environment, verify with `python3 -c
+"import os; print(os.listdir(...))"` before trusting it.**
+
+### Repo state at end of round 6
+
+- One new commit: `a85f4b1` (`func_08010158` match). `make compare`
+  verified bit-exact via two independent full clean rebuilds.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
+- Stray untracked file named `" "` (literal single space, 6480 bytes)
+  found in the worktree root at the start of this round, not created by
+  this round's work -- left untouched, not staged, not deleted (unclear
+  provenance, not this round's to manage per the "don't overwrite
+  activity you didn't produce" rule).
+- Priority list for whoever picks this up next: (1) `franglais_boot_fsm_run`
+  (`func_08093364`) itself -- needs a dedicated multi-round register-
+  pressure budget, not a quick attempt; (2) re-scan the ~22 remaining
+  "richer" `func_080007EC` call sites for the SAME simple
+  "direct-calls-only" shape `func_08010158` turned out to have, before
+  assuming they all need the harder child-layout characterization work;
+  (3) everything still open from rounds 1-5's priority lists (unchanged).
