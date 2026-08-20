@@ -6195,3 +6195,105 @@ fomt.sha1` échoue comme attendu (payload franglais non-vanilla). Aucune
 **État du worktree en fin de round** : propre (`git status --short`
 vide), 3 commits ajoutés depuis `main` (2 matchs + 1 fix de
 vérification). `origin` non touché, rien poussé, pas de PR.
+
+## Round w39 (worktree `parallel-39`) -- match 5 handle-forwarding thunks after TransitionCtlQuery, near-miss on 2 bitfield setters, découverte d'un gros blob caché non exploré
+
+Consigne : depuis `func_08050DF0`/`TransitionCtlQuery` juste matchée par
+w38, regarder les sites d'appel/fonctions liées non portées dans le
+voisinage immédiat (`asm/code_08050E0C.s`).
+
+### Matchs (commit `dfd228e`)
+
+Juste après `TransitionCtlQuery` (0x08050DF0-0x08050E0C), le fichier
+`asm/code_08050E0C.s` enchaînait une dizaine de petites fonctions de
+même famille : `self` est un handle (1er mot = pointeur vers l'objet
+réel), la fonction déréférence puis tail-forward vers un callé
+(pression de registres confirmée dans CE callé lui-même, mais appelé
+en boîte noire ici -- pas besoin de le porter). Même idiome que
+`func_080E09B0` (round 5, tail-forward pur `push{lr};bl X;pop{r0};bx r0`),
+juste avec un paramètre en plus dans certains cas.
+
+Matchés bit-exact du premier coup via le harnais rapide, aucune
+itération nécessaire :
+- `func_08050E50` -> `func_08050AD8(self->inner, arg1)` (2 args)
+- `func_08050E5C` -> `func_08050B3C(self->inner)` (1 arg)
+- `func_08050E74` -> `func_08050C18(self->inner)` (1 arg)
+- `func_08050E80` -> `func_08050C2C(self->inner, arg1)` (2 args)
+- `func_08050E8C` -> `func_08050C64(self->inner)` (1 arg)
+
+Découpage du fichier monolithique en plusieurs morceaux (les cibles
+n'étaient pas contiguës -- `func_08050E68` entre `E5C` et `E74` est un
+thunk d'un genre différent, `ldr r3,=ADDR; bx r3`, PAS tenté ce round,
+laissé en asm) : `asm/code_08050E0C.s` tronqué juste avant `E50`,
+nouveau `asm/code_08050E68.s` (juste ce thunk), nouveau
+`asm/code_08050E98.s` (reste du fichier original, jusqu'à juste avant
+`func_0805218C` déjà porté). `fomt.lds` : 8 entrées insérées à la place
+de l'unique `asm/code_08050E0C.o(.text)`.
+
+Vérification standard `DECOMP_RULES.md` (objet isolé) : les 5 `.o`
+compilés font chacun exactement `0xc` octets = écart d'adresse attendu ;
+diff de désassemblage borné (`--adjust-vma=0x08000000`) contre
+`baserom.gba` : identique octet à octet pour les 5. Rebuild complet
+(`rm -rf build ... && make compare`) : LD réussit sans référence non
+définie ni définition multiple (seul le `sha1sum` final échoue, attendu
+depuis `cb06198`). Sweep anti-doublon
+(`grep -rl -- ".L08050E50\|.L08050E5C\|.L08050E74\|.L08050E80\|.L08050E8C" asm/*.s`) :
+vide.
+
+### Near-miss NON commité : `func_08050E98`/`func_08050EBC` (setters de bitfield 6 bits, offset self+0x550)
+
+Paire de setters sur le même champ que `TransitionCtlQuery` ne lit pas
+(offset différent, `+0x550` vs `+8`/`+0x158`) : un octet dont les 6 bits
+bas sont un sous-champ modifiable (`E98` = clear via masque param,
+`EBC` = set via masque param OR-é puis re-masqué à 6 bits), les 2 bits
+hauts préservés inconditionnellement. Extraction du champ bas via
+double-shift (`lsls #0x1a; lsrs #0x1a`, cohérent avec anti-pattern #1bis)
+-- partie FACILE, reproduite du premier coup.
+
+**Résidu non résolu** : le masque des 2 bits hauts (`~0x3F` = `0xC0`)
+est construit dans la cible via `movs r1,#0x40; rsbs r1,r1,#0; ands r1,r4`
+(négation explicite d'une petite constante pour fabriquer
+`0xFFFFFFC0`), **jamais** via un simple `movs r1,#0xc0` direct -- alors
+que TOUTE formulation C testée (`v & ~0x3F` avec `v` typé `u8` OU `u32`,
+stocké ensuite dans `*field` de type `u8*`) fait fondre agbcp la
+constante en `0xc0` (immédiat 8-bit direct), jamais la construction par
+négation. Le désassemblage cible garde aussi `push {r4,lr}`/
+`pop {r4}; pop {r1}; bx r1` (la valeur lue `v` survit dans `r4` à travers
+tout le calcul), alors qu'aucune de nos formulations n'a eu besoin de
+`r4` (tout tient dans `r0`-`r3`, `bx lr` direct, pas de `push`/`pop` du
+tout) -- signe que la vraie source garde `v` vivant plus longtemps
+qu'aucune de nos réécritures ne le fait, probablement via une variable
+supplémentaire ou un ordre de calcul différent pas encore identifié.
+**2 hypothèses testées, toutes deux repliées par le peephole de
+constant-folding** (`v` en `u8` local ; `v` en `u32` local) -- piste non
+tentée : construire le masque comme variable ELLE-MÊME calculée à
+runtime (ex. `u32 mask = -0x40;` déclarée à part, jamais inlinée dans
+l'expression finale) pour empêcher le pliage compile-time, cohérent avec
+l'anti-pattern #4bis (séparer un load/calcul dans un statement à part
+déjoue certains peepholes). **Pas engagé plus loin ce round** (2
+fonctions, 58 octets au total, budget marginal) -- laissé en asm, aucun
+fichier modifié pour cette paire.
+
+### Découverte : gros blob `.byte` caché NON répertorié, `.L08050EE4` (0x43c = 1084 octets)
+
+En lisant `asm/code_08050E98.s` (nouveau fichier, reste de l'ancien
+`code_08050E0C.s`) pour matcher `E98`/`EBC` ci-dessus, un bloc `.byte`
+massif de **1084 octets** apparaît juste après `func_08050EBC`, avant
+`func_08051320` (label local `.L08050EE4`, pas de `thumb_func_start`).
+`scan_hidden_code_blobs.py` (round w37, "scan épuisé") **ne l'a jamais
+vu** : le scanner ne cherche que les blocs de 4 à 40 octets, ce bloc-ci
+est 27x plus gros que sa borne haute -- angle mort documenté du
+scanner, pas une régression. Contenu non analysé ce round (hors budget) :
+au vu de la taille, contient très probablement PLUSIEURS fonctions
+distinctes non nommées (le premier mot `0x70,0xB5` = `push {r4,r5,r6,lr}`
+est un vrai prologue Thumb plausible, cohérent avec un vrai code
+compilé, pas des données). **Candidat sérieux pour un futur round dédié**
+-- nécessitera un désassemblage manuel complet (pas de contexte
+d'appelant symbolique cherché ce round) avant de tenter un port.
+
+### Repo state en fin de round
+
+- 1 commit de matchs (`dfd228e`, 5 fonctions).
+- `git status --short` vide, `build/`/`fomt.gba`/`fomt.elf`/`fomt.map`
+  nettoyés.
+- `origin` intact, rien poussé, aucune PR.
