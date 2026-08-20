@@ -232,6 +232,8 @@ SECTIONS
         src/harvest_sprite.o(.text);
 
         asm/code_809E804.o(.text);
+        src/code_080A3744.o(.text);
+        asm/code_080A3774.o(.text);
         src/code_080B3C0C.o(.text);
         asm/code_080B3C3C.o(.text);
         src/code_080BC8C0.o(.text);
