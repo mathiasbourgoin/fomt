@@ -591,6 +591,8 @@ continuation après `mov lr,pc; bx sb` existent aussi dans
 | `func_080099EC`, `func_08009A04`, `func_08009A2C`, `func_08009A38` | 4 fonctions NON cataloguées, ex-`.byte` bruts après `func_080099D4` : 2 constructeurs qui stampent des vtables déjà connues (`vtable_unk_080E5BB4`/`080E5BD8`/`080E5BE8`), 1 prédicat "sentinelle vide" assorti, 1 utilitaire sans rapport (test non-nul branchless) | 9 (w18) | `d417e87` |
 | `func_080100F0`, `func_08010104`, `func_08010118`, `func_08010128`, `func_08010138`, `func_08010148`, `func_0801014C` | 7 accesseurs NON catalogués, ex-`.byte` bruts après `func_0801004C` : 6 lisent le global déjà connu `gUnk_0300040C` à divers offsets constants, 1 retourne une constante entière brute | 9 (w18) | `dc8fd26` |
 | `func_08008A68` | teardown de `func_08008980` (registre du root object démarrage, `AgbMain`/`func_0801004C`) | 9 (w21) | `2bab4c4` |
+| `func_0803A804`, `func_0803A80C`, `func_0803A814`, `func_0803A820`, `func_0803A840`, `func_0803A870`, `func_0803A8A0` | 7 fonctions NON cataloguées, ex-`.byte` bruts (160 octets) après `func_0803A798` : accesseurs/prédicat/wrapper sur `UnknownEntityThing::sprite_animator`, helper `SetAnim` dédupliqué (sœur de `AActorEntity::RefreshSprite`), getter trivial `UnknownEntityThingBase::dummy` | 10 (w23) | `0ae8f12` |
+| `func_08011ED8` | 2e overload du constructeur de la classe bâtie par `func_08011DC4` (asm, non porté) -- construit une `Location` locale avec un seul champ initialisé (les 2 autres restent non-initialisés, comme l'original), ex-`.byte` bruts (272 octets) après `func_08011DC4` | 10 (w23) | `51cbacc` |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré

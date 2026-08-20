@@ -4044,3 +4044,244 @@ concrete next thing to try, not just "try harder."
 - `origin` push URL untouched, nothing pushed, no PR, no network action.
   Solo worktree (`w21`/`parallel-21`), no concurrent-session interference
   observed.
+
+## Round 10 (worktree w23) -- the 3 remaining "larger, not auto-verified"
+hidden-blob candidates from round 9: 2 matched, 1 solid near-miss
+
+### Goal
+
+Round 9 (w18) flagged 3 blobs found by `tools/scripts/scan_hidden_code_blobs.py`
+as real-looking Thumb code but too large (>40 bytes) to auto-verify, and
+explicitly deferred hand-disassembly to a future round:
+`asm/code_entities_08034CEC.s` `.L0803A804` (160 bytes), `asm/code_08010F54.s`
+`.L08011ED8` (272 bytes, file also contains an unrelated large
+register-pressure function -- explicit caution flagged), `asm/code_actor_0809BFE8.s`
+`.L0809E1B4` (288 bytes). This round attacked all 3.
+
+### Match 1: `func_0803A804` group -- 7 functions, not 5 (correction of an
+early misread), commit `0ae8f12`
+
+Hand-disassembling `asm/code_entities_08034CEC.s`'s 160-byte tail
+initially looked like 5 sub-functions but turned out to be **7** -- a
+first-pass read merged two adjacent functions (`func_0803A840`,
+gated on `unk_47` and calling `func_0805E8F0`; `func_0803A870`, the
+`SetAnim`-shaped one) into a single description, and missed a trailing
+4-byte 7th function entirely (`func_0803A8A0`,
+`ldr r0,[r0,#0]; bx lr` -- a trivial `UnknownEntityThingBase::dummy`
+getter) because it sat one line past the initial `Read` window. **Lesson
+for future blob hand-disassembly: always re-verify against the true EOF
+of the source file (`wc -l` / `git show HEAD:<file> | tail`), don't trust
+an early truncated read of the raw `.byte` lines** -- the missing 4 bytes
+caused a real `sha1sum` FAILURE on the first `make compare` attempt (ROM
+shrank by 4 bytes, cascading a small diff into ~600k byte positions
+downstream via shifted literal-pool addresses) that was only found by
+diffing `baserom.gba` vs the built ROM byte-for-byte and confirming the
+literal `vtable_unk_...` constant right before the blob had shifted by
+exactly 4.
+
+All 7 operate on `UnknownEntityThing` (`include/unknown_types.hh`) via
+its known `sprite_animator` (+0x30) and `unk_44`/`unk_46`/`unk_47`
+fields, matching the shape already ported in
+`src/entity_actor.cc:AActorEntity::RefreshSprite` almost exactly (same
+`func_0805E860` call + flag-set sequence) -- `func_0803A870` is a
+dedup'd sibling of that call site with an extra cached-anim-id check at
+`self+4` (an undocumented field; `UnknownEntityThingBase`'s header
+comment guesses a vtable pointer lives there, unverified since no `.cc`
+in this repo constructs that base class yet -- left as raw pointer
+arithmetic rather than resolving that question). New matches:
+`func_0803A804`/`func_0803A80C` (i16 getter/setter on a `sprite_animator`
+sub-field), `func_0803A814` (tail-forwarding wrapper), `func_0803A820`
+(branchless-nonzero predicate, same idiom already known), `func_0803A840`
+(flag toggle), `func_0803A870` (`SetAnim`-style dedup helper),
+`func_0803A8A0` (trivial getter). Source: `src/code_0803A804.cc`.
+
+**New generalizable idiom confirmed** (2nd sighting after `func_0803A840`
+in this same file): a `ldrb`/`ble`/... "if flag set, clear it and store;
+else compute+maybe-store" shape where BOTH branches share a single tail
+`strb rX,[rY]` compiles correctly only when the C source hoists the
+"else" case's target pointer OUTSIDE the if/else (`u8 *out = &field;`
+computed once, up front, re-pointed only in the "if" branch) rather than
+assigning it fresh inside each branch -- this reproduces the target's
+`bne`-to-bottom control flow (the common/simple case physically at the
+end, right before the epilogue) and avoids an extra register move in the
+"else" (which, in target's true source, is actually reached by the
+`bne`, i.e. corresponds to the C `else`, not the `if`) -- get the
+if/else polarity backwards and you get an extra unconditional `b.n` that
+bloats the function by 2-6 bytes depending on shape.
+
+### Match 2: `func_08011ED8` -- second constructor overload of
+`func_08011DC4`'s class, commit `51cbacc`
+
+Confirmed NOT the register-pressure function that this round's brief
+explicitly warned about (that's a different, unrelated function
+elsewhere in the same file) -- uses only `r4-r7`, no `r8`/`sb`/`sl`/`ip`.
+Builds the exact same 0xF8-byte object as `func_08011DC4` (unported,
+still asm) via a different overload: instead of copying a caller-supplied
+`Location` by pointer (`ldm`), it builds one locally with only the first
+word set to 2, the other two read straight off the stack **uninitialized**
+-- a real quirk of the original, not a decompilation error, confirmed
+by the fact that reproducing it exactly required a **20-byte local**
+(5 words) even though only the first 12 bytes (3 words) are ever read or
+written -- agbcc's stack allocator reserves space for the local's full
+declared size regardless of what's actually touched, so an undersized
+12-byte local produces a 12-byte frame (`sub sp,#12`) while the target
+needs `sub sp,#20`. **New idiom, useful beyond this one function: when a
+target's `sub sp,#N` is bigger than the sum of bytes your candidate local
+variables actually touch, try widening the "front" local's declared
+size** (as an oversized struct with untouched trailing fields) rather
+than adding a second, genuinely separate unused local -- an actually-dead
+second local gets its storage optimized away entirely by agbcc (verified:
+adding `u32 pad[2]; pad[0]=pad[0];` did NOT change the frame size at
+all), but a single oversized struct whose extra fields are simply never
+referenced DOES reserve the extra space, because the struct's `sizeof`
+is what drives the frame allocation, not per-field liveness.
+
+Also confirmed (2nd sighting, generalizes round 9's finding for
+`func_0800711C`): a flat `*(u32*)(obj+8+4) = 0;` expression gets
+constant-folded by agbcp into a single `str r4,[r7,#12]`, losing a
+genuine nested-substruct-pointer computation (`adds r0,r7,#0; adds
+r0,#8; str r4,[r0,#4]; adds r0,#8` -- 4 instructions) that the real
+source performs because it accesses the field through an intermediate
+named sub-object pointer, not a flat offset. Fix: introduce the
+intermediate `char *sub = obj + 8;` variable explicitly.
+
+**New idiom found and reverted (important negative result):** a
+hand-unrolled zero-fill loop written as `char *p = ...; *(u32*)p = 0; p
++= 4;` (repeated) gets compiled by agbcp into a compact `stmia r0!,{r4}`
+(auto-increment single-register store) -- HALF the size of the target,
+which uses the verbose `str r4,[r0,#0]; adds r0,#4;` form repeated. This
+is the OPPOSITE problem from the usual "agbcp is too weak to optimize" --
+here it has a real (if narrow) peephole that collapses a manually-unrolled
+pointer-walk into `stmia`. Writing the SAME 7 stores as flat,
+independently-addressed statements (`*(u32*)(obj+0xa0)=0; *(u32*)(obj+0xa4)=0;
+...`, no shared pointer variable) avoids the peephole and reproduces the
+verbose form exactly, while still benefiting from agbcp's separate
+"reuse the last computed base + small delta" habit to avoid a full
+r7-relative recompute on each line. **Rule: if a target shows a
+`str`/`strb`/`strh` + `adds rX,#N` pair repeated verbatim (not `stmia`),
+and your hand-unrolled C pointer-walk compiles to `stmia` instead, switch
+to independent flat-offset statements (no local pointer variable
+persisting across the repeats).**
+
+### Near-miss (documented, not applied): `func_0809E1B4`, ~288-byte
+"format a value into a scattered-offset message buffer" helper
+
+Fully disassembled, fully understood structurally, confirmed real code
+(not data) and NOT the register-pressure class -- but **not bit-exact
+after ~10 distinct structural rewrites**, all converging on the exact
+same single symptom, so filed as a genuine near-miss rather than an
+abandoned target.
+
+**Function role** (semantic, not needed for correctness but useful
+context): reads a `Farmer`'s `ActorLocation` (`self->location` via the
+already-ported `func_0800E924`), and depending on whether
+`(i32)(loc.map << 22) > (i32)0x4CC00000` (an `if`/`else`, NOT an `if`
+followed by unconditional code -- see structural correction below),
+computes an index from `loc.map`'s low 10 bits (masked via the
+already-known double-shift idiom, DECOMP_RULES rule 1bis) offset by a
+constant (`-308` in the `if` branch, `-52` in the `else`), calls one of 4
+still-unported opaque helper functions (`func_0809D79C`/`func_0809D7D8`
+in the `if` branch, `func_0809D418`/`func_0809D470` in the `else`) with
+`(self, idx)`, and for each result runs a small fixed-count loop
+(`4`/`9`/`9`/`13` iterations) that copies bytes one at a time from a
+computed offset into one of 4 known `gUnk_...` byte tables
+(`gUnk_08103B38`/`08103C74`/`08103F98`/`0810400C`, source strings at a
+per-call stride of 5/7/5/5×2 bytes computed via literal shift-add, not a
+plain multiply) to SCATTERED destination offsets read from a matching
+`gUnk_...` word-array "offset table"
+(`gUnk_08103B10`/`08103C3C`/`08103F84`/`08103FE4`) into the caller's
+`dest` buffer -- almost certainly assembling a formatted in-game text
+string (season/day-of-week name substituted at fixed positions in a
+template) from lookup tables, though the exact semantic meaning (which
+message, which field) was not pinned down and isn't needed for a
+bit-exact port.
+
+**Real structural bug caught and fixed mid-round**: an early read of the
+disassembly mistook the function for "if (cond) { block A } <block C/D
+unconditionally>" -- the `b.n` at the end of block A actually jumps
+STRAIGHT to the epilogue, skipping block C/D entirely, i.e. it's a
+genuine `if`/`else`, not `if` + fallthrough. Confirmed by tracing that
+`r5` (the `Farmer*`, computed once at function entry) is read again,
+unmodified, at the very start of the `else` branch -- which only makes
+sense if the `if` branch's later clobbering of `r5` (reused as scratch
+for an offset-table pointer, see below) never executes on that path.
+**General lesson: when a conditional branch's target sits WELL AFTER a
+large block of code that itself ends in an unconditional branch, check
+where THAT unconditional branch actually goes before assuming the
+large block is optional-but-followed-by-shared-code -- it may instead be
+one whole arm of an if/else, with the other arm reached only via the
+original conditional branch.**
+
+**The near-miss itself**: every single instruction address, mnemonic,
+immediate, branch target, and literal-pool value matches the target
+exactly (270 bytes of code either side, confirmed via full manual
+address-by-address comparison, not just spot-checks) -- except that in
+each of the two branches, one 2-byte instruction encodes the WRONG
+register: the "compute `idx` from the freshly-read `ActorLocation`'s
+`map` field" instruction targets `r5` in every tested C formulation of
+this round, but the target uses `r4`. Correspondingly, the FIRST
+scatter-loop's offset-table pointer (a genuinely-independent, more
+short-lived value) ends up in the register the other one didn't take --
+i.e. the two candidate free registers at that point (`r4`, freed from
+holding the `ActorLocation`'s stack address once its field is read; `r5`,
+freed from holding `Farmer*` once the `func_0800E924` call returns) get
+assigned to (`idx`, offset-table-pointer) in the OPPOSITE order from
+target in every attempt.
+
+**~10 structural variants tried, all producing byte-IDENTICAL output for
+this specific choice** (i.e. this is a very stable/deterministic
+behavior of `agbcp`'s allocator, not noise): reordering the `+`
+operands; splitting the field-extraction into its own statement;
+hoisting `idx`'s declaration before the `ActorLocation` read; changing
+`idx`'s type `i32`->`u32`; changing `Farmer*` to `void*`; removing the
+named `farmer` variable entirely and inlining `(char*)save+0x1bd8` at
+each of the 3 call sites (confirmed `agbcp` DOES CSE this repeated
+subexpression into a single computation, matching target's single
+`adds r5,r2,r0` -- so that's not the lever either); inlining the
+`ActorLocation` read as an rvalue member access
+(`func_0800E924(...).map`) instead of a named `loc2` variable (byte
+IDENTICAL output either way, confirms `agbcp` treats both forms the
+same at the register-allocation level); writing the offset+constant as
+subtraction (`field - 308`) instead of add-a-negative-literal; a bare
+`register` storage-class hint on `idx` (no effect, this compiler
+appears to ignore it without an explicit `asm("rN")` binding, which
+isn't used anywhere else in this repo and wasn't attempted, being an
+unprecedented technique for this codebase).
+
+**Honest assessment**: this looks like a genuine, narrow gap in
+understanding of `agbcp`'s register-allocation heuristic for "two
+same-priority free registers become available at slightly different
+points within a block, one from a stack-address load's last use, one
+from a call argument's last use" -- not a shape/order/idiom problem
+(everything else about the port is proven correct by the exhaustive
+byte-for-byte structural match). **Do not re-attempt via C-source
+restructuring without first understanding this specific allocator
+behavior more deeply** (e.g. by finding a SIMPLER existing ported
+function in this repo with the exact same "two registers free up near
+each other, one gets reused by the next new variable" shape and diffing
+against ITS source, rather than more blind trial-and-error on this
+function specifically) -- 10 attempts against 1 unmoving symptom is a
+strong signal that further guessing here has a low expected payoff per
+unit of budget. The full working (but not-yet-matching) candidate is
+preserved in this note's git history context only, not applied to any
+file in this repo (per the non-negotiable rule against committing
+non-bit-exact matches).
+
+### Repo state at end of round 10
+
+- 2 new commits (`0ae8f12` for the `func_0803A804` group of 7,
+  `51cbacc` for `func_08011ED8`), both verified bit-exact via a full
+  clean rebuild + `sha1sum -c fomt.sha1` -> `Réussi` immediately before
+  each commit.
+- `func_0809E1B4` (`asm/code_actor_0809BFE8.s`) intentionally NOT
+  touched in the repo -- fully analyzed and documented above as a
+  near-miss, no files modified for it, `git status --short` confirmed
+  clean of any trace before moving on.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. Solo worktree (`w23`/`parallel-23`).
+- Re-running `tools/scripts/scan_hidden_code_blobs.py` at the end of
+  this round would still list `asm/code_actor_0809BFE8.s`'s
+  `.L0809E1B4` blob (the near-miss) as the sole remaining "larger, not
+  auto-verified" candidate -- everything else the script flagged as of
+  round 9 is now resolved (matched or, for the `Unpack` family,
+  previously diagnosed as infeasible).
