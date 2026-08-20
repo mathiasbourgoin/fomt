@@ -6195,3 +6195,153 @@ fomt.sha1` échoue comme attendu (payload franglais non-vanilla). Aucune
 **État du worktree en fin de round** : propre (`git status --short`
 vide), 3 commits ajoutés depuis `main` (2 matchs + 1 fix de
 vérification). `origin` non touché, rien poussé, pas de PR.
+
+## Round (worktree w40, branche `parallel-40`) -- nouvelle famille "entity
+factory" (38 sites matchés d'un coup, `func_080324BC` caractérisé comme
+callback opaque) + découverte d'un nouveau piège `bool`/`char`
+
+Mission : choisir une cible fraîche dans `DECOMP_ARCHIVE.md` ou continuer
+une méthode sœur sur une famille déjà cataloguée, sans retoucher
+`func_080DB320`/`func_080DB658` (2 hypothèses déjà réfutées par w35, même
+classe "assignation de champ" que `func_08004C68`/`func_08092570`) ni
+`func_08075334` (pression de registres, déjà écarté 2 fois).
+
+### Constat de départ : "Autres cibles ouvertes" est quasi vide
+
+Vérification entrée par entrée de `DECOMP_ARCHIVE.md` : table de dispatch
+script en recoupement avec w35 (non engagée), `func_08010F14` documentaire
+seule, `asm/code_08010F54.s` écarté (risque chevauchement), `func_08075334`
+explicitement à éviter par consigne. Rien de vraiment "libre" restait dans
+cette section.
+
+### Méthode sœur : variante du scan double-critère des constructeurs de
+placement (round 10/11, w24/w33), élargie aux blocs SANS littéral vtable
+
+Le scan historique (`DECOMP_RULES.md`/`DECOMP_ARCHIVE.md`) cherchait des
+blocs `thumb_func_start` contenant À LA FOIS un littéral `vtable_unk_ADDR`
+ET un `bl __builtin_new`. Hypothèse testée ce round : et les blocs qui ont
+`bl __builtin_new` mais **aucun** littéral vtable ? Un script Python
+(scratch, non commité) parcourant `asm/*.s`, croisé avec
+`arm-none-eabi-nm build/src/*.o | grep ' T func_'` pour exclure les
+fonctions déjà portées, a trouvé 134 candidats bruts -- la plupart des
+faux positifs (grosses tables de dispatch script à `asm/code_08012028.s`,
+`asm/code_entities_08034CEC.s` zone linkonce, `asm/code_linkonce.s` zone
+`func_080DB320`/`658` déjà connue comme dead-end, `hardware.s`/
+`func_08008980` déjà classée "pression de registres"). En filtrant sur les
+blocs COURTS (12-45 lignes), un motif net et complètement inédit est
+apparu dans `asm/code_entities_08034CEC.s` : des dizaines de wrappers
+quasi-identiques de la forme
+
+```
+push {r4, lr}
+sub sp, #0x10
+adds r4, r0, #0
+[bl func_HELPER]        @ optionnel, présent sur ~10 sites
+movs r0, #0x8c
+bl __builtin_new
+<4 stores sur la pile : f0,f4,f8 (mots), fc (octet, via add+strb)>
+adds r1, r4, #0
+movs r2, #KIND
+movs r3, #SUBKIND
+bl func_080324BC
+add sp, #0x10
+pop {r4}
+pop {r1}
+bx r1
+```
+
+38 sites exacts de ce motif dans ce seul fichier (`grep -c "bl
+func_080324BC" asm/code_entities_08034CEC.s`), tous alloquant 0x8c octets
+et déléguant l'init à `func_080324BC` -- traité comme boîte noire (lui-même
+non porté, corps complexe utilisant `r8`/`sb` tout du long, signal
+"pression de registres" -- pas attaqué ce round, exactement comme les
+callees opaques `func_08005B68` etc. de la saga `func_08004C68`). 3 autres
+sites du même appelé existent ailleurs (`asm/code_080E41E8.s`,
+`asm/code_entities_080320DC.s` x2, `asm/code_entities.s`) -- **non
+attaqués ce round**, laissés pour un futur round (même famille,
+probablement même succès).
+
+### Nouveau piège de traduction découvert : `bool` vs `char` pour un
+argument scalaire passé sur la pile au-delà de r0-r3
+
+Le désassemblage montre systématiquement, pour le 4e argument "en trop"
+(au-delà des 4 registres), une paire `add rX, sp, #0xc` + `strb rY, [rX]`
+(store d'un OCTET à une adresse calculée) plutôt qu'un simple `str rY,
+[sp, #0xc]` (mot). Décliner ce paramètre en `char d` dans le prototype
+C++ compile mais produit un `str` (mot) -- agbcp semble promouvoir `char`
+comme les autres scalaires dans ce contexte d'argument-sur-pile. Le typer
+**`bool d`** (et passer `true`/`false` au lieu de `0`/`1`) restaure très
+exactement la paire `add`+`strb` -- confirmé bit-exact sur les 38 sites.
+**Règle généralisable, à ajouter à `DECOMP_RULES.md`** : pour un argument
+scalaire de rôle "flag" stocké sur la pile au-delà des 4 premiers
+registres, préférer `bool` à `char`/`u8` dès que le désassemblage montre
+un store byte via adresse calculée (`add`+`strb`) plutôt qu'un store mot
+direct -- signe qu'agbcp traite `bool` différemment de `char` pour la
+génération d'argument débordant sur la pile.
+
+### Piège de découpage rencontré et résolu : `.align 2, 0` en fin de bloc
+appartient à la frontière, pas à la fonction portée
+
+8 des 38 sites ont un `.align 2, 0` explicite juste après leur `bx r1`
+dans `asm/code_entities_08034CEC.s` (padding zéro entre cette fonction et
+la suivante, présent seulement quand la fonction se termine à un nombre
+d'instructions impair). Une première comparaison octet-à-octet (harnais :
+assembler le bloc ORIGINAL extrait tel quel vs le C compilé, mêmes
+outils) donnait 30/38 identiques et ces 8 différaient uniquement sur les
+2 derniers octets (`c046` = nop d'alignement auto-inséré par
+`agbcp`/`as`, vs `0000` attendu). Root cause : le `.align 2, 0` fait
+partie du texte du bloc `thumb_func_start` CIBLE tel qu'écrit dans le
+fichier original, mais c'est un artefact de FRONTIÈRE entre deux
+fonctions, pas du corps de la fonction portée. Fix appliqué dans le script
+de découpage : détecter un `.align 2, 0` final après le dernier `bx r1`
+d'un bloc cible et le faire migrer en tête du fragment `asm/*.s` SUIVANT
+(avant son propre `thumb_func_start`) au lieu de le supprimer avec le
+reste du bloc. Résultat vérifié : la taille compilée de `build/src/
+code_ADDR.o` (`readelf -S`) correspond exactement à `next_addr -
+this_addr` pour les 38 sites, ET les 2 derniers octets sont bien `00 00`
+(vérifié `objcopy -O binary --only-section=.text` + `od`), pas un nop --
+l'alignement de section standard de `as` (déjà 4-aligné après le padding
+implicite de l'objet) rend le `.align` explicite du fragment suivant un
+no-op inoffensif, sans doublon de padding. **Piste générale pour de
+futurs découpages** : toujours vérifier si le bloc `thumb_func_start`
+cible se termine par un `.align` avant de couper -- le déplacer vers le
+fragment suivant plutôt que de le garder attaché ou de le jeter.
+
+### Découpage mécanique
+
+`asm/code_entities_08034CEC.s` (201 fonctions au total, un seul objet
+`.lds` avant ce round) scindé en 39 fragments par script Python (scratch,
+non commité) : le premier fragment garde le nom de fichier d'origine, les
+38 autres nomment d'après l'adresse de leur première fonction retenue
+(ex. `asm/code_08035B64.s`). `fomt.lds` : les 77 nouvelles entrées
+interfoliées remplacent l'unique ancienne ligne
+`asm/code_entities_08034CEC.o(.text);`, dans l'ordre adresse croissante
+(`asm_avant.o; src_ADDR.o; asm_après.o; ...`).
+
+### Vérification
+
+Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map`, stub
+`franglais_stub.bin` factice) : lien réussi, aucune référence non
+définie, aucun symbole dupliqué (`arm-none-eabi-nm fomt.elf` : chaque
+symbole `func_ADDR` porté apparaît une seule fois). `sha1sum -c
+fomt.sha1` échoue comme attendu (payload franglais non-vanilla). Pour les
+38 fonctions : taille `.text` de `build/src/code_ADDR.o` == `next_addr -
+this_addr` (`readelf -S`, script Python), ET comparaison octet-à-octet
+(pas seulement mnémonique) entre le C compilé et le bloc original
+réassemblé avec les MÊMES outils (`arm-none-eabi-as`, même flags) --
+38/38 identiques une fois le piège d'alignement ci-dessus corrigé. Sweep
+anti-doublon (`grep thumb_func_start` sur les 38 noms dans `asm/*.s`) :
+aucun résidu.
+
+### État du worktree en fin de round
+
+- 38 fonctions matchées (`func_08035B38` à `func_08039A30`), 1 commit de
+  match (tout le groupe, découpage + `fomt.lds` + les 38 `.cc`).
+- 3 autres sites de `func_080324BC` identifiés mais **non portés** ce
+  round (`asm/code_080E41E8.s`, `asm/code_entities_080320DC.s` x2,
+  `asm/code_entities.s`) -- candidats directs pour un prochain round,
+  même méthode, même signature de callee opaque.
+- `func_080324BC` lui-même reste non porté (callee opaque, `r8`/`sb`
+  utilisés tout du long -- signal "pression de registres", pas attaqué).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `git status --short` vide après commit.
