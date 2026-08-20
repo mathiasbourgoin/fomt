@@ -5613,3 +5613,177 @@ round) :
   passé à un `func_080041DC` déjà connu) -- shape différente de la
   famille standard, pas creusées faute de temps ce round, laissées comme
   piste pour un futur agent.
+
+## Round 12 (worktree w35, branche `parallel-35`) -- reprise des 5 candidats différés round 11 (w33)
+
+Consigne : reprendre les 5 candidats "dispatch/composite constructor"
+laissés en attente par le round 11 (`func_0806D8C8`, `func_080DB320`,
+`func_080DB658`, `func_08004B58`, `func_08004B94`), en commençant par
+eux avant le 7-argument (`func_08083A7C`) et sans rouvrir le chantier
+SmartPtr fermé (`func_08092570`).
+
+**3/5 matchés et commités** (`8734...`/2 commits + 1 fix -- voir
+`git log`) :
+
+- `func_08004B58` (asm/new_game.s -> src/code_08004B58.cc) : variante
+  "composite constructor" -- alloue un objet helper de 4 octets sur le
+  tas (son propre vtable stamp), le passe par adresse-de-variable-locale
+  au helper opaque déjà connu `func_080041DC` (déjà croisé round 6 dans
+  l'écriture de `src/code_08004BDC.cc`, toujours non porté lui-même),
+  stocke le résultat à `self+4`. Bit-exact du premier coup une fois le
+  piège d'ordre ci-dessous corrigé.
+- `func_08004B94` (même fichier) : même famille mais le "helper" est
+  VOLÉ à un out-param appelant (`a2`, move-in convention identique aux
+  constructeurs de placement "2-enfants" déjà connus) plutôt qu'alloué,
+  puis, après construction, un second `bl _call_via_r2` conditionnel
+  détruit l'ancienne valeur -- mais le test se fait sur une SECONDE
+  lecture de `*a2` (pas la variable locale déjà volée), donc la branche
+  est provablement morte À L'EXÉCUTION dans cette fonction précise, mais
+  agbcp la garde car elle est écrite littéralement dans la source (pas de
+  CSE/value-numbering, cf. anti-pattern #2 de `DECOMP_RULES.md`).
+  **Bug de vérification vécu et corrigé DANS CE ROUND** : la première
+  passe de ce match (commit initial) a été committée avec `stolen = *a2;
+  *a2 = nullptr;` écrit dans l'ordre naïf -- la vérification par adresse/
+  taille de symbole (`nm`) a semblé passer (taille de fonction inchangée,
+  car nombre d'instructions identique, juste réordonné), mais un vrai
+  diff bit-à-bit de l'ELF lié contre `baserom.gba` a révélé un registre
+  ET un ordre différents (`ldr r1,[r4]` original vs `ldr r0,[r4]` chez
+  nous, spill-avant-zero au lieu de zero-avant-spill). **Leçon
+  généralisable pour tout futur round : ne JAMAIS s'arrêter à "l'adresse
+  du symbole suivant tombe juste" comme preuve de bit-exactitude -- ce
+  signal ne détecte QUE les divergences de TAILLE, pas les divergences de
+  CONTENU à taille égale (permutation d'instructions, registre différent).
+  Toujours faire le diff de désassemblage complet (ELF lié contre
+  `baserom.gba`, `--adjust-vma=0x08000000`) avant de considérer un match
+  vérifié, même quand la taille semble déjà convaincante.** Corrigé en
+  routant la lecture volée via une variable temporaire NON adressée avant
+  de l'aliaser à la variable dont l'adresse est prise (même piège que
+  ci-dessous pour `func_08004B58`).
+- `func_0806D8C8` (asm/code_08069E98.s -> src/code_0806D8C8.cc) :
+  contrepartie placement-constructor du destructeur déjà matché
+  `func_0806D918` (`src/code_0806D918.cc`) -- même shape que
+  `func_08004B94` mais 4 registres d'arguments et allocation 0x4178
+  octets via un second helper opaque encore non porté (`func_08069F14`).
+  Corrigé du même piège d'ordre dès la première tentative (leçon
+  appliquée immédiatement).
+
+**Piège de "spill anticipé" généralisé, observé sur les 3 fonctions
+ci-dessus** : quand le désassemblage montre `lire une valeur -> la
+"garder de côté" (spill vers la pile) -> PUIS zéro la source`, écrire `T
+tmp = *src; *src = nullptr;` directement en C fait agbcp spiller `tmp`
+vers sa case mémoire (parce que son adresse est prise plus loin pour
+l'appel du helper) **immédiatement à l'assignation**, AVANT le
+zero-store -- ordre inversé par rapport à l'original qui zéro D'ABORD,
+spill ENSUITE. Fix systématique : `T raw = *src; *src = nullptr; T tmp =
+raw;` -- router la lecture à travers une variable intermédiaire NON
+adressée avant de l'aliaser à la variable adressée force agbcp à retarder
+le spill jusqu'au point où l'adresse est effectivement nécessaire,
+reproduisant l'ordre et le registre (`r1` au lieu de `r0` dans ce cas)
+exacts de l'original. Généralisation directe de la note déjà présente
+dans `DECOMP_RULES.md` sur `func_0807EE14`/l'ordre alloc->stamp->spill.
+
+**2/5 non résolus, caractérisés en détail pour un futur round**
+(`func_080DB320` et `func_080DB658`, `asm/code_linkonce.s`, lignes
+~12740 et ~12919 -- shape byte-pour-byte identique entre les deux, seule
+la constante `vtable_unk_ADDR` change) :
+
+Shape observée (16 octets de pile, `sub sp, #0x10`) :
+```
+    ldr r5, [r4, #4]        ; steal a1->f4
+    movs r2, #0
+    str r2, [r4, #4]        ; a1->f4 = 0
+    ldr r3, [r4, #8]        ; plain copy a1->f8
+    ldr r1, =vtable_unk_ADDR
+    str r1, [r0]             ; obj->vt = vtable   (obj = fresh alloc(0xc))
+    str r2, [sp, #4]         ; sp+4 = 0   (jamais relu ensuite)
+    str r5, [r0, #4]         ; obj->f4 = stolen
+    str r3, [r0, #8]         ; obj->f8 = plain
+    str r0, [sp]              ; sp+0 = obj
+    mov r1, sp
+    str r1, [sp, #8]           ; sp+8 = &(sp+0)
+    str r0, [sp, #0xc]          ; sp+0xc = obj  (dup, jamais relu ensuite)
+    str r2, [r1]                 ; *(sp+0) = 0   (zéro via le pointeur, pas assignation directe)
+    str r0, [r6]                  ; self->f0 = obj  (registre r0, pas relu depuis la pile)
+    ldr r1, [sp]                   ; relit sp+0 -> toujours 0
+    cmp r1, #0
+    beq .Lend
+    ldr r0, [r1]
+    ldr r2, [r0, #8]
+    adds r0, r1, #0
+    movs r1, #3
+    bl _call_via_r2                 ; vt->slot2(check, 3) -- branche morte à l'exécution, comme func_08004B94
+.Lend:
+```
+
+**2 hypothèses testées, toutes deux négatives** (harnais rapide,
+`/tmp/w35scratch/code_080DB320*.cc`, non committées) :
+
+1. **4 locales brutes séparées** (`localB=0; obj->f4=...; obj->f8=...;
+   tmp1=obj; ptmp1=&tmp1; tmp2=obj; *ptmp1=nullptr;` puis `if(tmp1)
+   {...}`) -- compile mais agbcp élimine ENTIÈREMENT les 4 locales ET la
+   branche (aucune trace des stores `sp+0/4/8/0xc` ni du check), preuve
+   que pour des locales PUREMENT locales (adresse jamais passée à un
+   appel opaque), agbcp fait bien la propagation de constante et le
+   dead-code elimination inter-instructions -- contrairement à ce que
+   `DECOMP_RULES.md` pourrait laisser penser ("compilateur non-
+   optimisant"), cette élimination EST réelle pour ce cas précis
+   (variable locale, écriture via pointeur-vers-elle-même, sans `bl`
+   intermédiaire). Diffère du cas `func_08004B94`/`func_0806D8C8` où le
+   check portait sur `*a2` (déréférencement d'un PARAMÈTRE pointeur,
+   donc aliasing non prouvable par le compilateur) -- ici tout se passe
+   sur la pile locale, sans paramètre intermédiaire, d'où l'élimination.
+2. **`SmartPtr<T> local(obj); local.Move();` réel** (avec un type
+   `AUnk_child_iface` doté d'un VRAI destructeur virtuel `virtual
+   ~AUnk_child_iface();` pour que `delete inner` dans
+   `include/smart_ptr.hh` génère le même appel vtable-slot-2/arg-3 que
+   les autres fonctions de cette famille) -- hypothèse que le destructeur
+   de fin de scope de `local` produirait le check+call mécaniquement,
+   indépendamment de l'élimination inter-instructions. Compile, mais
+   agbcp élimine ÉGALEMENT tout (this de `Move()` jamais spillé vers
+   `sp+8`, pas de duplication `tmp2`, pas de check final) -- l'inlining
+   des méthodes de `SmartPtr<T>` n'est PAS traité comme un "stage séparé"
+   immunisé contre l'élimination : agbcp voit à travers l'inlining
+   complet du corps de `Move()` + du destructeur, même chose que
+   l'hypothèse 1.
+
+**Piste NON encore testée pour un futur round** : la persistance du
+check dans l'original implique que le compilateur NE PEUT PAS prouver
+que `sp+0` reste à 0 entre l'écriture (`str r2,[r1]`) et la relecture
+(`ldr r1,[sp]`) -- ce qui, empiriquement (hypothèses 1 et 2 ci-dessus),
+n'arrive QUE quand le pointeur intermédiaire (`r1`/`ptmp1`) est lui-même
+issu d'un paramètre ou d'une valeur dont la provenance n'est pas
+statiquement traçable jusqu'à `sp` par agbcp -- pas un simple `&local`
+littéral. Piste concrète : essayer de faire passer l'adresse
+intermédiaire à travers un APPEL DE FONCTION opaque qui la retourne
+(ex. un helper minuscule `void **AddrOf(void **p) { return p; }` compilé
+séparément, ou -- plus vraisemblablement fidèle au vrai code source --
+vérifier si `self` lui-même (`r6`, un PARAMÈTRE, pas une locale) est en
+réalité le porteur de cette adresse (ex. `self` a un champ qui EST
+`&local`, ou la fonction manipule en fait un membre de `self` plutôt
+qu'une pile locale pure) -- relire le désassemblage en supposant que
+`sp+0/4/8/0xc` ne sont PAS 4 locales indépendantes mais correspondent à
+un layout de `self` accédé via une copie de `self` sur la pile (`self`
+lui-même pourrait être passé par valeur/copié localement dans certains
+ABI C++ pour des raisons de calling convention -- non vérifié). Cette
+classe de difficulté ("assignation de champ via pointeur-vers-locale
+qui résiste à l'élimination") est la MÊME famille que celle bloquant
+`func_08004C68`/`func_08092570` (7+8 hypothèses déjà négatives au total
+sur ce type de problème, cf. `DECOMP_ARCHIVE.md`) -- ne pas rouvrir sans
+budget dédié, ou escalader vers un agent `fable` pour un angle créatif
+neuf (stratégie d'escalade documentée dans `DECOMP_RULES.md`).
+
+**Vérification appliquée aux 3 matchés** : harnais rapide pendant le
+tâtonnement, PUIS (pour `func_08004B94`, après le bug ci-dessus révélé)
+diff complet de désassemblage de l'ELF lié (`fomt.elf`, rebuild propre)
+contre `baserom.gba` (`--adjust-vma=0x08000000`) sur la plage d'adresses
+exacte de chaque fonction -- seules des différences cosmétiques
+(annotations de symbole, rendu mot/demi-mot du pool littéral) subsistent,
+zéro différence d'opcode réelle, pour les 3. Rebuild complet propre
+(`rm -rf build fomt.gba fomt.elf fomt.map`) avant chaque commit ; lien
+réussi sans référence non définie ni symbole dupliqué ; `sha1sum -c
+fomt.sha1` échoue comme attendu (payload franglais non-vanilla). Aucune
+étiquette `.LADDRESS` résiduelle pour aucune des 3 adresses matchées.
+
+**État du worktree en fin de round** : propre (`git status --short`
+vide), 3 commits ajoutés depuis `main` (2 matchs + 1 fix de
+vérification). `origin` non touché, rien poussé, pas de PR.
