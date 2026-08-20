@@ -644,6 +644,165 @@ docs (dynamic trace, not just static disassembly).
    `do`/`while` loop with several external calls and a 0x38-byte record
    allocation, likely non-trivial; not evaluated for difficulty this
    round.
+## Round 6 -- `func_0805E790` retried with systematic shape-hunting, still not
+converged; narrowed the failure to a single register-class allocation
+decision, not the surrounding computation shape
+
+Scope: retry round 1's failed `func_0805E790` (the `DefinedSprite` frame
+accessor, companion to the matched `func_0805E6CC`) using the
+`quicktest.sh`-style fast harness (`cpp | agbcp | as`, no link), generating
+and testing several structurally distinct variants rather than one or two
+guesses. **Did not converge**, but made real progress narrowing the exact
+failure point, worth recording precisely so a future round doesn't repeat
+the same five variants.
+
+### Struct layout re-confirmed (matches round 1's notes exactly)
+
+`FrameMetadata` (16-byte entry, indexed by `frame_index` into
+`self->frame_data`): `{ u16 oam_count, oam_index, unk_04, tile_index,
+unk_08, pal_index, matrix_count, matrix_index }`. Output `FrameResolved`
+(0x20 bytes, written through an explicit `out` pointer parameter that's
+`r0` at the call site -- confirmed real explicit pointer, NOT a hidden
+struct-return slot, see below): `{ void *oam_ptr; u16 oam_count; void
+*tile_ptr; u16 unk_04_shl5; void *palette_ptr; u16 unk_08_shl5; void
+*matrix_ptr; u16 matrix_count; }`. Pointers resolve as `archive_base_field
++ (index << {3,5,5,3})` for oam/tile/palette/matrix respectively, matching
+`docs/GRAPHISMES.md`.
+
+### Confirmed via a real caller site: `out` is a genuine explicit pointer
+parameter, not hidden struct-return
+
+Round 1 didn't check this. `asm/code_0803A8A4.s:3885` calls it as:
+```
+mov r0, sp      @ out = &local on caller's stack
+adds r1, r6, #0 @ self
+movs r2, #0     @ frame_index = 0
+bl func_0805E790
+ldr r2, [sp, #0x10]   @ reads out->palette_ptr afterward
+```
+This rules out one hypothesis this round tested (see below): the function
+does NOT return `FrameResolved` by value via the ARM hidden-return-pointer
+ABI convention -- it's a plain `void func(FrameResolved *out,
+DefinedSprite const *self, u32 frame_index)`, exactly as round 1 assumed.
+
+### The real puzzle: original defers ALL 8 output stores to one block at
+the very end, and evicts `out` (not `self`) to `ip` as the very first
+instruction in the function body
+
+Disassembly shows the original reads all 8 `FrameMetadata` fields
+interleaved with computing `tile_ptr`/`palette_ptr` immediately (right
+after their index field), but *defers* computing `oam_ptr`/`matrix_ptr`
+until a block right before the stores -- and defers literally all 8
+`str`/`strh` writes into `*out` to one contiguous block at the very end
+(never stores incrementally as each field becomes ready). This can only
+be explained by all 8 output values being held live in registers straight
+through to a final block, which needs the same instruction-order-mirrors-
+statement-order shape as `func_0805E6CC`/`DrawString` (see rule #4 in
+`DECOMP_RULES.md`) -- i.e. the real C source almost certainly declares
+local temporaries for every field first, then assigns `out->field = ...`
+for all 8 fields consecutively at the end. **This exact C shape was
+written and tested this round** (see "Variants tried" below) and gets the
+right *macro* structure (right total instruction count in the ballpark,
+right grouping) but the wrong **register class** for one value: the
+original moves `out` (`r0`) to `ip` as the literal first instruction of
+the function body (`mov ip, r0`), before even the `frame_count` bounds
+check, freeing `r0` as scratch and never touching a low register for
+`out` again until the very last block. Every variant tried this round
+instead keeps `out` resident in a low callee-saved register (`r6` or
+`r7`) for the whole function -- which is one low register `out` didn't
+need to occupy, and that shortfall is what forces a 3rd value to spill
+into a high register (`r8`/`r9`/`sl` all three used, vs. the original's
+`sb`+`r8` pair only) at some point in the deferred-compute block. Which
+*specific* local ends up as the 3rd spill victim was NOT stable across
+variants (`tile_ptr` in one run, `unk_04` in another) -- consistent with
+this being a generic "one register short" overflow rather than something
+tied to a particular variable's type or position.
+
+### Variants tried, all producing the identical "3 high regs instead of
+2" result
+
+1. **Immediate-store version** (each `out->field = ...` written right
+   after its value is computed, matching a naive first-literal-translation
+   reading): wrong on a more basic level too -- produces NO high-register
+   spills at all (fits everything in `r0`-`r7`), 38 bytes short of the
+   original (0x66 vs 0x8C). Confirms the deferred-store hypothesis is
+   necessary (this immediate-store shape is definitely not it), just not
+   sufficient on its own.
+2. **Deferred-store version** (all temporaries declared first, single
+   block of 8 `out->field = ...` assignments at the end, matching the
+   read/compute order described above): right macro shape, but 3 high
+   regs instead of 2, as described above. This is the closest variant.
+3. **Return `FrameResolved` by value** (hidden struct-return ABI
+   hypothesis, since that pattern IS known to make an unused-until-the-end
+   pointer get evicted to `ip` immediately -- confirmed: this variant DOES
+   put the hidden pointer in `ip` as instruction 1, matching original's
+   eviction timing exactly): wrong for a different, disqualifying reason
+   -- ruled out anyway by the real caller-site evidence above, but also
+   the codegen itself doesn't match: this compiler implements struct
+   return via a local stack temporary (`sub sp, #32`) plus an unrolled
+   `ldmia`/`stmia` block-copy into the hidden pointer at the very end,
+   something the original's disassembly has zero trace of (no `sub sp`
+   at all, no `ldmia`/`stmia` anywhere). Bigger (0xA2 bytes vs 0x8C) and
+   structurally wrong, not just register-different.
+4. **Return via `(FrameResolved){...}` aggregate-literal / compound
+   literal** instead of a named local + `return`: hoped this might let
+   the front end write directly into the return slot without a
+   materialize-then-copy step. Made it *worse* -- agbcp actually emits a
+   real `bl memset` call to zero the temporary first, then the same
+   `ldmia`/`stmia` copy. Confirms the copy-through-stack-temp is
+   fundamental to how this compiler lowers any aggregate return, not an
+   artifact of naming a local. Not the right shape regardless of the
+   `out`-placement question.
+5. **`register` storage-class hint on the `self` parameter**: zero effect
+   on codegen (agbcp's `-O2` register allocator ignores `register` as a
+   placement hint here, byte-identical output to variant 2 without it).
+
+### Assessment: this now looks like a single-register-class allocation
+quirk, not a wrong C shape
+
+Variant 2's C shape is very likely *correct* (matches original's
+read/compute/store grouping exactly, field for field) -- what's missing
+is whatever makes agbcp's allocator decide, within the first instruction
+of the function body, that `out` specifically (and not `self`, not any of
+the 8 field temporaries) is the one value cheap enough to evict to `ip`.
+Both `out` and `self` are dead-on-arrival-but-needed-later relative to
+their native argument registers (`r0`, `r1`); the original evicts `out`
+to `ip` and `self` to a low reg (`r7`), never the reverse, and never
+either of them staying in `r0`/`r1`/`r2` past the prologue (both r0/r1
+are needed almost immediately as scratch for computing the entry
+pointer). No variant this round reproduced that specific asymmetry.
+Plausible next angles, none attempted due to round budget: (a) try
+swapping which of `out`/`self` is the FIRST expression referencing a
+register-hungry computation in the function body (right now both are
+"first touched" by roughly the same distance from function entry --
+maybe reordering so `self`'s frame_count check literally comes textually
+after some `out`-adjacent no-op would perturb the allocator's greedy
+choice); (b) grep the whole ROM's `asm/*.s` for a handful of *other*
+functions with the exact same "explicit out-pointer param evicted to
+`ip`, used only in a tail store block" idiom (if any exist and are
+simpler, they'd make a much cheaper testbed for isolating the allocator
+rule than this 8-field function); (c) accept this as confirmation of the
+"register pressure" difficulty class already documented in
+`DECOMP_RULES.md` (now 4 attempts across 2 rounds on this one function
+alone, on top of the 2 other functions in the same class) and deprioritize
+further blind iteration in favor of a genuinely different technique (e.g.
+inspecting agbcc/agbcp's own allocator source in `tools/agbcc` if that's
+ever warranted -- not attempted this round, out of scope for a
+single-function shape-hunt).
+
+Nothing committed this round -- no C file was ever added to the tracked
+worktree; all iteration happened against a scratch file outside the repo
+via the quicktest harness. `git status`/`make compare` confirmed clean
+and bit-exact both before and after this round's work.
+
+### Repo state at end of round 6
+
+- Working tree clean, `make compare` passes bit-exact (verified via full
+  clean rebuild immediately before writing this section).
+- No new commits this round.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
+
 4. The rest of round 1/2's untouched priority list is still open and
    unchanged: `franglais_transition_ctl_query` (`0x08050DF0`), `Unpack`
    (`0x080D102C`, Python reference exists), the script dispatch table

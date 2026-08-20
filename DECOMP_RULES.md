@@ -106,8 +106,13 @@ allocation.
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 gros budget
 
-**3 échecs sur 3 tentatives** à ce jour sur cette classe précise :
-`func_0805E790` (round 1), `func_0800736C` (round 2), `func_0804E4AC`
+**4 échecs sur 4 tentatives** à ce jour sur cette classe précise :
+`func_0805E790` (round 1, re-tenté et toujours échoué round 6 malgré un
+shape-hunting systématique -- voir `SESSION_NOTES.md` round 6, le blocage
+est descendu à une décision précise d'allocation de registre pour UNE
+seule variable (le paramètre pointeur de sortie, évincé vers `ip` par
+l'original dès la 1re instruction, jamais reproduit malgré une forme C
+jugée par ailleurs correcte), `func_0800736C` (round 2), `func_0804E4AC`
 (round 3, `DrawGlyphAt`). Signature du problème : une fonction avec
 **beaucoup de valeurs simultanément vivantes** (dépilement de liste
 libre, parcours de section déroulée, ou ici un blit conditionnel à 4
