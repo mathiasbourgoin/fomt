@@ -354,10 +354,10 @@ func_08009094: @ 0x08009094
 func_0800912C: @ 0x0800912C
     ldr r3, .L08009138 @ =franglais_read_keys
     bx r3
-    @ La fonction vanilla fait 0x14 octets (code + litteraux REG_KEYINPUT et
-    @ masque 0x3FF). Le trampoline DOIT garder exactement cette taille, sinon
-    @ tout le code aval glisse et les pointeurs bruts (vtables, tables de
-    @ donnees) deviennent perimes -- crash au boot via vtable_unk_080E5B18.
+    @ The vanilla function is 0x14 bytes (code + REG_KEYINPUT and 0x3FF
+    @ mask literals). The trampoline MUST keep this exact size, or every
+    @ downstream function shifts and raw-address references (vtables,
+    @ data tables) go stale -- boot crash via vtable_unk_080E5B18.
     nop
     nop
     nop
