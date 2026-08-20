@@ -130,6 +130,8 @@ SECTIONS
         src/harvest_sprite.o(.text);
 
         asm/code_809E804.o(.text);
+        src/code_080C7ED0.o(.text);
+        asm/code_080C7F00.o(.text);
 
         src/m4a_1.o(.text);
         src/m4a.o(.text);
