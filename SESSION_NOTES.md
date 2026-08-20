@@ -6,6 +6,96 @@ worked on strictly offline: `origin`'s push URL is deliberately broken
 restored. Never `git push`, never open a PR, never touch `origin`. Commit
 locally only.
 
+## Round (worktree `w48`, branche `parallel-48`) -- `func_0803A798` matché
+bit-exact (1 commit), incertitude d'héritage multiple de w47 levée,
++ découverte méthodologique : ce worktree a un décalage global constant
+de ROM (`+0xF4`) déjà présent sur `main` avant toute modification
+
+Mission : reprendre `func_0803A798` (caractérisé mais non porté round
+w47) avec l'hypothèse bitfield `Location` chevauchant, en vérifiant
+d'abord la question laissée ouverte (héritage multiple via une 2e
+vtable) avant de coder.
+
+### Levée de l'incertitude d'héritage multiple
+
+En comparant le destructeur homologue de cette même vtable
+(`func_080DCF4C`, `asm/code_linkonce.s`) à celui d'`AEntity` lui-même
+(`func_080DCE60`, même fichier) : les deux stampent leur vtable respective
+**au MÊME offset `+0x14`** (`__vt_7AEntity` pour l'un, `vtable_unk_080E7568`
+pour l'autre). C'est exactement le motif ABI CFront/ARM d'héritage SIMPLE
+(chaque niveau de la hiérarchie re-stampe le même unique pointeur de
+vtable avec sa propre table, plus grande) déjà vu ailleurs dans ce dépôt
+(`func_080DCE60` vs `func_080DCF4C`) -- **pas** une 2e vtable de base
+distincte à un autre offset. `vtable_unk_080E7568` fait `0x34` octets
+(13 slots), EXACTEMENT la taille de la vtable d'`AEntity` seule (aucun
+virtuel supplémentaire) -- la classe dérivée ne fait qu'overrider des
+slots existants, pas en ajouter. Confirme aussi le layout de `Location`
+prédit round w47 (`include/actor.hh` : `map:10`@0, `x:16`@1, `y:16`@3,
+`PACKED ALIGN(2)`) -- 3 affectations logiques à zéro compilent bien en
+5 RMW physiques à cause du chevauchement de bits.
+
+### Port : fonction-usine procédurale, pas une classe C++ complète
+
+`func_0803A798` alloue lui-même (`operator new(0x20)`), ce qui exclut
+qu'il s'agisse du vrai ctor mangle de la classe dérivée (un ctor ne fait
+jamais lui-même l'allocation). Suivant le style déjà établi pour ce genre
+de classe non identifiée (`src/code_08004B94.cc`, `src/code_entity_08020018.cc`
+pour la convention de nom `Entity_<adresse_vtable>`) : fonction C libre
+qui appelle le VRAI ctor `AEntity::AEntity` (`__7AEntityP10GameObjectRC8Location`,
+déjà implémenté `src/entity.cc`) via son symbole mangle directement, puis
+stampe manuellement `vtable_unk_080E7568`, le 2e paramètre (`self+0x18`)
+et un flag `true` (`self+0x1c`). Classe `Entity_080E7568` gardée minimale
+(juste les 2 champs touchés) -- nom/rôle réel non identifié, destructeur
+homologue `func_080DCF4C` laissé non catalogué pour un futur round (pas
+nécessaire pour porter ce ctor). Convergé du premier coup en harnais
+rapide après correction de l'ORDRE (allocation AVANT le zeroing de
+`Location`, pas l'inverse comme un premier essai naïf l'avait fait).
+
+### Découverte méthodologique : décalage global constant de ROM
+(`+0xF4`) déjà présent sur `main`, indépendant de toute modification
+
+En vérifiant le match via la méthode standard (adresse liée dans
+`fomt.elf` vs `baserom.gba` à la même adresse absolue) : la fonction
+atterrit à `0x0803A6A4` dans `fomt.elf`/`fomt.map`, **pas** `0x0803A798`
+comme l'indique le commentaire `@ 0x0803A798` du fichier asm source --
+un décalage constant de `-0xF4` (244 octets). **Vérifié comme PRÉEXISTANT
+sur `main`** (`git stash` + rebuild propre sur HEAD non modifié : même
+décalage, ex. `func_08004C54` reste à sa vraie adresse `0x08004C54` --
+aucun décalage -- mais tout ce qui suit une certaine frontière autour de
+`0x0801xxxx`-`0x08020xxx` est décalé de `-0xF4`, cohérent partout ensuite
+jusqu'à `0x0803A6A4`). Cause probable : un vrai hook franglais (pas
+seulement le blob `.franglais_payload` à l'adresse fixe `0x08800000`,
+qui lui n'a AUCUN impact ici) inséré quelque part dans le flux de code
+normal, plus long de 244 octets que le code vanilla qu'il remplace.
+**Conséquence pratique pour la vérification bit-exacte d'une fonction
+dans cette zone décalée** : ne PAS utiliser l'adresse du commentaire
+`@ 0xADDR` du fichier `asm/*.s` comme `--start-address` sur `fomt.elf` --
+lire la VRAIE adresse liée dans `fomt.map` (`grep func_ADDR fomt.map`)
+et l'utiliser côté `fomt.elf`/`fomt.gba`, tout en gardant l'adresse
+d'origine côté `baserom.gba`. Une fois les deux bons offsets utilisés,
+la comparaison OCTET À OCTET (`fomt.gba` vs `baserom.gba`, tailles
+identiques) ne montre plus qu'UNE SEULE demi-instruction différente
+(l'encodage de l'offset relatif du `bl __builtin_new`, cible basse
+adresse non décalée) -- écart directement explicable par le décalage
+global, pas un vrai bug. **Règle pratique à ajouter/rappeler pour toute
+future cible dont l'adresse `@ 0xADDR` dépasse `~0x0801Fxxx`** : toujours
+croiser `fomt.map` avant de conclure à un near-miss depuis une comparaison
+d'adresse absolue -- un near-miss d'1 seule demi-instruction *spécifiquement
+dans l'encodage d'un `bl` vers une routine basse-adresse* (`__builtin_new`,
+`_call_via_r2`, etc.) peut être ce décalage global, pas un vrai défaut de
+forme C.
+
+### État du worktree en fin de round
+
+- **1 commit** : `func_0803A798` (`src/code_0803A798.cc`,
+  `asm/code_08039A5C.s` tronqué, `fomt.lds` mis à jour) -- taille `.o`
+  vérifiée (`0x6c` = 108 octets, exact), lien complet sans erreur,
+  contenu vérifié octet à octet (voir ci-dessus, 1 seule demi-instruction
+  de `bl` différente, expliquée par le décalage global préexistant).
+- `git status --short` propre après nettoyage `build/`/`fomt.gba`/
+  `fomt.elf`/`fomt.map`.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
 ## Round (worktree `w47`, branche `parallel-47`) -- ZÉRO match commité,
 mais le near-miss "ordre d'évaluation des arguments" de w43 est enfin
 ROOT-CAUSÉ (mécanisme précis identifié empiriquement), + 1 cible fraîche
