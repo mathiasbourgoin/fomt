@@ -7564,3 +7564,128 @@ ont été vérifiées ensemble).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - Aucun recoupement avec w45/w48 (cibles `func_0803A798`/`func_0803BF78`
   jamais touchées ce round).
+
+## Round w52 (worktree `parallel-52`) -- symbolisation du 3e tiers des vtables `.incbin` brutes
+
+### Mission
+
+Mission différente du matching habituel : `asm/vtables.s` contenait 320
+vtables C++ jamais décompilées, chacune sous forme `.incbin "baserom.gba",
+OFFSET, TAILLE` -- copie brute des octets ROM, slots de pointeurs de
+fonction codés en dur (pas de référence symbolique). Portion assignée :
+les 107 vtables de `vtable_unk_080E7A38` à `vtable_unk_080E85E8` (3e tiers,
+fin du fichier, lignes ~959-1385 avant édition).
+
+### Méthode
+
+1. Convention d'encodage vérifiée AVANT toute conversion : `__vt_12ScriptEngine`
+   (`asm/vtables.s`, déjà écrit en `.4byte func_ADDR`/`.4byte
+   method_MANGLED` depuis un round antérieur) confirme que le bit thumb
+   (+1) est géré automatiquement par l'assembleur/linker via
+   `.thumb_func` -- écrire `.4byte func_ADDR` nu suffit, jamais `+1` à la
+   main. Vérifié aussi qu'un slot déjà connu (`vtable_unk_080E5A88`,
+   `func_08004C54`/`func_08004C68`, cf. `DECOMP_ARCHIVE.md` "2 mots nuls
+   de préfixe") décode EXACTEMENT pareil avec ma logique
+   (`valeur_brute - 1` == adresse du label) avant de l'appliquer à ma
+   portion.
+2. Index de tous les labels `func_ADDR` connus construit par grep
+   (`thumb_func_start` dans `asm/*.s` + occurrences `func_ADDR` dans
+   `src/*.cc`/`include/*.hh` pour les fonctions déjà portées, dont le
+   label `func_ADDR` ne vit plus que comme alias `ALIAS(...)` texte, pas
+   comme `thumb_func_start`) : 2697 adresses connues au total.
+3. Pour chacun des 758 mots de 4 octets de ma portion : lu depuis
+   `baserom.gba` à l'offset exact de chaque `.incbin`, comparé
+   `valeur - 1` (bit thumb) puis `valeur` nue contre l'index. Remplacé
+   par `.4byte func_ADDR` si trouvé, sinon gardé `.4byte 0xVALEUR @ no
+   label yet` (littéral, aucun label inventé). Les 2 premiers mots de
+   chaque vtable (préfixe `-fvtable-thunks`, cf. `DECOMP_ARCHIVE.md`) ont
+   un commentaire dédié (`offset-to-top`/`RTTI slot`) au lieu de `@ no
+   label yet` quand ils valent 0 -- un seul cas où le mot 0 (offset-to-top)
+   est non-nul (`vtable_unk_080E7DF4`, `0xFFFFFFF8` = -8, vrai ajustement
+   MI thunk, laissé littéral avec le même commentaire structurel).
+
+### Résultat du comptage
+
+- **327 slots symbolisés** (`.4byte func_ADDR`) sur 758 slots totaux
+  (107 vtables).
+- **431 slots laissés littéraux** : 215 valent `0x0` (préfixe structurel
+  `-fvtable-thunks`, 2 par vtable) + 216 sont des adresses ROM plausibles
+  (bit thumb posé) qui ne correspondent à AUCUN label existant --
+  vérifié sur plusieurs échantillons (ex. `0x08075E00`) qu'elles tombent
+  bien AU MILIEU d'un bloc `asm/*.s` jamais découpé (entre
+  `func_08075DEC` et `func_08075E24`), pas une adresse invalide -- exactement
+  le cas "fonction jamais isolée" décrit dans la mission. Aucun nouveau
+  label inventé, conformément à la règle.
+
+### Découverte importante -- le check "binaire rigoureusement identique"
+NE PASSE PAS, et c'est ATTENDU (pas une erreur de transcription)
+
+Le protocole de vérification demandé (sha1 avant/après strictement égal,
+puisque la transformation ne devrait rien changer sémantiquement) a
+échoué : 336 octets diffèrent, tous confinés exactement à la plage
+octets de ma portion (`0xE7A38`-`0xE8614`, vérifié par `cmp -l` complet --
+AUCUN octet ailleurs dans les 8 Mo de ROM n'a bougé, donc pas de dérive
+de taille globale, la taille du fichier est identique avant/après).
+
+Root-cause investiguée à fond (pas supposée) : `arm-none-eabi-nm
+fomt.elf` sur TOUS les symboles `func_ADDR` du binaire montre qu'à partir
+de `func_0803F8DC` (adresse RÉELLE liée = `0x0803F8E4`, soit +8 par
+rapport à l'adresse encodée dans son propre nom) et JUSQU'À LA FIN DU
+BINAIRE (1620 symboles vérifiés, delta == +8 pour TOUS sans exception),
+le binaire actuellement compilé par ce dépôt est **déjà décalé de +8
+octets par rapport à l'adresse vanilla** que chaque nom `func_ADDR`
+encode. Cause probable : le payload franglais réellement lié dans la ROM
+(cf. `DECOMP_RULES.md`, commit `cb06198`) fait déjà échouer
+`sha1sum -c fomt.sha1` pour la même raison structurelle -- la ROM de ce
+dépôt est INTENTIONNELLEMENT non-vanilla, et ce +8 est une conséquence
+déjà présente AVANT que je touche à quoi que ce soit (confirmé : le delta
++8 existe pour `func_08063E58`/`func_080E1D8C` qui n'ont RIEN à voir avec
+ma modification, juste en inspectant `nm` sur le binaire).
+
+Conséquence directe et IMPORTANTE pour la mission entière (pas juste ma
+portion) : **les 320 vtables `.incbin` brutes de tout `asm/vtables.s`
+contiennent, dès aujourd'hui, des pointeurs de fonction FIGÉS sur
+l'adresse vanilla (correcte à l'origine) qui ne correspond PLUS à la
+position réelle où le linker place ces fonctions dans CE build précis**
+-- exactement la classe de bug que cette mission de symbolisation est
+censée éliminer, sauf que le bug est déjà actif MAINTENANT pour toute
+vtable encore en `.incbin`, pas seulement dans un scénario hypothétique
+futur. Ma conversion en `.4byte func_ADDR` corrige donc RÉELLEMENT et
+DÈS MAINTENANT les 327 slots symbolisés de ma portion (le linker recalcule
+la vraie adresse +8), alors que les 431 slots restés littéraux (pas de
+label existant) restent, eux, avec l'ancienne adresse vanilla fausse --
+un bug latent réel mais qu'il est hors de portée de corriger sans
+inventer un label (interdit par la règle).
+
+Vérification de non-régression effectuée malgré l'échec du check sha1
+littéral :
+1. Chaque slot symbolisé référence un symbole EXISTANT (vérifié par le
+   lien complet, aucune référence non définie).
+2. Les 336 octets qui diffèrent sont TOUS de la forme "même valeur +8"
+   (vérifié programmatiquement sur l'intégralité du diff), cohérent avec
+   le delta +8 confirmé par `nm` -- pas une valeur aléatoire, pas un
+   octet mal ordonné/mal transcrit.
+3. Aucun octet en dehors de la plage de ma portion n'a changé (`cmp -l`
+   complet sur les 8 Mo).
+4. Lien complet réussi sans nouvelle erreur structurelle.
+
+**Ce résultat doit être signalé aux 2 autres agents travaillant en
+parallèle sur les 2 autres tiers du même fichier `asm/vtables.s`** : ils
+vont probablement observer le même échec du check "sha1 identique" sur
+leur propre portion (si leur portion contient des adresses >=
+`0x0803F8DC`, ce qui est très probable puisque `0x0803F8DC` est tôt dans
+la ROM) -- ce n'est pas une erreur de transcription à corriger, c'est la
+dérive globale +8 déjà présente. Un message a été envoyé à l'agent
+`main` avec ce résumé.
+
+### Commit
+
+`decomp: symboliser le 3e tiers des vtables (vtable_unk_080E7A38 à
+vtable_unk_080E85E8)` -- 1 commit, 107 vtables, 327/758 slots symbolisés.
+
+### État du worktree en fin de round
+
+- 1 commit (symbolisation vtables, portion w52), `git status --short`
+  propre après commit.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
