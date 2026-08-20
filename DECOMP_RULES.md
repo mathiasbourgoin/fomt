@@ -29,9 +29,27 @@ vieilles notes.
 
 ## Discipline non négociable
 
-- **Ne jamais commiter un match qui ne matche pas.** `make compare` doit
-  passer bit-exact (`sha1sum -c fomt.sha1` réussi) avant TOUT commit
-  touchant `src/`, `asm/`, ou `fomt.lds`.
+- **Ne jamais commiter un match qui ne matche pas.**
+  **`sha1sum -c fomt.sha1` (ROM entière contre `baserom.gba`) NE PASSE
+  PLUS depuis le commit `cb06198`** ("port hooks to source build") : un
+  vrai payload franglais est maintenant lié dans la ROM (`fomt.lds`
+  référence `build/franglais_stub.bin`, absent d'un checkout nu -- un
+  `head -c 4096 /dev/zero > build/franglais_stub.bin` suffit pour faire
+  passer le LINK, pas le check sha1, qui échouera TOUJOURS même sur un
+  match parfait puisque la ROM est désormais intentionnellement non-
+  vanilla). **Nouveau standard de vérification** (`main`, confirmé avec
+  Mathias) : vérifier CHAQUE fonction ISOLÉMENT --
+  1. taille du `.text` du `.o` fraîchement compilé comparée à
+     `next_addr - this_addr` (`arm-none-eabi-objdump -h build/src/code_ADDR.o`) ;
+  2. diff de désassemblage borné à cette taille exacte contre l'original
+     (`--adjust-vma=0x08000000`, piège déjà documenté plus bas) ;
+  3. optionnellement, un lien complet (avec le `franglais_stub.bin`
+     factice ci-dessus) pour vérifier l'absence d'erreur structurelle
+     (référence non définie, définition multiple) -- ça prouve l'absence
+     de régression de lien, pas la correction de la fonction elle-même.
+  Le harnais rapide (compilateur+assembleur sans lien, section dédiée
+  plus bas) reste la meilleure vérification PENDANT le tâtonnement, quel
+  que soit ce standard.
 - Toujours vérifier via un **rebuild propre**, pas juste le dernier `make`
   incrémental : `rm -rf build fomt.gba fomt.elf fomt.map && make compare`.
   Le coût est faible (~5-10s pour ce dépôt), donc pas de raccourci.
