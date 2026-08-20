@@ -2373,3 +2373,242 @@ should be a same-day match rather than exploratory work.
   nothing pushed, no PR, no network action against origin, no `git push`
   attempted or considered.
 - Working tree clean at the end of the round.
+||||||| 43c9148
+
+## Round 6 -- systematic shape-hunt on `func_0804E4AC` (`DrawGlyphAt`, plain):
+real progress, still not matched, honest near-miss with the gap fully
+characterized
+
+### Scope
+
+Dedicated retry of `func_0804E4AC` (round 3's worst failure in the
+"register pressure" class, reverted after one attempt + one refinement),
+this time doing a real systematic shape-hunt with the fast
+`arm-none-eabi-cpp | agbcp | as` quicktest harness (no full link), per
+round 4's successful method on `func_08004C54`. **Result: NOT matched,
+but went from "wrong from the very first instruction, 20 bytes short" (round
+3) to "byte-identical control-flow graph, differs by exactly ONE 2-byte
+instruction, single isolated register-allocation choice" -- the closest
+this function has ever come, and the specific remaining gap is now fully
+characterized (see below) rather than a vague "register pressure" writeoff.**
+No commit -- not bit-exact, per the non-negotiable discipline. Reverted
+cleanly (`rm src/code_0804E4AC.cc`, confirmed via full clean rebuild
+`rm -rf build fomt.gba fomt.elf fomt.map && make compare` that
+`sha1sum -c fomt.sha1` still reports `Réussi`).
+
+### Read for context first
+
+`docs/VWF.md` (franglais patch repo, full) for the semantic role and the
+already-Ghidra-verified signature (`DrawGlyphAt(uint dims, int dest, uint x,
+uint y, char code)`, `dims` packing `width_tiles | (height_tiles << 16)`).
+Confirmed the two already-matched `DrawString`/`DrawStringRecolor`
+(`src/code_0804E8F0.cc`, `src/code_0804E958.cc`) call `DrawGlyphAt` as an
+opaque `bl func_0804E4AC`/`func_0804E5AC` with 4 register args + a 5th
+stack arg (`code`, `u32` not `char` at the call site -- confirmed from
+`DrawString`'s own already-matched source) -- no new information about
+`DrawGlyphAt`'s internals from the callers beyond what `docs/VWF.md` already
+gave (expected: the loop treats it as a black box, that's exactly what made
+the loop itself tractable per round 3's finding).
+
+### Body of the function, reconstructed from the vanilla disassembly
+
+(`asm/code_0803EE94.s:27928-28061`, `func_0804E4AC`, 0x0804E4AC-0x0804E5AC,
+256 bytes / 0x100, 140-byte stack frame `sub sp, #0x8c`, uses all of
+`r4-r7` + `r8`/`r9`(`sb`)/`r10`(`sl`)/`r12`(`ip`) at points -- confirming
+round 3's "register pressure" read):
+
+1. `kind = ResolveGlyph(&glyph_buf[0], code)` (`func_080D0D28`, a local
+   128-byte stack buffer -- 4 possible 32-byte tile chunks at offsets
+   `+0`, `+0x20`, `+0x40`, `+0x60`, not just 32 bytes as `docs/VWF.md`
+   states for the short-glyph case -- the buffer is sized for the WORST
+   case, a 16x16px glyph split across 4 8x8 tiles).
+2. `if (kind != 1 && kind != 2) return 0;` -- compiled via the classic
+   `(unsigned)(kind - 1) > 1` range-check idiom (`subs r0,#1; cmp r0,#1;
+   bhi`), confirming `kind` must be typed `u32`/unsigned in the port (an
+   `int`-typed `kind` produces a SIGNED `ble`/`bgt` variant later at the
+   `kind > 1` check inside the tile-blit body, which does NOT match --
+   traced this precisely, see fix list below).
+3. `tile_x = x >> 3; tile_y = y >> 3; width_tiles = (dims<<16)>>16;
+   height_tiles = dims>>16;` -- clipped against the window: `if (tile_x >=
+   width_tiles) return kind; if (tile_y >= height_tiles) return kind;`
+   (two independent early-return guard clauses, NOT combined -- this part
+   matched on the first attempt and stayed matched throughout).
+4. Alignment test, written in the original as **two separately-flagged
+   checks, not a combined `&&`**: `x_ok = ((x & 7) == 0); if (x_ok) {
+   y_ok = ((y & 7) == 0); if (y_ok) { <aligned body, ends in `return
+   kind`> } } func_0804E9C8(dims, dest, x, y, &glyph_buf); return kind;`
+   -- i.e. a real if/else (aligned body as the "then", the unaligned-blit
+   call physically placed at the very END of the function as the
+   "else", both converging on a shared `return kind`), not a guard clause
+   `if (!aligned) { call; return; }` at the top. Getting this if/else
+   shape right (see fix list) was what fixed the single biggest structural
+   divergence found this round.
+5. Aligned body: `has_right = (tile_x+1) < width_tiles; has_bottom =
+   (tile_y+1) < height_tiles;` (also a literal `= 0; if (cond) = 1;`
+   two-step pattern for `has_right` specifically, confirmed by the
+   disassembly building a boolean into a register with two `movs`
+   before ever branching on it), then up to 4 conditional 32-byte
+   `CpuFastSet` blits (TL always; BL if `has_bottom`; TR if `has_right &&
+   kind > 1`; BR if all three) at tile-grid offsets `(width_tiles*row +
+   col) * 0x20` from `dest`, `+0x20` more for the right column.
+
+### Fixes found this round that closed almost the entire gap (all confirmed
+via the quicktest harness, `arm-none-eabi-cpp | agbcp -O2 | as`, ~1s/iter,
+no full link needed until the final check)
+
+1. **`(unsigned)(kind - 1) <= 1)` must be the condition of a
+   `then`-branch containing the ENTIRE rest of the function, with a
+   trailing `return 0;` AFTER the closing brace -- not a leading guard
+   clause `if ((unsigned)(kind-1) > 1) return 0;`.** Both are logically
+   identical; they compile to visibly different shapes. The guard-clause
+   form makes agbcp place the "return 0" stub inline right after the
+   check (needs an extra `movs r0,#0; b epilogue` to jump PAST it from the
+   valid path). The trailing form places "return 0" as the literal last
+   statement of the function, physically adjacent to the epilogue -- no
+   jump needed for that path, and the valid path's normal exit just does
+   one branch to skip over it. This matches the original exactly (`bhi
+   .L0804E598` jumps directly to `movs r0,#0` which falls straight into
+   the epilogue). **General rule for this codebase, worth adding to
+   `DECOMP_RULES.md`**: an early "impossible/invalid" return that appears
+   FIRST in a natural reading of the C is not necessarily first in the
+   real source -- if the compiled shape shows the invalid-path stub
+   sitting right before the epilogue with the valid path jumping around
+   it, the real source likely wraps the valid path in `if (valid) { ...
+   } return invalid_value;`, not `if (!valid) return invalid_value; ...`.
+2. **The aligned/unaligned dispatch is a real if/else, body-then-fallback,
+   not a guard clause either** -- same lesson as point 1, applied a
+   second time in the same function. Before this fix, the unaligned-call
+   block (`func_0804E9C8(...)`) was emitted inline right after the
+   alignment check (early-return style); after, it's placed at the very
+   end of the function, matching the original's physical layout exactly
+   (confirmed via the `b.n`-target address in the disassembly, which
+   points at the tail block, not an inline one).
+3. **The alignment check must be written as two SEPARATE flag variables
+   computed then tested (`x_ok = (x&7)==0; if (x_ok) { y_ok = (y&7)==0;
+   if (y_ok) {...} }`), not a single combined `&&` condition
+   (`if ((x&7)==0 && (y&7)==0)`).** Even though semantically identical
+   under short-circuit evaluation, the combined form compiles straight to
+   two `ands`+`cmp`+`bne` pairs with no intermediate flag-building; the
+   separate-variable form reproduces the original's literal
+   `movs r,#0; ...; movs r,#1; cmp r,#0; beq` pattern for EACH check.
+   **This generalizes the existing DECOMP_RULES.md lesson about literal
+   boolean-flag construction (previously only documented for the
+   free-list-pop case in round 2's `func_0800736C`) to alignment/range
+   checks too** -- worth broadening that rule's wording.
+4. **`kind` must be `u32`, not `int`.** A signed `int kind` produces
+   `ble.n`/`bgt.n` at the `kind > 1` check inside the aligned body (the
+   TR/BR gate); the original uses `bls.n` (unsigned). Purely a typing fix,
+   caught by direct instruction-mnemonic diffing against the vanilla
+   disassembly (`bls` vs `ble` -- one differs only in the condition code
+   nibble, both correct C, only one produces the recorded byte stream).
+5. **Multiplication operand order in source matches the register that
+   becomes the `muls` accumulator**: write `width_tiles * tile_y +
+   tile_x` (not `tile_y * width_tiles + tile_x`) to get `mov r0,
+   width_tiles_reg; muls r0, tile_y_reg` (accumulator = left operand's
+   register, loaded first) instead of the reverse. Cosmetic for byte
+   count on its own (both forms are 2 instructions), but matching it
+   removed noise from the diffing process and is a cheap, free thing to
+   get right once noticed.
+
+### The ONE remaining gap, fully characterized, not resolved
+
+After all 5 fixes above, the quicktest harness diassembly is **249**
+functionally-real instructions matching the original's 250 one-for-one in
+sequence and register role (confirmed via an automated Python
+mnemonic-sequence diff, `orig_ops*.txt`/`mine_ops*.txt`, in
+`/tmp/.../scratchpad` this session -- not committed, throwaway diagnostic
+files), for a total size of **250 bytes vs the original's 252** (256 minus
+a trailing 4-byte pad shared by both once you exclude the assembler's
+4-byte alignment `nop`). The single missing instruction is a `str`
+(stack-spill) of `tile_x` immediately after it's computed
+(`u32 tile_x = x >> 3;`), which the original does **even though the same
+physical register (`r4` in the original) still validly holds `tile_x`
+right up to its last use** (confirmed by manual dataflow trace: `r4` is
+never reassigned between the spill and the final read). The original later
+reloads this value from the stack (`ldr r2, [sp, #0x84]`) for the BR-tile
+address calculation specifically, NOT for the TL or BL calculations, which
+read directly from the still-valid register. **No C-level restructuring
+tried this round reproduces this specific redundant spill+reload**:
+
+- Declaration order of `tile_x`/`tile_y` vs `width_tiles`/`height_tiles`
+  swapped (tried both orders): changes WHICH of `tile_x` vs `width_tiles`
+  lands in a low register (`r4`-class, no separate `mov` into a high
+  register needed) vs a high register (`r8`-class, needs a `mov`) -- this
+  is a real, confirmed, mechanical THUMB constraint (16-bit shift
+  instructions `lsls`/`lsrs`/`asrs` can only target `r0`-`r7`, so whichever
+  of the two variables is homed in `r8`+ needs an extra `mov` to get
+  there) -- but in EVERY order tried, only ONE of the two variables pays
+  an "extra instruction" tax (either the `mov`-into-high-reg for whichever
+  lands high, or nothing for whichever lands low with no forced spill).
+  The original pays the tax on **both** simultaneously (`tile_x` in `r4`
+  WITH a redundant stack spill, `width_tiles` in `r8` WITH the expected
+  `mov`) -- an 8th distinct "hard" register-pressure slot that none of the
+  variants tried actually reproduces.
+- Extracting the BR-block's `width_tiles * (tile_y + 1)` sub-expression
+  into its own named local (`u32 row = ...; ... tile_x + row ...`) before
+  adding `tile_x`, to test whether a fresh statement boundary triggers a
+  reload the way it seems to for the ORIGINAL's `tile_x` reference at that
+  exact point: no effect, `tile_x` still resolved from its live register,
+  no spill/reload emitted.
+- `register u32 tile_x = ...;`: no effect (unsurprising for this era of
+  compiler, but cheap to rule out).
+
+**Best working hypothesis, not verified**: the redundant spill/reload is
+NOT actually about `tile_x`'s own C-level treatment at all, but a
+side-effect of overall register-pressure accounting elsewhere in the
+function forcing agbcp's allocator to treat `r4` as "not confidently live"
+by the time it reaches the BR block specifically (the BR block is the
+*third* conditionally-executed `CpuFastSet` call site, nested two `if`
+levels deep -- TL is unconditional, BL is one level deep, TR/BR are two
+levels deep) -- possibly the allocator's live-range tracking has a
+different (more conservative) rule for values referenced from inside a
+DOUBLY-nested conditional block reached only after two sibling `bl`
+call sites (TL's and BL's `CpuFastSet` calls) have already executed, vs.
+a value referenced from a singly-nested block. This was NOT tested
+directly this round (would require, e.g., artificially adding a 3rd
+nesting level around the TR-only case to see if IT also starts
+spilling/reloading something that currently doesn't) -- flagged as the
+most promising next lead, not chased further this round given the
+budget already spent getting this close.
+
+### What to try next, if this function is picked up again
+
+1. Test the "doubly-nested conditional forces reload" hypothesis directly:
+   wrap the TR block (currently singly-nested under `has_right && kind >
+   1`) in an ADDITIONAL dummy-but-truthful nesting level and see if
+   `width_tiles` (or whichever value is read inside it) starts exhibiting
+   the same spill+reload pattern independent of which variable it is --
+   if so, the fix is structural (find what the SECOND nesting level should
+   really be, maybe `has_right` and `kind > 1` are tested as two SEPARATE
+   nested `if`s rather than one `&&`, exactly like the `x_ok`/`y_ok`
+   fix -- **this was not tried this round and is the most promising next
+   experiment**, given fix 3 above already established that this
+   function's original source strongly prefers separately-flagged
+   sequential conditions over combined `&&` everywhere else).
+2. `func_0804E5AC` (`DrawGlyphAt`, recolor variant) was NOT attempted this
+   round -- per round 3's note, expect the identical shape/gap once
+   `func_0804E4AC` matches, since both share the same buffer/flag layout.
+   Port `func_0804E4AC` first, then immediately try reapplying the exact
+   same shape to `func_0804E5AC` as a fast follow-up (round 3 confirmed
+   this pattern works for the `DrawString` pair: second function of a
+   pair matches on the first attempt once the shape is known).
+3. If neither this function nor its recolor sibling converge with a
+   modest continued budget, this is still consistent with round 2's
+   general lesson (register-pressure-class functions need a genuinely
+   large budget) -- but note the gap is now ONE isolated, well-understood
+   instruction, not an open-ended mismatch, so "large budget" here likely
+   means a handful more structural experiments around the nesting-depth
+   hypothesis above, not starting over.
+
+### Repo state at end of round 6
+
+- Working tree clean, `make compare` passes bit-exact (verified via full
+  clean rebuild immediately before writing this section).
+- No new commits this round -- nothing matched bit-exact, nothing
+  committed, per discipline. The one attempted file
+  (`src/code_0804E4AC.cc`) was removed (it was never staged/committed;
+  the build system auto-globs `src/*.cc`, so leaving it in place broke
+  `make compare` with a duplicate-symbol link error against the
+  still-`asm/`-resident original -- caught and fixed before finishing).
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin.
