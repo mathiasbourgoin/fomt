@@ -274,6 +274,8 @@ SECTIONS
         asm/code_linkonce.o(.text.code_080D68C0);
         src/code_080D6D98.o(.text);
         asm/code_080D6DB8.o(.text);
+        src/code_080D7944.o(.text);
+        asm/code_080D7990.o(.text);
         src/code_080D79CC.o(.text);
         asm/code_080D7AAC.o(.text);
         src/code_080D7AAC.o(.text);

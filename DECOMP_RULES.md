@@ -318,6 +318,28 @@ d'allocateur agbcp" -- voir `DECOMP_ARCHIVE.md` pour le détail complet
 future cible de la classe "pression de registres" : chercher l'aliasing
 explicite avant d'abandonner.
 
+### 12. `x & 1` testé dans un `if` : `!!(x & 1)` force l'écriture du
+résultat DANS le registre-maison de `x`, `x & 1` nu le laisse dans un
+registre scratch
+
+Near-miss d'1 instruction vu round 10 (`func_080D7944`, worktrees w28 puis
+w30) : le désassemblage cible fait `movs r0,#1` puis `ands r5,r0` (le
+masque écrase le registre déjà alloué au paramètre `flags`, ici `r5`),
+alors que TOUTE formulation naïve de `if (flags & 1)` -- y compris
+`flags &= 1; if (flags)`, `flags = flags & 1;`, `if ((flags &= 1) != 0)`,
+une variable intermédiaire nommée, ou un `do {} while(0)` autour -- compile
+systématiquement en `ands r0,r5` (résultat dans un registre scratch,
+`flags` intact mais mort ensuite, la "sauvegarde" vers son propre registre
+étant éliminée comme store mort). La seule formulation qui a fonctionné :
+la double négation explicite **`if (!!(flags & 1))`** -- le `!!` déclenche
+chez agbcp un chemin de normalisation booléenne différent qui réécrit le
+résultat dans le registre du paramètre au lieu de le garder en scratch,
+même si `flags` n'est jamais relu après. Signal pratique : si un `if (x &
+CONST)` résiste à toute reformulation de l'expression/l'assignation et
+que l'écart residuel est *exactement* "le AND écrit dans le mauvais
+registre" (taille identique, un seul encodage différent), essayer `!!()`
+avant de conclure à un mur d'allocateur irrécupérable.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
