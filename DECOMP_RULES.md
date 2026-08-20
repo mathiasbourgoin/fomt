@@ -380,6 +380,29 @@ supposer. Vu round (worktree w40) : 8 sites sur 38 concernés, détecté par
 une comparaison octet-à-octet (pas seulement mnémonique) entre le bloc
 original réassemblé tel quel et le C compilé.
 
+### 15. Argument d'appel nécessitant un littéral non shift-décomposable :
+TOUJOURS hissé avant le montage des arguments-pile, indépendamment de
+l'ordre déclaré en C
+
+Near-miss root-causé pour de bon round (worktree w47, `func_08037B48`/
+`func_08037B80`) : quand un appel à 5+ arguments passe une constante
+"kind"/"tag" qui doit être chargée depuis le pool littéral (impaire, ou
+`> 0xFF`, donc pas exprimable en `movs #k; lsls #n`), agbcp calcule
+TOUJOURS ce littéral AVANT de monter le(s) argument(s) passé(s) sur la
+pile -- quelle que soit la position de cet argument dans la liste
+déclarée en C, et quel que soit l'ordre des sous-expressions écrit
+(cf. règle 5bis). Contrairement aux autres near-miss de ce fichier, **ce
+n'est pas un idiome C à trouver -- c'est structurellement infaisable**
+tant que la constante en cause n'est pas shift-décomposable : le seul
+gain possible serait de rendre le littéral décomposable, ce qui changerait
+la valeur elle-même, ou de renoncer si aucune formulation ne fait passer
+le calcul du littéral après le montage de la pile. Signal pratique : si un
+near-miss résiste à 5+ reformulations C ET que l'écart concerne
+spécifiquement quel calcul (littéral vs argument-pile) est fait en
+premier, vérifier si la constante en cause est shift-décomposable AVANT
+de chercher encore une forme C -- si non, fermer la piste plutôt que de
+continuer à itérer.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
