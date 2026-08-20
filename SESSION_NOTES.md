@@ -5015,3 +5015,153 @@ inutile de refaire l'analyse, juste réappliquer le split `asm/*.s` +
   (fichier gitignored, n'affecte pas l'état git) -- prochain agent sur ce
   worktree : ne pas supposer qu'un `make compare` propre passera tant que
   le point ci-dessus n'est pas corrigé en amont.
+
+## 2026-08-20, worktree `w29`/`parallel-29` -- `func_0804E5AC` (`DrawGlyphAt`
+recolor) round 4 : résidu réduit de 44 à 24 octets (piste concrète), toujours
+pas de match -- 4e échec honnête, nouvelle cause identifiée
+
+Contexte : reprise post-round 10/w27 (voir plus haut, ligne ~4779), qui avait
+résolu la piste `anchor` (doit être recalculé PAR BLOC, pas partagé comme
+`delta`) mais laissé un résidu de 44 octets sur l'encodage compact-vs-verbose
+de `shifted_index + (u32)dest` dans les 4 blocs TL/BL/TR/BR (original :
+`mov r0, sl` puis `adds` 3-opérandes ; reconstruction : `add rX, sl` compact
+1 instruction). Les 2 tentatives de round 10/w27 (variable de shift séparée,
+arithmétique de pointeur explicite) n'avaient eu aucun effet sur cette forme.
+
+Fichier `src/code_0804E4AC.cc` (le corps plain, déjà matché depuis le round
+"5e tentative", commit `247e6f3`) relu comme référence structurelle -- il
+contient LES DEUX formes (verbose pour son bloc TL, compact pour son bloc
+BL) dans la MÊME fonction, ce qui prouve que le choix n'est pas une
+propriété globale du compilateur mais un artefact **local à chaque site**
+de l'addition. Vérifié en désassemblant `build/src/code_0804E4AC.o` :
+bloc TL -> `mov r2, r9` puis `adds r6, r0, r2` (verbose, car le résultat
+`tl` est casé dans r6 alors que l'accumulateur du calcul est en r0 --
+incompatible avec l'encodage Thumb `ADD(4)` qui exige `Rdn += Rm`, même
+registre des deux côtés) ; bloc BL -> `add r1, r9` (compact, car là
+l'accumulateur ET la variable finale coïncident déjà dans r1). **La règle
+identifiée** : verbose si le compilateur assigne l'adresse finale à un
+registre DIFFÉRENT de celui qui vient d'accumuler `(shifted_index)`,
+compact sinon.
+
+### Lecture littérale du désassemblage original de `func_0804E5AC` (pas
+deviné depuis la forme C) : `row_product` partagé TL/TR, jamais BL/BR
+
+Au lieu de retenter une piste C générique, relecture ligne à ligne du
+désassemblage original des 4 blocs :
+- TL sauvegarde `row_product` (= `width_tiles * tile_y`, AVANT le
+  `+ tile_x` et AVANT le `<< 5`) sur la pile (`str r3, [sp, #0x9c]`) juste
+  avant d'entrer dans la boucle de recolor -- TR le recharge et refait
+  `+ tile_x` puis `<< 5` depuis zéro, plutôt que de réutiliser l'adresse
+  finale de TL + `0x20` (le raccourci qu'utilise le corps PLAIN pour son
+  propre bloc TR). Seule explication cohérente : l'adresse finale de TL
+  est un pointeur consommé par auto-incrément dans la boucle inline
+  (`stm r7!, {r1}` répété 8 fois) -- le registre ne contient donc plus la
+  valeur de départ une fois la boucle TL terminée, contrairement au corps
+  plain qui n'a pas de boucle et garde `tl` intact pour son raccourci TR.
+- BL, à l'inverse, NE sauvegarde PAS son propre `row_product`
+  (`width_tiles * row_below`) pour que BR le réutilise -- BR le recalcule
+  intégralement depuis zéro. Asymétrie confirmée, gardée telle quelle
+  (pas "corrigée" en fausse symétrie TL/TR == BL/BR).
+- Dans les 4 blocs, le calcul couleur (`delta`/`anchor`) est intercalé
+  ENTRE le `<< 5` et le `+ dest` final -- jamais avant le shift, jamais
+  après le dest-add.
+
+### Candidat reconstruit à partir de cette lecture -- progrès réel, pas de
+match
+
+Réécriture complète de `func_0804E5AC` (signature confirmée depuis l'appelant
+`src/code_0804E958.cc` : `u32 func_0804E5AC(u32 dims, void * dest, u32 x,
+u32 y, u32 code, u32 color_a, u32 color_b)`), avec : boucle `do { } while`
+manuelle par bloc (pointeurs `src`/`dst` locaux, jamais de pointeur réutilisé
+au-delà de son propre bloc -- cohérent avec le point ci-dessus), `mask`
+(`0x11111111`) déclaré UNE FOIS à l'échelle fonction (déclarer une copie
+locale par bloc, testé, casse l'allocation de `dest` -- voir plus bas),
+`anchor` recalculé par bloc (piste round 10/w27, conservée), `row_product`
+partagé TL/TR uniquement.
+
+Résultat mesuré (harnais compilateur seul, `build/src/code_0804E5AC.o`,
+`arm-none-eabi-objdump -h`) : `.text` = `0x1dc` (476 octets) contre `0x1f4`
+(500) attendus -- **résidu de 24 octets, en baisse depuis les 44 du round
+précédent**. Désassemblage borné confirmé : le bloc TL reproduit maintenant
+EXACTEMENT la forme verbose originale (`mov r0, sl` puis `adds r6, r1, r0`
+3-opérandes), et `dest` reste bien casé dans `sl` sur toute la fonction
+(`mov sl, r1` au prologue, jamais spillé) -- les deux points bloquants des
+3 tentatives précédentes sont donc résolus pour au moins ce bloc.
+
+**Tentative pour aller plus loin, révèle un piège d'allocation global** :
+remplacer les boucles `do-while` par des `while` (avec le test amont que
+montre pourtant le désassemblage original -- `cmp r4,r2; beq skip` avant
+d'entrer), le pointeur de fin par une expression littérale
+`&glyph_buf[k+8]` (au lieu de `src + 8`), et `mask` par une déclaration
+locale par bloc (au lieu d'une déclaration unique à l'échelle fonction) :
+taille descend à `0x1ec` (492, résidu 8 octets -- semble mieux !) MAIS le
+désassemblage révèle que ce n'est qu'une coïncidence numérique : `dest`
+(arg1) se retrouve désormais SPILLÉ sur la pile (`str r1, [sp, #0x8c]` au
+prologue, rechargé à chaque site au lieu de `mov r0, sl`) -- la disposition
+entière de la pile change (offsets 0x8c/0x90/0x94/0x98/0x9c tous décalés
+par rapport à l'original), donc plus proche en taille mais structurellement
+FAUX. Isolé lequel des 3 changements cause la régression en les révertant
+un par un : c'est la déclaration LOCALE de `mask` par bloc (pas le
+`while`, pas le pointeur littéral) qui fait perdre `sl` à `dest` --
+signal qu'agbcp semble faire une allocation de registres qui dépend du
+nombre total de variables/constantes déclarées dans le scope, pas
+seulement de la liste de vies locale à chaque site (cohérent avec le
+soupçon déjà noté round 10/w27 sur un facteur de pression de registres
+non identifié). Reverté vers la version à 24 octets (mask unique,
+`do-while`, `src + 8`) après confirmation que ce n'était pas une piste.
+
+### Résidu restant caractérisé (pas résolu) : collision `anchor`/`end`
+sur le registre r2 dans la boucle TL
+
+Dans le candidat à 24 octets, le calcul du pointeur de fin de boucle
+(`end = src + 8`) compile en 2 instructions (`mov r0, sp; adds r0, #44`)
+au lieu de l'unique `add r2, sp, #0x2c` de l'original, et nécessite une
+copie supplémentaire (`adds r7, r0, #0`) pour survivre à la boucle --
+alors que l'original garde `end` directement dans `r2` sans copie. Cause
+identifiée par lecture des registres vivants dans la boucle originale :
+`r2` porte `end` ET RIEN D'AUTRE dans l'original (anchor y est en `r5`,
+delta en `r6`) ; dans ma reconstruction, `anchor` finit alloué en `r2`
+(le même registre où `end` voudrait aller), forçant le compilateur à
+choisir un autre registre libre (`r7`) pour `end`, avec le coût d'une
+copie explicite. Testé un réordonnancement (calculer `anchor` avant
+`delta` au lieu d'après) : aucun effet sur la taille -- l'allocation de
+`anchor` sur `r2` ne semble pas piloté par l'ordre séquentiel simple des
+2 affectations. Piste NEUVE pour la suite, non testée faute de temps :
+forcer `anchor` sur un registre différent de `r2` via une variable-copie
+explicite supplémentaire (idiome règle 11 de `DECOMP_RULES.md`), ou
+inverser l'ordre où le pointeur de fin de boucle et `anchor` sont
+matérialisés dans le texte C (calculer `end` AVANT le bloc couleur, pas
+après).
+
+### Verdict et repo state en fin de round (worktree w29)
+
+**Pas de match -- 4e tentative sérieuse sur cette fonction, résidu à un
+niveau différent à chaque fois (44 -> 24 octets ce round), signal
+cohérent avec le diagnostic déjà posé fin round 10/w27** : cette variante
+"recolor" de `DrawGlyphAt` est sensiblement plus dure que le corps plain
+(`func_0804E4AC`, résolu en 5 tentatives) à cause d'une interaction
+d'allocation de registres entre le calcul adresse et le calcul couleur qui
+n'a pas encore de règle générale identifiée -- seulement des symptômes
+locaux. Recommandation pour Mathias, cohérente avec la note de fin de
+round 10/w27 : soit consacrer un round dédié avec budget étendu (itération
+fine sur l'ordre exact des micro-affectations, un bloc à la fois, en
+comparant après CHAQUE changement au lieu de grouper plusieurs
+hypothèses), soit comparer avec une décompilation Ghidra amont si elle
+existe pour ce binaire, soit accepter que cette variante reste ouverte
+plus longtemps que le corps plain (elle n'est pas seule dans ce cas :
+`DrawGlyphAt` plain a mis 5 tentatives).
+
+- **Aucun commit de code.** `src/code_0804E5AC.cc` (nouveau), le split
+  `asm/code_0804E5AC.s` -> `asm/code_0804E7A0.s`, et l'edit `fomt.lds`
+  ont tous été annulés/supprimés après l'échec (`git reset` + `git
+  checkout HEAD --` sur les fichiers renommés/modifiés, suppression du
+  nouveau fichier `.cc`). `git status --short` vide confirmé.
+- Vérification effectuée : harnais compilateur seul (taille `.text` +
+  désassemblage borné, standard officiel documenté en tête de
+  `DECOMP_RULES.md`) -- pas de `make compare` sha1 ROM entière (toujours
+  structurellement impossible tant que `cb06198` reste sur la branche,
+  cf. round 10/w27) ; lien complet néanmoins vérifié une fois avec
+  `build/franglais_stub.bin` factice (`head -c 4096 /dev/zero`) pour
+  confirmer l'absence d'erreur de lien -- aucune référence non définie ni
+  symbole dupliqué.
+- `origin` non touché, rien poussé, pas de PR.
