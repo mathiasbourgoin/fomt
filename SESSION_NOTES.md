@@ -5015,3 +5015,59 @@ inutile de refaire l'analyse, juste réappliquer le split `asm/*.s` +
   (fichier gitignored, n'affecte pas l'état git) -- prochain agent sur ce
   worktree : ne pas supposer qu'un `make compare` propre passera tant que
   le point ci-dessus n'est pas corrigé en amont.
+
+### Addendum -- nouveau standard officiel confirmé par le coordinateur,
+`func_080D7AAC`/`func_080D7B04` committés
+
+Le coordinateur confirme : `w27` (worktree parallèle) a trouvé la même
+régression indépendamment. `DECOMP_RULES.md` a été mis à jour (section
+"Discipline non négociable", en tête de fichier) : le check
+`sha1sum -c fomt.sha1` sur la ROM entière est **définitivement caduc**
+depuis `cb06198` (payload franglais intentionnellement non-vanilla, pas
+un bug à corriger) -- **pas la peine d'attendre un "gate réparé"**.
+**Nouveau standard officiel, déjà en vigueur** : vérification ISOLÉE par
+fonction --
+1. taille du `.text` du `.o` compilé (`arm-none-eabi-readelf -S
+   build/src/code_ADDR.o`) comparée à `next_addr - this_addr` ;
+2. diff de désassemblage (`arm-none-eabi-objdump -d` du `.o`) borné à
+   cette taille contre le désassemblage brut de `baserom.gba`
+   (`objdump -D -bbinary -marmv4t -Mforce-thumb
+   --adjust-vma=0x08000000 --start-address=ADDR --stop-address=ADDR+size`) ;
+3. lien complet (`make fomt.elf`) vérifié sans erreur, avec un
+   `build/franglais_stub.bin` factice (`head -c 4096 /dev/zero >
+   build/franglais_stub.bin`, gitignored) juste pour satisfaire la
+   dépendance non liée au payload franglais -- pas de bit-exactness
+   globale attendue, seulement absence d'erreur de LIEN
+   (symbole dupliqué/non résolu) ;
+4. `grep -rl -- "ADDR" asm/*.s` pour confirmer l'absence de blob dupliqué
+   (piège hidden-blob déjà documenté).
+
+Le harnais rapide déjà utilisé pour `func_080D7AAC`/`func_080D7B04` EST
+cette vérification (étape 2 sous une forme équivalente, compilateur+
+assembleur direct sans lien) -- suffisant, aucune ré-analyse nécessaire.
+
+**Committé (`076eb72`)** : `func_080D7AAC` (`src/code_080D7AAC.cc`) et
+`func_080D7B04` (`src/code_080D7B04.cc`), les deux vérifiés selon les 4
+points ci-dessus (taille 0x28/40 octets chacun, matchant exactement
+l'écart à la fonction suivante ; désassemblage instruction-pour-
+instruction identique à `baserom.gba` ; lien propre ; aucun label
+dupliqué). `asm/code_080D7B04.s` renommé `asm/code_080D7B2C.s` (la cible
+était la première fonction du fichier, le trio de wrappers triviaux
+`func_080D7B2C`/`38`/`44` devient le nouveau contenu sous sa propre
+adresse).
+
+`func_080D7944` (near-miss d'1 instruction, `ands r5,r0` attendu vs
+`ands r0,r5` produit par toute formulation C testée) : **laissé en l'état,
+documenté comme near-miss honnête**, pas de nouvelle piste ce round --
+ne pas forcer (consigne du coordinateur). Prêt à reprendre pour un futur
+round avec un angle neuf (hypothèse non testée : influence du nombre de
+registres bas simultanément vivants sur le choix de destination de
+l'allocateur d'agbcp, cf. ci-dessus).
+
+### Repo state final (après addendum)
+
+- 2 fonctions matchées et committées ce round (`func_080D7AAC`,
+  `func_080D7B04`, commit `076eb72`), plus le commit docs `325ecac`.
+- `git status --short` vide, arbre de travail propre (build/, fomt.elf,
+  fomt.map supprimés après vérification -- gitignored de toute façon).
+- `origin` intact, rien poussé, aucune PR.

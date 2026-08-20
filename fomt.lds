@@ -276,8 +276,10 @@ SECTIONS
         asm/code_080D6DB8.o(.text);
         src/code_080D79CC.o(.text);
         asm/code_080D7AAC.o(.text);
+        src/code_080D7AAC.o(.text);
         src/code_080D7AD4.o(.text);
-        asm/code_080D7B04.o(.text);
+        src/code_080D7B04.o(.text);
+        asm/code_080D7B2C.o(.text);
         *(.gnu.linkonce.t.__as__5SheepRC5Sheep);
         *(.gnu.linkonce.t.__as__3CowRC3Cow);
         *(.gnu.linkonce.t.__as__9LivestockRC9Livestock);
