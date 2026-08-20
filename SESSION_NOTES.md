@@ -4044,3 +4044,34 @@ concrete next thing to try, not just "try harder."
 - `origin` push URL untouched, nothing pushed, no PR, no network action.
   Solo worktree (`w21`/`parallel-21`), no concurrent-session interference
   observed.
+
+## 2026-08-20, maintenance round (coordinateur, pas un worktree) -- split
+`DECOMP_RULES.md` en quick-start + `DECOMP_ARCHIVE.md`, docs seulement
+
+Mathias a fait remarquer que chaque agent commence systématiquement par
+"se re-décompiler lui-même" -- en partie inhérent (chaque fonction est
+unique) mais en partie évitable : `DECOMP_RULES.md` avait grandi à ~950
+lignes avec de la vraie duplication issue de merges "garder les deux
+côtés" appliqués à des sections qui en réalité se SUPERSÉDAIENT (ex. la
+section "pression de registres" répétait le même paragraphe évolutif 5
+fois, avec des compteurs d'échecs différents à chaque copie -- 3/3 puis
+4/4 puis le near-miss round 6, jamais nettoyé). Chaque agent payait le
+coût de lecture complet avant de toucher sa cible réelle, peu importe si
+elle avait besoin de cet historique ou non.
+
+Scindé en deux fichiers : `DECOMP_RULES.md` (450 lignes, dédupliqué) ne
+garde que ce dont CHAQUE round a besoin -- discipline, anti-patterns
+C->asm, conventions de nommage, méthodologie de découpage/harnais.
+`DECOMP_ARCHIVE.md` (nouveau, 349 lignes) prend l'historique des matchs,
+les récits complets des classes de difficulté, et la liste des cibles
+priorisées -- consulté seulement quand une cible touche une famille déjà
+documentée. Aucun changement de code, `make compare` reconfirmé bit-exact
+après le split (docs uniquement).
+
+- Rien poussé, `origin` intact.
+- Les 3 agents en cours (w22 fable/`DrawGlyphAt`, w23 blobs cachés, w24
+  méthodes sœurs) ont lu l'ancien `DECOMP_RULES.md` monolithique avant ce
+  split -- pas de problème, leurs cibles ne dépendent pas de la
+  structure du fichier. Au prochain merge, router leurs nouvelles
+  entrées de table/historique vers `DECOMP_ARCHIVE.md`, pas
+  `DECOMP_RULES.md`.
