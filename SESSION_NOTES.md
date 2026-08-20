@@ -847,3 +847,127 @@ verified via `git status --short` before committing, per round 3's
   -- still not recommended without a bigger register-pressure budget,
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`).
+
+## Round 5
+
+### Goal
+
+Attack the next priority target from round 4's list: `func_080E09B0`
+(pure-forwarding derived destructor already quicktest-confirmed, just
+needed the `.text.code_ADDR` COMDAT/linkonce section split worked out),
+apply two naming-convention corrections from Mathias mid-round, and keep
+`DECOMP_RULES.md`/this file current.
+
+### `func_080E09B0` matched (commit `e4638b2`)
+
+Body: `push {lr}; bl func_080007EC; pop {r0}; bx r0` -- 0xC bytes, a pure
+tail-forward to the base `AScene` destructor with **no own vtable field
+to stamp** (unlike `func_08004C54`, which resets its own vtable pointer
+first). Ported as a plain free function `func_080E09B0(void *self, int
+in_chrg) { func_080007EC(self, in_chrg); }` -- no semantic name found in
+the patch repo's docs for this address, kept as the raw symbol.
+
+**Split mechanics, and a real near-miss caught and fixed before commit**:
+`asm/code_linkonce.s` groups many functions under a handful of explicit
+`.section ".text.code_ADDR"` blocks (not one section per function
+despite the "linkonce" name) -- same split method as any monolithic
+`.s` file applies (cut the target function's body into `src/code_ADDR.cc`,
+push everything after it into a new `asm/code_NEXT.s`). The trap: the
+`fomt.lds` line right after `asm/code_linkonce.o(.text.code_080D7CFC)`
+is `*(.gnu.linkonce.t.__lower_bound__H4ZPC12JumpTableEntZiZ...)` --
+first assumption was that this wildcard is inert (matches nothing, 0
+bytes), since nothing in `asm/*.s` defines that mangled symbol. Wrong:
+it's a REAL C++ template instantiation, compiled fresh from
+`src/script_engine.cc` (already ported), occupying a genuine ~60-byte
+(0x3C) gap in the ROM (`0x080E0EB4`-`0x080E0EF0`) that sits right BEFORE
+the next explicit `.text.code_080E0EF0` entry, not after
+`.text.code_080D7CFC`'s nominal end. First attempt inserted the two new
+split entries (`src/code_080E09B0.o(.text); asm/code_080E09BC.o(.text);`)
+AFTER that wildcard in `fomt.lds` -- built and linked cleanly (no error,
+`make` exit 0) but **`sha1sum -c` failed**, with a huge contiguous diff
+block starting exactly at `0x080E09B0` and ending exactly at
+`0x080E0EF0` (full byte-diff scan + `fomt.map` inspection showed the new
+stub had been shoved 0x3C bytes later than expected, with the OLD
+blob's `func_080E09BC` content landing at `0x080E09B0` instead). Fixed
+by moving the two new entries BEFORE the wildcard -- verified bit-exact
+with two independent full clean rebuilds (`rm -rf build fomt.gba
+fomt.elf fomt.map && make compare`), once right after the fix and once
+again before commit.
+
+**Diagnostic method that found this fast** (documented as a general
+rule in `DECOMP_RULES.md` now): don't assume a `*(.gnu.linkonce.t...)`
+wildcard is a harmless vestige without checking its assigned address in
+`fomt.map` from a clean build first. When `make compare` fails with NO
+compiler/linker error but a sha1 mismatch, byte-diff the built ROM
+against `baserom.gba`, group into contiguous ranges, and check whether
+the range boundaries line up exactly with a section/symbol boundary
+(they did here) -- that's a strong signal of a `fomt.lds` *ordering*
+bug, not a code-content bug, and `fomt.map` directly shows where an
+object's `.text` actually landed vs. where its name says it should be.
+
+Also worth recording: `rtk`'s command-tee wrapper truncates/caches long
+`make` output unpredictably in this environment (`tail -N` on its log
+file sometimes showed a STALE prior run's output, including one paste
+of an old `Échec` after the fix was already in place and the direct
+`sha1sum -c fomt.sha1` said `Réussi`). When in doubt, re-run
+`sha1sum -c fomt.sha1` directly against the just-built `fomt.gba`
+instead of trusting a wrapped/tee'd `make compare` tail.
+
+### Naming-convention corrections (mid-round, from Mathias)
+
+1. **No patch-project branding in symbol names.** Renamed
+   `franglais_vwf_draw_string_plain` -> `DrawString` and
+   `franglais_vwf_draw_string_recolor` -> `DrawStringRecolor` (commit
+   `916d609`), via the same `ALIAS()` mechanism used for
+   `func_08004C54` in round 4 -- zero binary impact, verified bit-exact
+   with a full clean rebuild after the rename. Rationale: this repo
+   describes vanilla `fomt`, not our `franglais` patch; `vwf` is our own
+   internal jargon, not necessarily the game's or `StanHash/fomt`'s own
+   term. Keeping symbol names patch-neutral keeps the door open to
+   someday proposing matches upstream (not decided, but not to be
+   foreclosed by premature naming). The `docs/VWF.md` pointer stays in
+   header comments as the PROVENANCE of the analysis -- that's fine,
+   it's not the symbol name.
+2. **C vs C++ shape must follow the REAL binary structure, not a
+   uniform style preference.** Documented as a general rule (see
+   `DECOMP_RULES.md`): a function with a real `this`/vtable in the
+   disassembly (like `func_08004C54`) should be ported as a genuine
+   class method on the real class in `include/*.hh`, not hand-rolled
+   as a free C function faking a vtable to hit the same bytes. A
+   function that's genuinely procedural in the original (no `this`, no
+   vtable -- `DrawString`/`DrawStringRecolor`, plain `(dims, dest, x, y,
+   s)` arguments) stays plain C -- inventing OO structure that isn't
+   there would be guessing, which the project's non-negotiable
+   discipline already forbids. Neither `func_080E09B0` nor `DrawString`/
+   `DrawStringRecolor` needed changes under this rule (already correctly
+   shaped: `func_080E09B0` genuinely has no vtable of its own to stamp,
+   so it's correctly a plain forwarding free function despite operating
+   on a `this`-like `self` pointer it doesn't own the layout of;
+   `DrawString`/`DrawStringRecolor` are genuinely procedural).
+
+Both rules are now written up in `DECOMP_RULES.md`'s "Conventions de
+nommage" section for future rounds.
+
+### Repo state at end of round 5
+
+- Three new commits: `e4638b2` (`func_080E09B0` match), `916d609`
+  (naming-convention rename), plus this session-notes/rules update.
+  `make compare` verified bit-exact via full clean rebuild after each
+  code-affecting commit.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. No parallel-session activity observed this round
+  (`git status`/`git log` matched exactly what this round produced).
+- Priority list for whoever picks this up next: (1) characterize the
+  child-object field layout for the ~23 "richer" destructors in
+  `func_08004C54`'s family (Ghidra on 2-3 examples in the patch repo,
+  offset +4 of the presumed child object) before attempting them --
+  once characterized, port as real C++ methods per this round's C-vs-C++
+  rule, not hand-rolled vtable pokes; (2) everything still open from
+  rounds 1-3's priority lists (the function documented as
+  `franglais_transition_ctl_query` in the patch repo, `0x08050DF0` --
+  give it a vanilla-neutral name when ported; `Unpack` `0x080D102C`; the
+  script dispatch table `0x0803F900`; `DrawGlyphAt`/`DrawGlyphAt`-recolor,
+  still the "register pressure" difficulty class, not recommended
+  without a bigger dedicated budget; `docs/DIALOGUE.md`,
+  `docs/BACKGROUNDS_INVENTORY.md`, `docs/CLAIRE_SPRITE_PORTABILITY.md`,
+  `docs/MFOMT_ADDITIONS.md`).

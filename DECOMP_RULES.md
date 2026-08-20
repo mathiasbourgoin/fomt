@@ -204,23 +204,53 @@ converger plus vite pendant la phase de tâtonnement.
   directement, qui casserait tous les `bl func_ADDR` encore présents
   dans les fichiers `asm/*.s` non portés (potentiellement des dizaines
   de sites d'appel par fonction, cf. `func_0804E8F0`/`func_0804E958`).
-  La vraie définition (le corps) vit sous le nom sémantique documenté
-  dans `docs/*.md` du dépôt patch (`franglais_vwf_draw_string_plain`,
-  etc.) ; `func_ADDR` devient un simple alias de compatibilité, sans
-  corps, sans coût de code généré (`ALIAS()` ne fait qu'ajouter une
-  entrée dans la table des symboles, vérifié `make compare`
-  toujours bit-exact après renommage).
+  La vraie définition (le corps) vit sous le nom sémantique choisi (cf.
+  règle "point de vue vanilla" ci-dessous) ; `func_ADDR` devient un
+  simple alias de compatibilité, sans corps, sans coût de code généré
+  (`ALIAS()` ne fait qu'ajouter une entrée dans la table des symboles,
+  vérifié `make compare` toujours bit-exact après renommage).
+- **Point de vue vanilla, jamais de nom/jargon lié à notre projet de
+  patch dans un symbole** (correction round 5, appliquée à
+  `franglais_vwf_draw_string_plain`/`_recolor` -> `DrawString`/
+  `DrawStringRecolor`) : ce dépôt (`fomt-decomp`) documente le jeu
+  ORIGINAL, pas notre patch `franglais`. Un nom de symbole doit décrire
+  le rôle générique du moteur vanilla, dans le style déjà établi par
+  `StanHash/fomt` lui-même (CamelCase C++, ex. `AScene::~AScene()`,
+  `DrawGlyphAt`) -- jamais `franglais_...`, jamais notre vocabulaire
+  interne au patch (`vwf` par exemple est NOTRE terme pour désigner ce
+  système, pas forcément celui du jeu ou du projet `fomt`). Raison :
+  garder ouverte l'option de proposer un jour ces matchs en amont vers
+  `StanHash/fomt` (pas décidé, mais l'option ne doit pas être fermée par
+  un choix de nom prématuré). Le commentaire d'en-tête peut toujours
+  pointer vers `docs/VWF.md` etc. du dépôt patch comme SOURCE de
+  l'analyse -- c'est la provenance de la compréhension, pas le nom du
+  symbole lui-même, qui doit rester neutre.
+- **Choix C libre vs méthode C++ = refléter la structure RÉELLE du
+  binaire, jamais une préférence de style uniforme** (règle round 5) :
+  si le désassemblage montre un vrai objet (`this` en r0, vtable,
+  héritage -- comme `func_08004C54`/`AScene`), porter la fonction comme
+  MÉTHODE de la classe réelle dans les `.hh` du dépôt (`include/*.hh`),
+  pas comme fonction C libre qui bricole une vtable à la main pour
+  produire les mêmes octets -- ça suit la convention déjà posée par
+  `fomt` et généralise souvent gratuitement à des fonctions sœurs
+  (ex. la famille de ~24 destructeurs apparentés à `func_08004C54`). Si
+  la fonction est du C procédural pur dans l'original (pas de `this`,
+  pas de vtable -- utilitaires bas niveau type décompression/rendu,
+  comme `DrawString`/`DrawStringRecolor` qui prennent `dims, dest, x, y,
+  s` en arguments plats), rester en C simple -- inventer une structure
+  OO qui n'existe pas dans le binaire serait deviner, contraire à la
+  discipline du dépôt (cf. règle "ne jamais deviner un type/prototype
+  sans vérifier le corps compilé" plus haut).
 - **Quand une fonction fraîchement portée appelle une fonction DÉJÀ
   portée (déjà matchée dans ce dépôt), référencer son nom sémantique,
   pas son alias `func_ADDR`** -- ça rend le corps du call-site
-  auto-documenté (on voit "j'appelle `franglais_vwf_draw_string_plain`"
-  au lieu de "j'appelle `func_0804E8F0`, va relire le commentaire
-  d'en-tête pour savoir ce que c'est"). Ne s'applique évidemment qu'aux
-  fonctions déjà portées avec un corps réel dans ce dépôt -- tant que le
-  callé est encore en asm (cas de `func_0804E4AC`/`func_0804E5AC`,
-  `DrawGlyphAt`, appelés par les deux `DrawString`), il n'y a pas de nom
-  sémantique "réel" à référencer, `func_ADDR` reste le seul choix
-  honnête.
+  auto-documenté (on voit "j'appelle `DrawString`" au lieu de "j'appelle
+  `func_0804E8F0`, va relire le commentaire d'en-tête pour savoir ce que
+  c'est"). Ne s'applique évidemment qu'aux fonctions déjà portées avec
+  un corps réel dans ce dépôt -- tant que le callé est encore en asm
+  (cas de `func_0804E4AC`/`func_0804E5AC`, `DrawGlyphAt`, appelés par
+  les deux `DrawString`), il n'y a pas de nom sémantique "réel" à
+  référencer, `func_ADDR` reste le seul choix honnête.
 - **Variables locales** : nommer selon la sémantique comprise dès qu'elle
   est claire (`right_edge_x`, `glyph_kind` plutôt que `right`, `kind` --
   ou pire, les noms bruts `uVar4`/`param_1` que Ghidra produirait). Pas
@@ -242,23 +272,57 @@ converger plus vite pendant la phase de tâtonnement.
 | fonction | rôle | round | commit |
 |---|---|---|---|
 | `func_0805E6CC` | `DefinedSprite`, constructeur d'archive | 1 | `648d15f` |
-| `franglais_vwf_draw_string_plain` (`func_0804E8F0`) | boucle DrawString, police normale | 3 | `ecef66e` |
-| `franglais_vwf_draw_string_recolor` (`func_0804E958`) | boucle DrawString, recolorée | 3 | `3b2a40d` |
+| `DrawString` (`func_0804E8F0`) | boucle DrawString, police normale | 3, renommé 5 | `ecef66e`, `48ebfa3` + round 5 |
+| `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
+| `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
 
-## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4 pour le détail complet)
+## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
-1. `func_080E09B0` (`asm/code_linkonce.s`, `0x080E09B0`) -- match déjà
-   confirmé via quicktest, juste la mécanique de découpage
-   `.text.code_ADDR` (linkonce/COMDAT) à travailler avant de committer.
+Contrairement à un fichier `asm/*.s` monolithique en `.text` implicite,
+`asm/code_linkonce.s` a QUELQUES (4, pas une par fonction) `.section
+".text.code_ADDR"` explicites regroupant chacune plusieurs fonctions --
+le découpage suit la MÊME méthode générale que le fichier monolithique
+(cf. section dédiée plus haut), sauf sur un piège spécifique :
+
+**Un wildcard `*(.gnu.linkonce.t.NOM_MANGLE)` dans `fomt.lds`, placé
+juste après une entrée `asm/code_linkonce.o(.text.code_ADDR)`, N'EST
+PAS FORCÉMENT INERTE.** Round 5 (`func_080E09B0`) : ce wildcard matchait
+en réalité une vraie instanciation de template C++ de ~60 octets,
+compilée depuis un fichier `.cc` DÉJÀ porté ailleurs dans le dépôt
+(`src/script_engine.cc` ici), et occupant un vrai gap d'adresses juste
+AVANT la section `.text.code_ADDR` suivante (pas après celle qu'on
+découpe). Symptôme si on se trompe d'ordre : `make compare` échoue avec
+UN GROS bloc de diffs contigu (pas un near-miss de quelques octets) qui
+démarre PILE à l'adresse de la fonction découpée et s'arrête pile à la
+frontière de la section suivante -- diagnostic rapide : comparer
+`fomt.map` (adresse réellement assignée à l'objet fraîchement séparé)
+à l'adresse attendue (son nom `code_ADDR`) ; si elles ne correspondent
+pas, c'est un problème d'ORDRE des entrées dans `fomt.lds`, pas un
+problème de contenu du `.s`/`.cc`. **Règle pratique : les nouvelles
+entrées `src/code_ADDR.o(.text)` / `asm/code_ADDR_suivant.o(.text)`
+doivent être insérées immédiatement après l'entrée
+`asm/code_linkonce.o(.text.code_ADDR_section)` d'origine, AVANT tout
+wildcard `*(.gnu.linkonce.t...)` qui suivait déjà cette entrée dans le
+`fomt.lds` d'origine** -- ne jamais supposer qu'un tel wildcard est un
+vestige inerte sans avoir vérifié son adresse assignée dans `fomt.map`
+sur un build propre AVANT de toucher au fichier.
+
+## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
+
+1. ~~`func_080E09B0`~~ -- matché round 5.
 2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
    d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
    enfant à l'offset +4 avant de le caractériser côté dépôt patch**
    (Ghidra sur 2-3 exemples).
-3. Reste ouvert depuis les rounds 1-3 : `franglais_transition_ctl_query`
-   (`0x08050DF0`), `Unpack` (`0x080D102C`, référence Python déjà
-   disponible côté patch repo), table de dispatch script
-   (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
+3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
+   `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
+   NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
+   pointeur de recherche -- si/quand cette fonction est portée ICI,
+   lui donner un nom neutre côté vanilla, pas ce nom-là littéralement,
+   cf. règle "point de vue vanilla" ci-dessus), `Unpack` (`0x080D102C`,
+   référence Python déjà disponible côté patch repo), table de dispatch
+   script (`0x0803F900`), `DrawGlyphAt`/`DrawGlyphAt`-recolor (classe
    "pression de registres", cf. section dédiée ci-dessus -- pas sans
    gros budget), `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
    `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
