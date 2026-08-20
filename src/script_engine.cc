@@ -605,10 +605,42 @@ int AScriptEngine::NextInstruction()
     return 0;
 }
 
-char const * AScriptEngine::GetString(u32 id) const
+NAKED char const * AScriptEngine::GetString(u32 id) const
 {
-    typedef char const * (*Fn)(AScriptEngine const *, u32);
-    return ((Fn)(FRANGLAIS_franglais_get_string | 1u))(this, id);
+    // Size-preserving trampoline. The vanilla body (bounds check against
+    // string_count, table lookup into string_pool/string_offset_table,
+    // else return "Error" -- see the pre-hook source at commit cb06198^)
+    // compiles to exactly 0x24 (36) bytes. A plain C++ tail call to the
+    // franglais payload (as this function used to read) compiles to only
+    // 0x10 (16) bytes, which shifted every function placed after this one
+    // in the ROM by -20 bytes. Since asm/vtables.s and other tables in
+    // this ROM reference downstream functions by raw absolute address
+    // (not by symbol), any such shift lands those pointers mid-function
+    // instead of at a prologue -- the same class of boot-crash bug fixed
+    // for func_0800912C's trampoline (see DECOMP_RULES.md). The explicit
+    // nop padding below brings this trampoline back to the exact vanilla
+    // size; `this` (r0) and `id` (r1) are already in the registers the
+    // payload function expects, so this is a plain tail call.
+    asm_unified("\
+        ldr r3, .Lfranglais_get_string\n\
+        bx r3\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        nop\n\
+        .align 2, 0\n\
+    .Lfranglais_get_string: .4byte 0x08800001\n\
+    ");
 }
 
 ScriptEngine::ScriptEngine(void * arg_r1)
