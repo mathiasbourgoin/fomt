@@ -2220,3 +2220,156 @@ through `+0xFDF` of `object_base+4` hold 13 `DefinedSprite`-typed
 sub-objects (per-costume/pose sprite archives), which is the kind of
 field a sprite-swap patch (Claire's alternate archives) would plausibly
 need to enumerate.
+||||||| 43c9148
+
+## Round 6 (this session, worktree `w7`/branch `parallel-7`) -- child-object
+field layout for the "~23 richer destructors" family finally characterized
+from raw disassembly, four matches landed, no guessing involved
+
+### Scope and isolation
+
+Assigned target: the second half (by address, i.e. the upper addresses) of
+the `func_08004C54`-family "richer destructors" -- worktree `w3`, running
+concurrently on the same overall family, was assigned the first half (lower
+addresses) to avoid duplicate work. This worktree never touches `w3`'s
+files (separate git worktree checkout), and `git log`/`git status` showed
+no concurrent-session artifacts in `w7` itself at any point this round.
+
+### Toolchain bring-up in this fresh worktree
+
+`tools/agbcc/{bin,lib,include}` is gitignored (as documented in round 1's
+notes), so a fresh worktree checkout starts with none of it built. Found a
+complete, already-built copy sitting in a stale `mktemp -d` leftover at
+`/tmp/tmp.Cv88fZh1RY` (a `notyourav/agbcc` `cp`-branch clone with `agbcc`,
+`old_agbcc`, `agbcp`, `libgcc.a`, `libc.a`, and headers already built --
+almost certainly a round-1-style `install_agbcp.sh` run from some other
+worktree/session that didn't reach its `rm -fr $temp` cleanup step). Copied
+those binaries/libs/headers straight into this worktree's
+`tools/agbcc/{bin,lib,include}` (matching `install.sh`'s expected layout)
+instead of re-running the slow from-scratch host-toolchain-workaround build
+documented in round 1 -- verified working immediately via a full clean
+`make compare` (bit-exact, ~4.8s) before touching any code. `baserom.gba`
+symlinked from `harvest-moon-franglais/baserom.gba` as in round 1.
+
+### The blocking question from round 4-5 resolved: child field layout,
+read directly off disassembly, not guessed
+
+Round 4's note said, explicitly: **"do not guess-port this family without
+first characterizing the child-object field's real type/offset."** This
+round did exactly that, empirically, via the fast quicktest harness
+(`arm-none-eabi-cpp | agbcp -O2 ... | as`, ~1s/iteration, no full link) --
+no Ghidra needed, the answer was fully recoverable from this repo's own
+disassembly plus one extra fact already sitting in `asm/vtables.s`:
+
+1. **Two distinct child-field shapes, confirmed on the first candidate
+   (`func_0809A518`, which conveniently has BOTH in one function)**:
+   - `self->unk_08`: a plain polymorphic pointer -- `ldr r0,[r1]` reads
+     the child's vtable pointer from the child's own offset +0.
+   - `self->unk_04`: a multiple-inheritance-shaped pointer -- `ldr
+     r0,[r1,#4]` reads the child's vtable pointer from the child's offset
+     +4, meaning the child object has one non-virtual 4-byte member
+     (unidentified, kept as `unk_00`) ahead of its own vtable pointer.
+     This is NOT a new/exotic pattern for this repo: `include/entity.hh`
+     already has `AEntity` with its vtable placed at `+0x14`, after all
+     its data members, for exactly this reason (a non-first polymorphic
+     base in a multiple-inheritance layout). Modeled locally in each
+     `.cc` as a small 2-struct MI pair (`ChildBase1` + `ChildOffset4 :
+     ChildBase1`) rather than inventing a shared named class, since
+     neither child's full identity/other members are characterized yet.
+2. **The missing piece that made offset math actually line up**: this
+   ABI (`-fvtable-thunks`) reserves **two always-null prefix words**
+   before a class's first declared virtual method's slot. Confirmed by
+   reading the raw bytes of `vtable_unk_080E5A88` (`func_08004C54`'s own
+   vtable, already bit-exact-verified in round 4) directly out of
+   `baserom.gba`: word0/word1 are `0`, word2 (offset +8) is
+   `func_08004C54` itself (the dtor), word3 (offset +12) is
+   `func_08004C68` (`Run()`). This is why a synthetic child class
+   declaring **only one virtual method** (`Unregister(int category)`, no
+   destructor) lands that single method at vtable offset **+8**, matching
+   the disassembly's `ldr r2,[r0,#8]` in every site tried this round --
+   first-attempt over-modeling (giving the child classes a virtual
+   destructor + placeholder method, guessing 3 declared virtuals to reach
+   offset+8 the "obvious" way) produced offset **+16** instead and was the
+   one wrong guess corrected before any commit.
+3. **The virtual call itself always passes the ORIGINAL (non-adjusted)
+   child pointer as `this`, not the vtable-bearing sub-object pointer** --
+   confirmed by disassembly (`adds r0, r1, #0` after `ldr r0,[r1,#4]` was
+   only used to compute the vtable read, then overwritten), and
+   reproduced for free simply by calling `self->unk_04->Unregister(3)` in
+   real C++ and letting the compiler's own MI thunk logic generate the
+   right `this`.
+
+None of this required inventing semantics for the child objects themselves
+(role, other fields) -- only the byte-exact shape needed to reproduce
+`_call_via_r2` codegen, consistent with the repo's "don't guess a
+prototype, read the compiled `.o`" discipline (round 4's rule, reused here
+against live quicktest output instead of a compiled `.o`).
+
+### Four matches, all bit-exact on the first quicktest iteration once the
+layout above was nailed down
+
+- **`func_0809A518`** (commit `95a55f3`) -- the two-child case (`unk_04`
+  MI-shaped, `unk_08` plain), the one that revealed the layout above.
+  Split out of `asm/code_0805E760.s` (tail renamed
+  `asm/code_0809A558.s`).
+- **`func_080C7ED0`** (commit `e902a6c`) -- single MI-shaped child at
+  `unk_04` only, otherwise identical shape. Split out of
+  `asm/code_809E804.s` (tail renamed `asm/code_080C7F00.s`).
+- **`func_080BC8C0`** (commit `3f33b7d`) -- same single-child shape,
+  different own vtable constant (`vtable_unk_080E8528`). Split out of the
+  (already-once-split) `asm/code_809E804.s` (middle section renamed
+  `asm/code_080BC8F0.s`, inserted ahead of the `func_080C7ED0` split in
+  `fomt.lds`).
+- **`func_080B3C0C`** (commit `e5a8f43`) -- same shape again
+  (`vtable_unk_080E850C`). Split out of `asm/code_809E804.s` a third time
+  (middle section renamed `asm/code_080B3C3C.s`, inserted ahead of the
+  `func_080BC8C0` split).
+
+All four verified via full clean rebuilds
+(`rm -rf build fomt.gba fomt.elf fomt.map && make compare`, plus a direct
+`sha1sum -c fomt.sha1` after each) before their respective commits --
+`git status --short` reviewed in full (not just the files each attempt
+intended to touch) before every `git add -A`/commit, per round 3's
+pathspec-`-A` lesson.
+
+### Candidates picked and why (avoiding `w3`'s territory)
+
+Full candidate list built by grepping all `bl func_080007EC` sites across
+`asm/*.s` (46 total, mirrors round 4's "47 call sites" count minus the one
+already matched as `func_080E09B0` in round 5) and classifying by the
+`push {r4,r5,lr}; adds r4,r0; adds r5,r1; ...; ldr r1,[r4,#4]` "richer"
+signature vs. the plain forwarding shape. Picked from the highest-address
+end of that list, inside `asm/code_809E804.s`/`asm/code_0805E760.s`
+(monolithic files, mechanically simple single-function-at-a-time splits) --
+deliberately avoided `asm/code_linkonce.s`'s COMDAT/`.text.code_ADDR`
+entries at the very top of the address range (`func_080DC404`,
+`func_080E0908`, `func_080E41B0`/`func_080E41E8`/`func_080E4210`) this
+round, both to stay clear of any risk of overlapping `w3`'s slice and
+because round 5 already flagged that file's `fomt.lds` wildcard-ordering
+trap as something to handle carefully, one candidate at a time, not
+rushed alongside four other splits in the same session.
+
+### What's left in this family
+
+Per the classification above, still-unattempted "richer"-shaped sites in
+the upper half of the address range: the three `code_linkonce.s` entries
+just mentioned, plus (need re-verification against the current, smaller
+`asm/code_809E804.s`/`asm/code_0805E760.s` after this round's three splits)
+any remaining `func_08090E84`/`func_080925C4`/`func_080931E0`/
+`func_08093A88` (in `code_0805E760.s`, between `func_0808ED08` and the
+now-matched `func_0809A518`) and `func_080A3BF4`/`func_080A3C40`/
+`func_080A3C8C` (in `code_809E804.s`, right after its start) that weren't
+individually checked against the "richer" signature this round -- the
+grep-based classification only confirmed the 4 actually attempted, not the
+full remaining set. A future round should re-run the classification pass
+first, now that the layout puzzle is solved and each remaining candidate
+should be a same-day match rather than exploratory work.
+
+### Repo state at end of round 6
+
+- Four new commits: `95a55f3`, `e902a6c`, `3f33b7d`, `e5a8f43`. `make
+  compare` verified bit-exact via full clean rebuild after each.
+- `origin` push URL untouched (still `DISABLED-local-only-see-CLAUDE-md`),
+  nothing pushed, no PR, no network action against origin, no `git push`
+  attempted or considered.
+- Working tree clean at the end of the round.

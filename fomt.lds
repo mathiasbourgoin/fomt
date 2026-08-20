@@ -124,6 +124,8 @@ SECTIONS
         asm/code_0804E9C8.o(.text);
         src/code_0805E6CC.o(.text);
         asm/code_0805E760.o(.text);
+        src/code_0809A518.o(.text);
+        asm/code_0809A558.o(.text);
 
         src/actor.o(.text);
         src/animal.o(.text);
@@ -142,6 +144,12 @@ SECTIONS
         src/harvest_sprite.o(.text);
 
         asm/code_809E804.o(.text);
+        src/code_080B3C0C.o(.text);
+        asm/code_080B3C3C.o(.text);
+        src/code_080BC8C0.o(.text);
+        asm/code_080BC8F0.o(.text);
+        src/code_080C7ED0.o(.text);
+        asm/code_080C7F00.o(.text);
 
         src/m4a_1.o(.text);
         src/m4a.o(.text);

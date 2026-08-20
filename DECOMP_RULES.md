@@ -422,7 +422,30 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_08010158` | destructeur dérivé, classe construite par `func_080D3EF4` (0x554 octets, membre `ScriptEngine` à +8) -- variante SIMPLE (appels directs, pas de dispatch virtuel) de la famille "riche" | 6 | `a85f4b1` |
 ||||||| 43c9148
 | `func_0800371C`, `func_08004BDC`, `func_080059D0`, `func_080070A4` | famille "riche" : destructeur dérivé + teardown conditionnel d'un champ enfant à `self+4` | 6 | `ef58287` |
+||||||| 43c9148
+| `func_0809A518` | destructeur "riche" de la famille des ~23, 2 enfants (offset+4 MI, offset+8 plain) | 6 (w7) | `95a55f3` |
+| `func_080C7ED0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e902a6c` |
+| `func_080BC8C0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `3f33b7d` |
+| `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
 
+## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
+le premier slot déclaré
+
+Confirmé round 6 en lisant les octets bruts de `vtable_unk_080E5A88`
+(`func_08004C54`, déjà vérifiée bit-exact round 4) directement dans
+`baserom.gba` : mot0/mot1 = `0`, mot2 (offset +8) = le destructeur, mot3
+(offset +12) = la méthode virtuelle suivante déclarée. **Toute classe C++
+écrite dans ce dépôt pour matcher un vtable existant doit donc compter
+le premier slot utile à l'offset +8, pas +0** -- une classe locale avec UNE
+SEULE méthode virtuelle déclarée (pas de destructeur) place cette méthode
+à l'offset +8 automatiquement, ce qui matche directement le pattern
+`ldr rX, [rY, #8]` vu dans la famille des "23 destructeurs riches"
+(`func_08004C54`) sans qu'il faille ajouter un destructeur ou une méthode
+placeholder pour "pousser" le slot -- la première tentative round 6 a fait
+exactement cette erreur (ajouté un destructeur virtuel + une méthode
+placeholder en pensant "reconstituer" 3 slots utiles) et a produit
+l'offset +16 au lieu de +8, corrigé en ne déclarant QUE la méthode
+réellement appelée.
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
 Contrairement à un fichier `asm/*.s` monolithique en `.text` implicite,
@@ -545,6 +568,20 @@ suit cette convention plutôt que `r0` direct).
    NE PAS oublier une fonction non-portée intercalée entre deux
    découpages dans le même fichier, cf. `func_080070D4` oubliée puis
    retrouvée via `undefined reference` au link).
+||||||| 43c9148
+2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
+   d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
+   enfant à l'offset +4 avant de le caractériser côté dépôt patch**
+   (Ghidra sur 2-3 exemples).
+2. ~~La famille de ~23 destructeurs "plus riches"~~ -- layout du/des
+   champ(s) enfant CARACTÉRISÉ round 6 (`w7`), directement depuis le
+   désassemblage (pas besoin de Ghidra en fait) : voir la section
+   "Layout des vtables sous `-fvtable-thunks`" ci-dessus. 4 exemples
+   matchés round 6 (`func_0809A518`, `func_080C7ED0`, `func_080BC8C0`,
+   `func_080B3C0C`). Reste ouvert : les ~19 autres sites de la famille
+   (le round 6 n'a traité que la moitié haute des adresses,
+   `code_linkonce.s` compris, pas encore attaqué -- cf.
+   `SESSION_NOTES.md` round 6 "What's left in this family").
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
 ||||||| 43c9148
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
