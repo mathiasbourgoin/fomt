@@ -16290,29 +16290,3 @@ func_0807D218: @ 0x0807D218
 	bx r0
 	.align 2, 0
 .L0807DD34: .4byte vtable_unk_080E5A28
-
-	thumb_func_start func_0807DD38
-func_0807DD38: @ 0x0807DD38
-	push {r4, r5, r6, lr}
-	adds r4, r0, #0
-	adds r6, r1, #0
-	adds r5, r2, #0
-	ldr r0, .L0807DD64 @ =vtable_unk_080E7C30
-	str r0, [r4]
-	movs r0, #0xe2
-	lsls r0, r0, #3
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_0807D194
-	str r0, [r4, #4]
-	ldr r1, [r6]
-	movs r0, #0
-	str r0, [r6]
-	str r1, [r4, #8]
-	adds r0, r4, #0
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L0807DD64: .4byte vtable_unk_080E7C30
-

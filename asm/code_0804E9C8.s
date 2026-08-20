@@ -6532,29 +6532,3 @@ func_08051D70: @ 0x08051D70
 	pop {r0}
 	bx r0
 	.align 2, 0
-
-	thumb_func_start func_0805218C
-func_0805218C: @ 0x0805218C
-	push {r4, r5, r6, lr}
-	adds r4, r0, #0
-	adds r6, r1, #0
-	adds r5, r2, #0
-	ldr r0, .L080521B8 @ =vtable_unk_080E7934
-	str r0, [r4]
-	movs r0, #0x8c
-	lsls r0, r0, #4
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_0805143C
-	str r0, [r4, #4]
-	ldr r1, [r6]
-	movs r0, #0
-	str r0, [r6]
-	str r1, [r4, #8]
-	adds r0, r4, #0
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L080521B8: .4byte vtable_unk_080E7934
-
