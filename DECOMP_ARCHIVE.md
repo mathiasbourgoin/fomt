@@ -517,3 +517,14 @@ jamais utilisée dans ce dépôt).
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
+- **Famille "entity factory" `func_080324BC`, 3 sites restants** (round
+  worktree w40 a matché 38 des 41 sites connus, cf. `SESSION_NOTES.md`) :
+  `asm/code_080E41E8.s`, `asm/code_entities_080320DC.s` (2 sites),
+  `asm/code_entities.s` (1 site) contiennent chacun un appel `bl
+  func_080324BC` avec exactement le même shape (alloc 0x8c + store
+  f0/f4/f8/fc sur la pile + `func_080324BC(obj, ctx, kind, subkind, f0,
+  f4, f8, (bool)fc)`, callee traité en boîte noire). Candidat direct pour
+  un prochain round : même méthode, même prototype, piège `bool`/`char`
+  déjà documenté (`DECOMP_RULES.md` #13). `func_080324BC` lui-même reste
+  non porté (`r8`/`sb` utilisés tout du long -- signal "pression de
+  registres", pas attaqué).
