@@ -139,7 +139,6 @@ SECTIONS
 
         asm/code_0803A8A4.o(.text);
         src/script_engine.o(.text);
-        . = . + 0x108;
         asm/code_0803EE94.o(.text);
         src/code_0804E4AC.o(.text);
         asm/code_0804E5AC.o(.text);
@@ -308,14 +307,12 @@ SECTIONS
         . = ALIGN(4); asm/data/data_080E8610.o(.rodata);
         src/shipping_bin.o(.rodata);
         src/record_player.o(.rodata);
-        . = . + 0x28;
         . = ALIGN(4); src/item.o(.rodata);
         /* . = ALIGN(4); src/code_0800E2E4.o(.rodata); */
         . = ALIGN(4); asm/data/data_080F0348.o(.rodata);
         . = ALIGN(4); src/data_schedules.o(.rodata);
         . = ALIGN(4); asm/data/data_080F1A80.o(.rodata);
         . = ALIGN(4); src/script_engine.o(.rodata);
-        . = . + 0x08;
         . = ALIGN(4); asm/data/data_080F9EB8.o(.rodata);
         . = ALIGN(4); src/sound_data.o(.rodata.*);
         . = ALIGN(4); asm/data/data_0813B288.o(.rodata);
@@ -334,11 +331,6 @@ SECTIONS
     {
         LONG(0);
         . = 0x08800000 - 0x0875C240;
-    } > ROM = 0xFF
-
-    .franglais_payload 0x08800000 : ALIGN(4)
-    {
-        src/franglais_payload.o(.franglais_payload);
     } > ROM = 0xFF
 
     /* DWARF 2 sections */

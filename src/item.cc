@@ -1,7 +1,5 @@
 #include "item.hh"
 
-#include "franglais_poc.hh"
-
 #include <algorithm>
 
 struct ToolInfo
@@ -78,8 +76,10 @@ int Tool::GetId() const
 
 char const * Tool::GetName() const
 {
-    typedef char const * (*Fn)(Tool const *);
-    return ((Fn)(FRANGLAIS_franglais_tool_name | 1u))(this);
+    if (IsValidToolId(id))
+        return gToolInfo[id].name;
+
+    return "Broken Tool";
 }
 
 u16 Tool::GetIconId() const
@@ -101,8 +101,10 @@ static inline char const * GetToolDescById(u32 id)
 
 char const * Tool::GetDesc() const
 {
-    typedef char const * (*Fn)(Tool const *);
-    return ((Fn)(FRANGLAIS_franglais_tool_desc | 1u))(this);
+    if (IsValidToolId(id))
+        return GetToolDescById(id);
+
+    return "No Explanation";
 }
 
 ToolStack::ToolStack()
@@ -179,8 +181,10 @@ int Food::GetId() const
 
 char const * Food::GetName() const
 {
-    typedef char const * (*Fn)(Food const *);
-    return ((Fn)(FRANGLAIS_franglais_food_name | 1u))(this);
+    if (IsValidFoodId(id))
+        return gFoodInfo[id].name;
+
+    return "Broken Food";
 }
 
 u16 Food::GetIconId() const
@@ -242,8 +246,10 @@ static inline char const * GetFoodDescById(u32 id)
 
 char const * Food::GetDesc() const
 {
-    typedef char const * (*Fn)(Food const *);
-    return ((Fn)(FRANGLAIS_franglais_food_desc | 1u))(this);
+    if (IsValidFoodId(id))
+        return GetFoodDescById(id);
+
+    return "No Explanation";
 }
 
 void Food::AddBonuses(i8 stamina_amount, i8 fatigue_amount)
@@ -344,8 +350,10 @@ int Article::GetId() const
 
 char const * Article::GetName() const
 {
-    typedef char const * (*Fn)(Article const *);
-    return ((Fn)(FRANGLAIS_franglais_article_name | 1u))(this);
+    if (IsValidArticleId(id))
+        return gArticleInfo[id].name;
+
+    return "Broken Article";
 }
 
 u16 Article::GetIconId() const
@@ -386,8 +394,10 @@ static inline char const * GetArticleDescById(u32 id)
 
 char const * Article::GetDesc() const
 {
-    typedef char const * (*Fn)(Article const *);
-    return ((Fn)(FRANGLAIS_franglais_article_desc | 1u))(this);
+    if (IsValidArticleId(id))
+        return GetArticleDescById(id);
+
+    return "No Explanation";
 }
 
 ArticleStack::ArticleStack()

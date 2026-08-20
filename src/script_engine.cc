@@ -1,7 +1,5 @@
 #include "script_engine.hh"
 
-#include "franglais_poc.hh"
-
 #include <string.h> // memset, memcpy
 #include <algorithm>
 
@@ -607,8 +605,11 @@ int AScriptEngine::NextInstruction()
 
 char const * AScriptEngine::GetString(u32 id) const
 {
-    typedef char const * (*Fn)(AScriptEngine const *, u32);
-    return ((Fn)(FRANGLAIS_franglais_get_string | 1u))(this, id);
+    // BUG: this should be strict compare
+    if (id <= string_count)
+        return string_pool + string_offset_table[id];
+
+    return "Error";
 }
 
 ScriptEngine::ScriptEngine(void * arg_r1)

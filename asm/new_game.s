@@ -773,7 +773,7 @@ func_08003C80: @ 0x08003C80
 .L08003DDC: .4byte 0x00002D1C
 .L08003DE0: .4byte 0x00002D14
 .L08003DE4: .4byte 0x00002D20
-.L08003DE8: .4byte 0x02001F18
+.L08003DE8: .4byte gUnk_080E8704
 .L08003DEC: .4byte 0x00002D28
 
     thumb_func_start func_08003DF0
@@ -2497,3 +2497,4 @@ func_08004B94: @ 0x08004B94
     bx r1
     .align 2, 0
 .L08004BD8: .4byte vtable_unk_080E5A68
+
