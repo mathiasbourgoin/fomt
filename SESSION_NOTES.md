@@ -8037,3 +8037,147 @@ depuis le checkout principal. Rien touché en dehors de ce worktree.
   spécifique.
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés en fin de round.
+
+## Round (worktree `w55`, branche `parallel-55`) -- conversion des 3 paires `Tool`/`Food`/`Article::GetName`/`GetDesc` en trampolines à taille fixe
+
+### Mission
+
+Les 6 hooks franglais de `src/item.cc` (`Tool::GetName`/`GetDesc`,
+`Food::GetName`/`GetDesc`, `Article::GetName`/`GetDesc`) étaient depuis
+`cb06198` des remplacements de CORPS ENTIER à taille libre (un simple
+`return ((Fn)(FRANGLAIS_xxx | 1u))(this);` compilé par agbcp à une taille
+arbitraire), en violation de la règle standing (`DECOMP_RULES.md`,
+"Discipline non négociable") qui exige un trampoline à taille FIXE,
+identique au corps vanilla remplacé. Ces 6 fonctions ne sont PAS
+virtuelles (vérifié : noms mangle CFront `GetName__C4Tool` etc., aucun
+`virtual` dans `include/item.hh`, appelées par `bl` direct dans le
+désassemblage vanilla) -- pas de vtable à préserver ici, contrairement à
+ce que le contexte de départ laissait supposer.
+
+### Méthode
+
+1. **Tailles/adresses vanilla exactes** obtenues en buildant le commit
+   `b8471ae` (dernier état de `item.cc` avant le hook `cb06198`, encore
+   vanilla-matché) dans un worktree scratch dédié
+   (`/tmp/w55_vanilla_check`) -- `make compare` y passe bit-exact
+   (`sha1sum -c fomt.sha1` -> Réussi), donc les adresses `nm` de ce build
+   SONT les adresses vanilla. Sizes mesurées (`next_addr - this_addr`) :
+   - `GetName__C4Tool` @ `0800db34`, 0x2C (44)
+   - `GetDesc__C4Tool` @ `0800db8c`, 0x3C (60)
+   - `GetName__C4Food` @ `0800dcb8`, 0x28 (40)
+   - `GetDesc__C4Food` @ `0800ddd4`, 0x38 (56)
+   - `GetName__C7Article` @ `0800df58`, 0x2C (44)
+   - `GetDesc__C7Article` @ `0800dfd4`, 0x3C (60)
+   Toutes prennent uniquement `this` (r0) -- pas de r1/r2/r3 vivant en
+   entrée, donc r3 est un scratch sûr pour le saut (même convention que
+   `func_0800912C`/les hooks `scene_text`).
+
+2. **Problème structurel avec le worktree** : ni `baserom.gba` ni
+   `tools/agbcc/bin/{agbcc,old_agbcc,agbcp}` (gitignorés, cf. round
+   "toolchain bring-up") n'étaient présents dans CE worktree `w55` --
+   copiés depuis `fomt-decomp` (checkout principal) avant de pouvoir
+   builder quoi que ce soit ici.
+
+3. **item.cc reste un SEUL fichier / une seule entrée `fomt.lds`**
+   (`src/item.o(.text)`, ~15 fonctions dont Tool/Food/Article ctors,
+   GetIconId, ToolStack/FoodStack/ArticleStack, Product, ItemVariant) --
+   pas de découpage en plusieurs fragments `.cc`/`asm` (contrairement à
+   la méthode "Découpage" habituelle pour un fichier `asm/*.s`
+   monolithique) : un vrai trampoline TAILLE FIXE s'est avéré possible
+   **directement en C++ via `asm volatile(...)` inline**, qu'agbcp
+   accepte (`gcc 2.9-arm` supporte le mot-clé `asm` basique). Solution
+   plus légère que scinder `item.cc` en 7 fragments + 6 fichiers asm.
+
+4. **Piège découvert (et root-causé) : `ldr rX, =valeur` (pool implicite)
+   casse dans un GROS fichier .cc, marche dans un petit test isolé.**
+   Un premier essai (`ldr r3, =0x08801975` sans label explicite) compile
+   et assemble sans erreur en isolation (le pool littéral se retrouve
+   comme par chance juste après la fonction, seul contenu du fichier de
+   test), mais échoue à la compilation réelle de `item.cc`
+   (`Error: invalid offset, value too big`, décalages mesurés 0x794,
+   0x744, 0x620, 0x50C -- tous >> la portée ±1020 octets d'un
+   `ldr rD,[pc,#imm]` Thumb) : `as` ne flush le pool implicite qu'en fin
+   de fichier assembleur entier, beaucoup trop loin dès qu'il y a
+   plusieurs fonctions après. **Fix : littéral posé via un label explicite
+   local (`ldr r3, 1f` / ... / `1: .word VALEUR`)**, comme le fait déjà
+   la convention existante (`func_0800912C`, hooks `scene_text` de
+   `asm/code_0804E9C8.s`) -- jamais la pseudo-syntaxe `=valeur` dans un
+   fichier `.cc` de taille réelle.
+
+5. **Calcul du nombre de NOP exact** : agbcp ajoute TOUJOURS un `bx lr`
+   après le bloc `asm volatile` pour une fonction à valeur de retour sans
+   `return` explicite (comportement de compilateur non négociable, pas
+   contournable en C pur) -- budgété dans le compte de NOP plutôt que
+   combattu. Formule vérifiée empiriquement (compilation + mesure réelle,
+   pas déduite à l'aveugle) :
+   `total = (2 ldr + 2 bx + 2*N nop) + pad_align(mot) + 4 (word) + 2 (bx lr agbcp) + pad_align(fin fonction)`,
+   les deux paddings d'alignement dépendant de la parité de `N`. Résolu
+   par script Python essayant chaque `N` jusqu'à matcher la taille cible
+   exacte, PUIS validé par compilation réelle+`objdump` sur chacune des 6
+   fonctions (pas seulement calculé). Valeurs finales (`N` = nombre de
+   `nop`) : Tool::GetName 15, Tool::GetDesc 23, Food::GetName 13,
+   Food::GetDesc 21, Article::GetName 15, Article::GetDesc 23.
+
+6. Macro partagée `FRANGLAIS_TRAMPOLINE(addr_hex_plus_one, nop_count)`
+   ajoutée à `include/franglais_poc.hh` (commentaire anglais, comme
+   l'exige la convention du dépôt) pour éviter de dupliquer 6 fois le
+   même bloc `asm volatile`. `addr_hex_plus_one` est l'adresse payload
+   `FRANGLAIS_franglais_xxx` DÉJÀ additionnée de 1 (bit Thumb), donnée en
+   littéral hex nu (pas de suffixe `u` -- invalide en syntaxe `as`).
+
+### Vérification
+
+- Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map`,
+  `build/franglais_stub.bin` factice 4096 octets de zéros) : lien
+  complet réussi, aucune référence non définie, aucune définition
+  multiple. `sha1sum -c fomt.sha1` échoue (attendu, `cb06198`, payload
+  franglais réellement lié -- pas un signal d'échec pour ce round).
+- **Taille de `build/src/item.o` (`.text`) identique bit à bit
+  AVANT/APRÈS** entre ce worktree et le build vanilla de référence
+  (`b8471ae`) : `0x7b8` octets dans les deux cas.
+- `arm-none-eabi-nm fomt.elf` : les 6 fonctions atterrissent EXACTEMENT à
+  leur adresse vanilla (`0800db34`, `0800db8c`, `0800dcb8`, `0800ddd4`,
+  `0800df58`, `0800dfd4`) -- **et surtout `func_0800E2E4` (première
+  fonction du fichier SUIVANT `item.o` dans `fomt.lds`) atterrit
+  EXACTEMENT à `0800e2e4`**, sa propre adresse vanilla : preuve directe
+  que `item.o` occupe désormais very exactement sa plage d'octets
+  vanilla de bout en bout, donc les 6 trampolines ont chacun la bonne
+  taille (pas seulement en apparence, le décalage cumulé retombe
+  pile à zéro en sortie du fichier).
+- Diff de désassemblage borné à la taille exacte de chacune des 6
+  fonctions (`objdump --start-address=X --stop-address=X+size`) : chaque
+  bloc est `ldr r3, [pc,#N]` / `bx r3` / N `nop` / `.word ADRESSE_PAYLOAD`
+  / `bx lr` (l'épilogue mort agbcp), sans octet en trop ni en moins avant
+  le début de la fonction suivante -- vérifié visuellement fonction par
+  fonction.
+- Résidu de décalage HORS scope confirmé toujours présent ailleurs (pas
+  cassé par ce round, pas réparé non plus, hors mandat) : `func_08010158`
+  atterrit à `0801013c` (-0x1C vs vanilla, imputable au hook
+  `franglais_season_of`/`func_0800E324` juste après `item.o`, explicitement
+  HORS SCOPE de ce round -- traité par un autre agent) ; `func_08050EE4`
+  atterrit à `08050fbc` (+0xD8, imputable à `GetString`/`farmer_stamina`,
+  également hors scope, traités en parallèle sur d'autres worktrees).
+- **Vérification visuelle en jeu (mGBA) NON EFFECTUÉE** : `mgba-qt` est
+  disponible sur la machine, mais le `fomt.gba` de CE dépôt lie un
+  `build/franglais_stub.bin` factice (4096 octets de zéros, requis
+  seulement pour faire passer le LIEN) -- ce n'est pas le vrai payload
+  franglais (les vraies chaînes traduites vivent dans le dépôt séparé
+  `harvest-moon-franglais`), donc lancer ce ROM précis dans l'émulateur
+  ne testerait que du texte garbage/zéro, pas un vrai comportement de
+  patch. Un test visuel significatif nécessiterait d'intégrer ce fix
+  dans le pipeline de build de `harvest-moon-franglais` d'abord -- hors
+  mandat de ce round (mission = fomt-decomp uniquement). Documenté
+  explicitement comme NON vérifié visuellement, conformément à la
+  consigne.
+
+### État du worktree en fin de round
+
+- 2 fichiers modifiés : `include/franglais_poc.hh` (ajout de la macro
+  `FRANGLAIS_TRAMPOLINE`), `src/item.cc` (6 corps remplacés).
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant commit.
+  `baserom.gba` et `tools/agbcc/bin/*` (copiés depuis `fomt-decomp` pour
+  pouvoir builder dans ce worktree) restent gitignorés, jamais ajoutés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Les 6 fonctions ciblées par la mission (`Tool`/`Food`/`Article::GetName`/
+  `GetDesc`) sont maintenant des trampolines à taille fixe -- AUCUNE des
+  6 n'est restée bloquée.
