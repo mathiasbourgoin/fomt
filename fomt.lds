@@ -103,6 +103,8 @@ SECTIONS
         asm/code_0803A8A4.o(.text);
         src/script_engine.o(.text);
         asm/code_0803EE94.o(.text);
+        src/code_0805E6CC.o(.text);
+        asm/code_0805E760.o(.text);
 
         src/actor.o(.text);
         src/animal.o(.text);
