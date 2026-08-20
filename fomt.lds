@@ -75,6 +75,7 @@ SECTIONS
         asm/new_game.o(.text);
         src/code_08004BDC.o(.text);
         asm/code_08004C0C.o(.text);
+        src/code_08004C48.o(.text);
         src/code_08004C54.o(.text);
         asm/code_08004C68.o(.text);
         src/code_0800598C.o(.text);
@@ -93,6 +94,8 @@ SECTIONS
         asm/code_08008AE0.o(.text);
         src/code_08008DB8.o(.text);
         asm/code_08008DE8.o(.text);
+        src/code_080098DC.o(.text);
+        asm/code_08009908.o(.text);
         src/code_080099EC.o(.text);
         src/farm.o(.text);
         src/field.o(.text);
@@ -269,6 +272,10 @@ SECTIONS
         asm/code_linkonce.o(.text.code_080D68C0);
         src/code_080D6D98.o(.text);
         asm/code_080D6DB8.o(.text);
+        src/code_080D79CC.o(.text);
+        asm/code_080D7AAC.o(.text);
+        src/code_080D7AD4.o(.text);
+        asm/code_080D7B04.o(.text);
         *(.gnu.linkonce.t.__as__5SheepRC5Sheep);
         *(.gnu.linkonce.t.__as__3CowRC3Cow);
         *(.gnu.linkonce.t.__as__9LivestockRC9Livestock);
