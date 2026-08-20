@@ -7204,3 +7204,113 @@ pre-allocated" entity-factory sibling`), local à `parallel-46`.
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - Aucun recoupement avec w45 ni avec les cibles en pause (inchangé
   depuis l'entrée précédente).
+
+## Round w49 (worktree `parallel-49`) -- déblocage de la classe "masque par négation", 2 matchs
+
+Consigne : choisir une cible fraîche, éviter le recoupement avec w45/w48
+(`func_0803A798`/`func_0803BF78`) et les cibles fermées (`func_0803BDFC`,
+`func_08083A7C`, `func_08075334`, variante recolor `DrawGlyphAt`).
+
+### Idée neuve testée : bitfield struct réel + `return self` implicite
+
+Choix : reprendre la classe "masque construit par négation" documentée sans
+succès rounds w39/w41/w44 (`func_08050EE4`/`func_080512D8`, ctors de la
+famille `vtable_unk_080E7878/78A8/78C0/78E0`) -- 2 hypothèses déjà réfutées
+(masque `& ~N` sur `u8`/`u32` local, avec ou sans variable intermédiaire),
+1 piste explicitement non tentée notée par w39 ("construire le masque comme
+variable ELLE-MÊME calculée à runtime").
+
+Désassemblage manuel complet de `func_08050EE4` (88 octets) : les 4 blocs
+de bits écrits à `self+0xc` (largeurs 5/10/4/4, via `strb`/`strh`/`str`
+selon la largeur d'accès la plus étroite couvrant chaque champ) collent
+exactement au style déjà utilisé PAR CE DÉPÔT pour documenter des bitfields
+réels (`barn.hh`, `coop.hh`, `bachelorette.hh` : plusieurs `u32 champ : N;`
+consécutifs partageant un mot). Hypothèse testée : le masque par négation
+n'est PAS un artefact d'une expression manuelle `v & ~mask` -- c'est le
+codegen PROPRE d'agbcp pour une vraie AFFECTATION DE BITFIELD STRUCT
+(chaque écriture choisit l'unité d'accès -- octet/demi-mot/mot -- la plus
+étroite qui couvre entièrement le champ visé). Modélisé comme un vrai
+`struct` avec bitfields C, testé au harnais rapide : **taille et
+désassemblage identiques SAUF l'épilogue** (`pop {r0}; bx r0` chez nous vs
+`pop {r1}; bx r1` dans la cible). Résolu par une 2e idée neuve : ce
+constructeur retourne `self` (convention ARM/CFront pour les ctors, déjà
+documentée règle 9/`SmartPtr`) -- une fois `r0` occupé par la valeur de
+retour vivante, agbcp restaure `lr` dans `r1` au lieu de `r0`. Avec
+`return self_;` explicite : **byte-exact au premier essai après correction**.
+
+Même méthode appliquée à `func_080512D8` (60 octets, sibling
+`vtable_unk_080E78E0`) : structure similaire (2 champs `u32` PLEINS +
+1 bitfield 14 bits + 2 bitfields 1 bit partageant le MÊME octet, ce qui
+explique pourquoi un seul `ldrb`/`strb` couvre les 2 micro-champs -- même
+octet, même unité d'accès). Écart résiduel supplémentaire : le dernier
+argument (pile, 5e) est chargé via `add r4,sp,#12; ldrb r5,[r4,#0]` (accès
+octet calculé), pas un `ldr` mot -- typé `bool` (règle 13 déjà connue,
+version LECTURE plutôt qu'écriture) au lieu de `u32` : byte-exact au
+2e essai.
+
+### Vérification (standard `DECOMP_RULES.md`, objet isolé)
+
+1. `arm-none-eabi-readelf -S build/src/code_ADDR.o` : `.text` = `0x68`
+   (`func_08050EE4`, == `0x08050F4C - 0x08050EE4`) et `0x48`
+   (`func_080512D8`, == `0x08051320 - 0x080512D8`) -- tailles exactes.
+2. Diff **octet à octet réel** (`dd` sur `fomt.gba` lié vs `baserom.gba`,
+   même plage d'adresses/tailles) -- identique pour les 2 fonctions.
+   (`objdump` seul aurait signalé un faux écart : formatage différent des
+   pools littéraux entre un binaire lié -- mots 32 bits résolus -- et le
+   désassemblage brut de `baserom.gba` -- pseudo-instructions mal
+   synchronisées -- piège de present affichage, pas de contenu réel;
+   confirmé par la comparaison `dd`/`cmp` directe.)
+3. Rebuild complet (`rm -rf build ... && make compare`) : lien réussi sans
+   référence non définie ni définition multiple, seul `sha1sum` échoue
+   (attendu depuis `cb06198`).
+4. Sweep anti-doublon (`grep -rl -- ".L08050EE4\|.L080512D8" asm/*.s
+   src/*.cc`) : vide.
+
+### Découpage
+
+- `asm/code_08050E98.s` tronqué juste après `func_08050EBC` (le blob
+  `.L08050EE4` en sortait entièrement).
+- Nouveau `asm/code_08050F4C.s` : reste du blob (fonction `func_08050F4C`,
+  18 octets, near-miss "copie explicite élidée" déjà documenté w44 --
+  PAS retenté ce round, laissé en `.byte`) + 2 octets de padding avant
+  `func_08050F60` déjà porté.
+- `asm/code_080512D8.s` : le blob de tête (`.L080512D8`, 72 octets =
+  fonction + pool en entier, RIEN ne restait avant `func_08051320`) a été
+  retiré intégralement ; fichier renommé `asm/code_08051320.s` (règle de
+  découpage #6 -- la fonction suivante devient la nouvelle tête du fichier).
+- `fomt.lds` : 2 nouvelles entrées insérées à chaque emplacement.
+
+### Commit
+
+`decomp: match func_08050EE4/func_080512D8, packed-bitfield ctor family`
+(1 commit, les 2 fonctions partagent exactement la même cause racine et
+ont été vérifiées ensemble).
+
+### Cibles NON tentées ce round, laissées en l'état
+
+- `func_08050F4C` (18o, near-miss "copie explicite élidée", w44) --
+  reste en `.byte` dans le nouveau `asm/code_08050F4C.s`.
+- `func_08050F74` (44o, near-miss registre r4/r5 + `__umodsi3`) -- inchangé.
+- `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o, "pression de
+  registres", jamais tentées) -- candidates pour escalade `fable`,
+  inchangées.
+- `func_08050E98`/`func_08050EBC` (les 2 setters voisins, MÊME champ
+  `self+0x550` mais PAS ce round) : réexaminés avec la nouvelle idée
+  "bitfield struct" -- **ne s'applique PAS directement** : contrairement
+  aux ctors, le masque de ces 2 setters est construit à partir d'un
+  PARAMÈTRE d'appel dynamique (`bics r2,r1` -- `r1` est un masque fourni
+  par l'appelant, pas une largeur de champ fixée à la compilation), donc
+  ce n'est pas une simple affectation de bitfield à largeur constante.
+  Root-cause potentiellement différente, PAS résolu ce round -- laissé
+  en l'état, aucun fichier modifié pour cette paire. À noter dans
+  `DECOMP_ARCHIVE.md` comme sous-cas distinct de la famille pour éviter
+  de re-tenter la même idée dessus sans nuance.
+
+### État du worktree en fin de round
+
+- 1 commit de matchs (2 fonctions), déjà listé ci-dessus.
+- `git status --short` propre après commit, `build/`/`fomt.gba`/
+  `fomt.elf`/`fomt.map` nettoyés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Aucun recoupement avec w45/w48 (cibles `func_0803A798`/`func_0803BF78`
+  jamais touchées ce round).

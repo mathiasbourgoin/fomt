@@ -502,25 +502,44 @@ jamais utilisée dans ce dépôt).
   alors que la cible construit `0xFFFFFFC0` par négation explicite
   (`movs #0x40; rsbs`) et garde la valeur lue vivante dans `r4`
   (`push {r4,lr}`/`pop{r4};pop{r1};bx r1`) -- aucune de nos formulations
-  n'a eu besoin de ce registre. Piste non tentée : sortir le masque dans
-  une variable calculée à part (pas inlinée) pour bloquer le pliage
-  compile-time, cf. `SESSION_NOTES.md` round w39 pour le détail complet
-  des 2 hypothèses déjà fermées.
+  n'a eu besoin de ce registre. **Root-cause partiel round w49** (cf.
+  `func_08050EE4`/`func_080512D8` ci-dessous pour la percée sur les
+  SIBLINGS ctors) : l'idée "bitfield struct réel" qui a débloqué les
+  ctors NE S'APPLIQUE PAS directement ici -- le masque de ces 2 setters
+  est construit à partir d'un paramètre d'APPEL dynamique (`bics r2,r1`,
+  `r1` est un masque fourni par l'appelant), pas une largeur de champ
+  fixée à la compilation comme dans une affectation de bitfield normale.
+  Sous-cas distinct, toujours PAS résolu -- piste non tentée : voir si le
+  paramètre "masque" est en fait la valeur d'un AUTRE bitfield struct
+  (`self->x = self->y;` où `y` est lui-même un bitfield d'une largeur qui,
+  une fois relu, agbcp doit re-décomposer par négation) plutôt qu'un
+  entier brut.
 - Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
   (**1084 octets** à l'origine, entre `func_08050EBC` et `func_08051320`) --
   découvert round w39 (**angle mort du scanner automatique**,
   `scan_hidden_code_blobs.py` ne couvre que 4-40 octets, ce bloc était 27x
   plus gros), **cartographié entièrement par w41** : 8 fonctions
   distinctes séparées par 4 pools littéraux (détail complet,
-  `SESSION_NOTES.md` round w41). **5/8 matchées** (`func_08050F60`,
+  `SESSION_NOTES.md` round w41). **7/8 matchées** (`func_08050F60`,
   `func_08050F70`, `func_080512B8`, `func_080512C8`, `func_080512D0`,
-  commit `0ba5e82`). Restent en `.byte`, dans le nouveau
-  `asm/code_08050E98.s`/`asm/code_08050F74.s`/`asm/code_080512D8.s` issus
-  du découpage w41 :
-  - `func_08050EE4` (88o) et `func_080512D8` (60o+pool) -- même classe de
-    near-miss "masque construit par négation" que `func_08050E98`/
-    `func_08050EBC` ci-dessus (agbcp plie systématiquement le masque en
-    immédiat direct, jamais par `negs` à l'exécution).
+  commit `0ba5e82` ; `func_08050EE4`/`func_080512D8`, round w49, cf.
+  ci-dessous). Restent en `.byte`, dans `asm/code_08050F4C.s`/
+  `asm/code_08050F74.s` :
+  - **`func_08050EE4` (88o) et `func_080512D8` (60o+pool) -- MATCHÉS
+    round w49** (`SESSION_NOTES.md`) : la classe "masque construit par
+    négation" est en fait le codegen NORMAL d'agbcp pour une vraie
+    affectation de bitfield struct C (widths 5/10/4/4 pour `08050EE4`,
+    2 mots pleins + 14+1+1 bits pour `080512D8`) -- pas un artefact
+    d'expression `v & ~mask` manuelle sur un entier brut (les 2
+    hypothèses déjà réfutées w39/w41). Écart résiduel d'épilogue
+    (`pop{r1};bx r1` vs `pop{r0};bx r0`) expliqué par le ctor qui
+    retourne `self` (convention ARM/CFront, r0 occupé par la valeur de
+    retour). Généralise potentiellement à TOUTE future cible de cette
+    classe : avant de conclure à un "mur agbcp" sur un masque construit
+    par négation, vérifier si le champ a une largeur FIXE (compile-time)
+    -- si oui, modéliser en bitfield struct réel plutôt qu'en masque
+    manuel, et vérifier si la fonction est un ctor candidat au `return
+    self`.
   - `func_08050F4C` (18o) -- near-miss "copie explicite élidée" (`v?1:v`
     normalisation booléenne), reconfirmé round w44 (essai `!!(v)` façon
     anti-pattern #12 : toujours 16 octets au lieu de 18).
