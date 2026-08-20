@@ -114,9 +114,22 @@ même pic de pression de registres.
   écrite -- si oui, c'est probablement une variable-copie explicite dans
   la source, pas un artefact. Vérifié bit-exact (harnais rapide 256/256,
   seul le padding final de 2 octets diffère -- zéro-rempli par
-  `align_sections.sh` dans le vrai build -- puis `make compare` complet).
-  Pas encore mergé dans `main` (worktree `w22` toujours actif, poursuit
-  sur `func_0804E5AC` la variante recoloration).
+  `align_sections.sh` dans le vrai build). Mergé dans `main` (`247e6f3`).
+  **`func_0804E5AC` (variante recoloration) : 4 tentatives, toujours pas
+  matchée, mais progrès net et mesuré à chaque round** -- round 9,
+  généralisation directe échouée (8 octets courts, `dest` swappé en `r9`
+  au lieu de `sl`, mauvaise paire de registres par rapport au corps
+  plain) ; round 10/w22, piste identifiée pas résolue ; round 10/w27,
+  piste `anchor`/`delta` résolue (`anchor` doit être RECALCULÉ dans
+  chaque bloc TL/BL/TR/BR, pas partagé comme `delta` qui lui est un vrai
+  temporaire de portée fonction) mais nouveau résidu de 44 octets trouvé
+  (forme verbeuse `mov r0,sl`+`adds` 3-opérandes non reproduite,
+  s'effondre en 1 instruction compacte) ; round 4/w29, résidu réduit de
+  44 à 24 octets (bloc TL correctement reproduit), cause isolée à une
+  collision de registre entre `anchor` (alloué en `r2`) et le pointeur
+  de fin de boucle `end` (que l'original garde en `r2`, libre) -- piste
+  concrète pour un round futur. Voir `SESSION_NOTES.md` rounds 9/w22,
+  10/w27, 4/w29 pour le détail complet de chaque itération.
 - `func_08008980` (callee bloquant de `func_08004C68`) -- **caractérisée
   en détail round 9/w21**, confirmée classe "pression de registres" par
   inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur
