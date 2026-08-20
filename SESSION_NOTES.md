@@ -7564,3 +7564,135 @@ ont été vérifiées ensemble).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - Aucun recoupement avec w45/w48 (cibles `func_0803A798`/`func_0803BF78`
   jamais touchées ce round).
+
+## Round (worktree w51, branche `parallel-51`) -- symbolisation de vtables
+`.incbin` -> `.4byte`/`.word` sur le 2e tiers (`vtable_unk_080E6AD8` à
+`vtable_unk_080E7A28`)
+
+Mission différente du matching habituel : convertir les 320 vtables C++
+de `asm/vtables.s`, qui sont aujourd'hui des blobs `.incbin` bruts (donc
+des pointeurs de fonction codés en dur, jamais recalculés par le
+linker), en forme symbolique (`.4byte func_ADDR`). Motivation directe :
+un hook franglais mal dimensionné a récemment décalé des adresses
+downstream et cassé ces pointeurs bruts (corrigé entretemps par
+`f718114`/`4f55c43`, déjà présents sur cette branche) -- symboliser
+élimine cette classe de bug pour toujours puisque le linker recalcule
+alors chaque slot automatiquement, quel que soit un futur décalage.
+
+Portion prise : les 105 vtables de `vtable_unk_080E6AD8` à
+`vtable_unk_080E7A28` (lignes ~526-958 avant édition), 958 mots (3832
+octets) au total.
+
+### Méthode
+
+1. Convention de slot vérifiée sur un exemple déjà symbolisé dans ce
+   dépôt (`__vt_12ScriptEngine`, ligne ~830) : `.4byte func_ADDR` nu,
+   sans `+1` manuel -- le bit thumb est ajouté automatiquement par le
+   linker via la relocation, puisque `func_ADDR` porte déjà `.thumb_func`
+   (macro `thumb_func_start`). Confirmé bit-exact par les rounds
+   précédents qui ont produit cet exemple.
+2. Table adresse -> label construite par script (`thumb_func_start
+   func_ADDR`/`sub_ADDR` dans tout `asm/*.s`, + définitions `func_ADDR(`
+   dans tout `src/*.cc` pour couvrir les fonctions déjà portées sous
+   ALIAS) : 2744 adresses connues au total.
+3. Chaque mot de 4 octets des 105 vtables lu directement dans
+   `baserom.gba` (pas de recalcul d'offset : les valeurs stockées dans
+   la ROM sont déjà des adresses ROM absolues `0x08xxxxxx`, bit thumb
+   inclus -- vérifié en lisant les octets bruts avant/après un slot déjà
+   converti).
+4. Par mot : `0x0` -> `.word 0` nu (mots nuls de préfixe MI/RTTI, cf.
+   convention déjà documentée plus haut dans ce fichier) ; adresse
+   trouvée dans la table -> `.4byte func_ADDR` (ou `sub_ADDR`) ; sinon
+   -> `.4byte 0xVALEUR @ no label yet` littéral, SANS deviner de nouveau
+   label.
+
+### Résultat du scan
+
+- **527 slots symbolisés** (`.4byte func_ADDR`/`sub_ADDR`), 280 labels
+  distincts référencés.
+- **208 mots nuls** (`.word 0`), préfixe MI/RTTI standard.
+- **223 slots laissés littéraux** (`@ no label yet`), 44 valeurs
+  distinctes. Spot-check sur 2 cas pour confirmer que ce ne sont pas des
+  labels ratés par le script :
+  - `0x08000639` (8 occurrences, `vtable_unk_080E7328`) : bytes bruts
+    `70 47` (`bx lr`) à l'offset fichier `0x638`, entre la fin de
+    `func_08000568` (`asm/interrupt.s`) et le début de
+    `func_0800063C` (`asm/sram_proxy_2.s`) -- un stub "ne rien faire" de
+    2 octets jamais isolé en fonction propre, donc jamais labellisé.
+  - `0x0801FDC1` (34 occurrences, la valeur la plus fréquente du lot) :
+    bytes bruts `70 b5 04 1c ...` (`push {r4,r5,r6,lr}`, vrai prologue de
+    fonction) à l'offset `0x1FDC0`, en PLEIN MILIEU du bloc monolithique
+    `asm/code_08012028.s` (entre `func_0801FD6C` et `func_08020060`,
+    jamais découpé) -- exactement le cas "fonction non isolée" anticipé
+    par la consigne, pas une erreur de la table.
+  - Les 44 valeurs restantes n'ont pas été investiguées une par une
+    (hors budget de ce round) -- laissées littérales par construction,
+    conformément à la consigne ("ne pas deviner").
+
+### Vérification -- découverte importante : le hash sha1 global NE PEUT PAS
+servir de critère bit-exact ici, et ce n'est pas un bug de transcription
+
+Protocole initial (rebuild propre AVANT édition, rebuild propre APRÈS,
+comparer `sha1sum fomt.gba`) exécuté correctement (`git stash`/`git stash
+pop` pour isoler les 2 builds sur l'état de commit identique, seul
+`asm/vtables.s` diffère) :
+- AVANT (incbin brut) : `edc0b545851bf6b921d979a5de0e8e9c20611b9a`
+- APRÈS (symbolisé)   : `c36f95b975cda85366ccd4de43b54d4ed0d85ccc`
+- **Les deux diffèrent**, mais la diffusion est bornée EXACTEMENT à la
+  plage `0xE6AE8`-`0xE7A3C` (ma portion, aucun octet ailleurs, taille de
+  fichier identique aux deux builds : 8392704 octets) -- pas une
+  cascade de décalage globale, pas une taille de vtable qui a changé.
+
+Root cause identifiée (`arm-none-eabi-nm fomt.elf`) : les adresses
+NOMINALES des fonctions (`func_08034E8C`, `func_080DC9FC`, ...) ne
+correspondent PLUS à leurs adresses RÉELLEMENT liées dans CE build --
+ex. `func_08034E8C` (nom = adresse vanilla) est en fait linké à
+`0x08034da0` (décalage de `-0xEC`), `func_080DC9FC` à `0x080dca04`
+(décalage de `+0x08`). Autrement dit, **les octets bruts `.incbin`
+encodent des adresses VANILLA/PRÉ-DÉCALAGE, déjà stales par rapport au
+layout RÉEL de ce build** -- exactement la classe de bug que cette
+mission existe pour éliminer. `DECOMP_RULES.md` documente déjà que ce
+dépôt a abandonné la vérification sha1 globale (`cb06198`) au profit
+d'une vérification PAR FONCTION isolée -- ce round en est la confirmation
+empirique côté vtables : le layout global a dérivé, et les vtables
+brutes qui n'ont pas encore été symbolisées sont donc **déjà cassées en
+silence** pour toute fonction dont l'adresse a dérivé, dans TOUT le
+fichier `asm/vtables.s`, pas seulement dans ma portion.
+
+Vérification de substitution utilisée à la place du hash global (rigueur
+équivalente, adaptée à un contenu qui doit maintenant suivre le linker
+plutôt que rester figé) :
+1. Aucune dérive de taille : fichier de sortie identique en taille aux
+   deux builds (958 mots = 3832 octets avant/après, `.incbin` remplacé
+   mot pour mot).
+2. `arm-none-eabi-nm fomt.elf` : les 280 symboles distincts référencés
+   dans ma portion sont TOUS définis (aucun `U`, aucune référence
+   pendante) -- lien propre, aucune référence non résolue.
+3. Rebuild répété (2x) : hash APRÈS reproductible à l'identique
+   (`c36f95b9...`) -- pas un artefact d'un unique build foireux.
+4. Spot-check manuel : le mot d'origine `0x080DC9FD` (`func_080DC9FC`
+   vanilla+1) correspond EXACTEMENT à l'adresse vanilla du symbole
+   `func_080DC9FC` (le nom du label), et le mot APRÈS symbolisation
+   (`0x080dca05`) correspond EXACTEMENT à `nm` (`080dca04` + bit thumb)
+   -- le linker résout bien la BONNE fonction, juste à sa vraie adresse
+   courante au lieu de l'adresse stale gravée dans la ROM vanilla.
+
+**Conclusion : la transformation est correcte** (pas d'erreur de
+transcription, pas de label inventé, pas de dérive de taille) ; la
+non-identité avec le hash `.incbin` d'origine est la PREUVE que le fix
+fonctionne, pas un signal d'échec. Le rebuild complet (avec
+`franglais_stub.bin` factice) ne montre aucune erreur de lien
+(référence non définie / définition multiple) -- seul `sha1sum -c
+fomt.sha1` échoue, attendu depuis `cb06198`.
+
+### État du worktree en fin de round
+
+- 1 fichier modifié : `asm/vtables.s` (105 `.incbin` -> séries de
+  `.4byte`/`.word`), aucun autre fichier touché, aucun label inventé.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Signal pour les rounds suivants (à remonter à `main`/`DECOMP_ARCHIVE.md`) :
+  **le layout global du binaire a dérivé de vanilla** pour au moins 2
+  fonctions vérifiées (`func_08034E8C`, `func_080DC9FC`) -- toute vtable
+  encore en `.incbin` brut ailleurs dans le fichier (les 2 autres tiers)
+  est potentiellement dans le même état "silencieusement cassée" tant
+  qu'elle n'est pas symbolisée à son tour.

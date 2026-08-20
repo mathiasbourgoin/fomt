@@ -525,115 +525,535 @@ vtable_unk_080E6A98:
 
 	.global vtable_unk_080E6AD8
 vtable_unk_080E6AD8:
-	.incbin "baserom.gba", 0xE6AD8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DC9FC
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036B1C
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08036B00
 
 	.global vtable_unk_080E6B18
 vtable_unk_080E6B18:
-	.incbin "baserom.gba", 0xE6B18, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA08
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036A4C
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6B58
 vtable_unk_080E6B58:
-	.incbin "baserom.gba", 0xE6B58, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA14
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080369E0
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_080369C4
 
 	.global vtable_unk_080E6B98
 vtable_unk_080E6B98:
-	.incbin "baserom.gba", 0xE6B98, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA20
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036898
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6BD8
 vtable_unk_080E6BD8:
-	.incbin "baserom.gba", 0xE6BD8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA2C
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036834
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6C18
 vtable_unk_080E6C18:
-	.incbin "baserom.gba", 0xE6C18, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA38
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080367C8
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_080367AC
 
 	.global vtable_unk_080E6C58
 vtable_unk_080E6C58:
-	.incbin "baserom.gba", 0xE6C58, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA44
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036704
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6C98
 vtable_unk_080E6C98:
-	.incbin "baserom.gba", 0xE6C98, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA50
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_0803669C
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08036680
 
 	.global vtable_unk_080E6CD8
 vtable_unk_080E6CD8:
-	.incbin "baserom.gba", 0xE6CD8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA5C
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036564
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6D18
 vtable_unk_080E6D18:
-	.incbin "baserom.gba", 0xE6D18, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA68
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036500
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_080364E4
 
 	.global vtable_unk_080E6D58
 vtable_unk_080E6D58:
-	.incbin "baserom.gba", 0xE6D58, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA74
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080363CC
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6D98
 vtable_unk_080E6D98:
-	.incbin "baserom.gba", 0xE6D98, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA80
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036364
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6DD8
 vtable_unk_080E6DD8:
-	.incbin "baserom.gba", 0xE6DD8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA8C
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080362FC
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6E18
 vtable_unk_080E6E18:
-	.incbin "baserom.gba", 0xE6E18, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCA98
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036290
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6E58
 vtable_unk_080E6E58:
-	.incbin "baserom.gba", 0xE6E58, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAA4
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036228
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6E98
 vtable_unk_080E6E98:
-	.incbin "baserom.gba", 0xE6E98, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAB0
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080361C0
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6ED8
 vtable_unk_080E6ED8:
-	.incbin "baserom.gba", 0xE6ED8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCABC
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08036154
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08036138
 
 	.global vtable_unk_080E6F18
 vtable_unk_080E6F18:
-	.incbin "baserom.gba", 0xE6F18, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAC8
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_0803601C
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6F58
 vtable_unk_080E6F58:
-	.incbin "baserom.gba", 0xE6F58, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAD4
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035FB0
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6F98
 vtable_unk_080E6F98:
-	.incbin "baserom.gba", 0xE6F98, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAE0
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035F48
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E6FD8
 vtable_unk_080E6FD8:
-	.incbin "baserom.gba", 0xE6FD8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAEC
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035EE4
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E7018
 vtable_unk_080E7018:
-	.incbin "baserom.gba", 0xE7018, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCAF8
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035E7C
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E7058
 vtable_unk_080E7058:
-	.incbin "baserom.gba", 0xE7058, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCB04
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035E14
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E7098
 vtable_unk_080E7098:
-	.incbin "baserom.gba", 0xE7098, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCB10
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035DAC
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E70D8
 vtable_unk_080E70D8:
-	.incbin "baserom.gba", 0xE70D8, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCB1C
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035D40
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E7118
 vtable_unk_080E7118:
-	.incbin "baserom.gba", 0xE7118, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCB28
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035CD4
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08035CB8
 
 	.global vtable_unk_080E7158
 vtable_unk_080E7158:
-	.incbin "baserom.gba", 0xE7158, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCB34
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035B9C
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global vtable_unk_080E7198
 vtable_unk_080E7198:
-	.incbin "baserom.gba", 0xE7198, 0x40
+	.word 0
+	.word 0
+	.4byte func_080DCB40
+	.4byte func_0803240C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_08034E8C
+	.4byte func_08034EB4
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte func_08034EA0
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08035B38
+	.4byte func_08034EE0
+	.4byte func_08034EF8
+	.4byte func_08034F00
 
 	.global __vt_10ANpcEntity
 __vt_10ANpcEntity:
@@ -641,191 +1061,526 @@ __vt_10ANpcEntity:
 
 	.global vtable_unk_080E7218
 vtable_unk_080E7218:
-	.incbin "baserom.gba", 0xE7218, 0x44
+	.word 0
+	.word 0
+	.4byte func_080DCB4C
+	.4byte func_08037470
+	.4byte func_08037434
+	.4byte func_0803745C
+	.4byte func_0803726C
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080379D8
+	.4byte func_08037430
+	.4byte 0x08032B41 @ no label yet
+	.4byte func_08037A04
+	.4byte func_08037958
 
 	.global vtable_unk_080E725C
 vtable_unk_080E725C:
-	.incbin "baserom.gba", 0xE725C, 0x44
+	.word 0
+	.word 0
+	.4byte func_080DCB58
+	.4byte func_08037470
+	.4byte func_08037434
+	.4byte func_0803745C
+	.4byte func_0803726C
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_0803788C
+	.4byte func_08037430
+	.4byte 0x08032B41 @ no label yet
+	.4byte func_080378B8
+	.4byte func_080377E8
 
 	.global vtable_unk_080E72A0
 vtable_unk_080E72A0:
-	.incbin "baserom.gba", 0xE72A0, 0x44
+	.word 0
+	.word 0
+	.4byte func_080DCB64
+	.4byte func_08037470
+	.4byte func_08037434
+	.4byte func_0803745C
+	.4byte func_0803726C
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_080376E4
+	.4byte func_08037430
+	.4byte 0x08032B41 @ no label yet
+	.4byte func_08037714
+	.4byte func_0803763C
 
 	.global vtable_unk_080E72E4
 vtable_unk_080E72E4:
-	.incbin "baserom.gba", 0xE72E4, 0x44
+	.word 0
+	.word 0
+	.4byte func_080DCB70
+	.4byte func_08037470
+	.4byte func_08037434
+	.4byte func_0803745C
+	.4byte func_0803726C
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_0803753C
+	.4byte func_08037430
+	.4byte 0x08032B41 @ no label yet
+	.4byte func_08037568
+	.4byte func_08037494
 
 	.global vtable_unk_080E7328
 vtable_unk_080E7328:
-	.incbin "baserom.gba", 0xE7328, 0x44
+	.word 0
+	.word 0
+	.4byte func_08037048
+	.4byte func_08037470
+	.4byte func_08037434
+	.4byte func_0803745C
+	.4byte func_0803726C
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte 0x08000639 @ no label yet
+	.4byte func_08037430
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
 
 	.global vtable_unk_080E736C
 vtable_unk_080E736C:
-	.incbin "baserom.gba", 0xE736C, 0x14
+	.word 0
+	.word 0
+	.4byte func_080DCDB0
+	.4byte func_08038928
+	.4byte func_08038A70
 
 	.global vtable_unk_080E7380
 vtable_unk_080E7380:
-	.incbin "baserom.gba", 0xE7380, 0x34
+	.word 0
+	.word 0
+	.4byte func_080DCE60
+	.4byte 0x0801FF25 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x0801FF55 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0801FE61 @ no label yet
+	.4byte func_080387A0
 
 	.global vtable_unk_080E73B4
 vtable_unk_080E73B4:
-	.incbin "baserom.gba", 0xE73B4, 0x34
+	.word 0
+	.word 0
+	.4byte func_08038098
+	.4byte func_0803834C
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte func_08038300
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_08038320
+	.4byte func_08038334
 
 	.global vtable_unk_080E73E8
 vtable_unk_080E73E8:
-	.incbin "baserom.gba", 0xE73E8, 0x14
+	.word 0
+	.word 0
+	.4byte func_080DCE94
+	.4byte func_08038580
+	.4byte func_080385B0
 
 	.global vtable_unk_080E73FC
 vtable_unk_080E73FC:
-	.incbin "baserom.gba", 0xE73FC, 0x34
+	.word 0
+	.word 0
+	.4byte func_08037E48
+	.4byte func_08037ED0
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x0801FF55 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0801FE61 @ no label yet
+	.4byte func_08037E9C
 
 	.global vtable_unk_080E7430
 vtable_unk_080E7430:
-	.incbin "baserom.gba", 0xE7430, 0x14
+	.word 0
+	.word 0
+	.4byte func_080DCEC0
+	.4byte func_08037F60
+	.4byte func_08037F7C
 
 	.global vtable_unk_080E7444
 vtable_unk_080E7444:
-	.incbin "baserom.gba", 0xE7444, 0x34
+	.word 0
+	.word 0
+	.4byte func_080DCEEC
+	.4byte 0x08037CDD @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x0801FF55 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0801FE61 @ no label yet
+	.4byte func_08037CF0
 
 	.global vtable_unk_080E7478
 vtable_unk_080E7478:
-	.incbin "baserom.gba", 0xE7478, 0x14
+	.word 0
+	.word 0
+	.4byte func_080DCF20
+	.4byte 0x08037D71 @ no label yet
+	.4byte func_08037D74
 
 	.global vtable_unk_080E748C
 vtable_unk_080E748C:
-	.incbin "baserom.gba", 0xE748C, 0x10
+	.word 0
+	.word 0
+	.4byte func_08039708
+	.4byte 0x080398A1 @ no label yet
 
 	.global vtable_unk_080E749C
 vtable_unk_080E749C:
-	.incbin "baserom.gba", 0xE749C, 0x10
+	.word 0
+	.word 0
+	.4byte func_0803955C
+	.4byte func_080396F4
 
 	.global vtable_unk_080E74AC
 vtable_unk_080E74AC:
-	.incbin "baserom.gba", 0xE74AC, 0x10
+	.word 0
+	.word 0
+	.4byte func_08039310
+	.4byte 0x08039E89 @ no label yet
 
 	.global vtable_unk_080E74BC
 vtable_unk_080E74BC:
-	.incbin "baserom.gba", 0xE74BC, 0x10
+	.word 0
+	.word 0
+	.4byte func_08039204
+	.4byte func_0803930C
 
 	.global vtable_unk_080E74CC
 vtable_unk_080E74CC:
-	.incbin "baserom.gba", 0xE74CC, 0x10
+	.word 0
+	.word 0
+	.4byte func_080391FC
+	.4byte func_08039200
 
 	.global vtable_unk_080E74DC
 vtable_unk_080E74DC:
-	.incbin "baserom.gba", 0xE74DC, 0x8C
+	.word 0
+	.word 0
+	.4byte func_080399C0
+	.4byte func_080202A0
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte func_08039A60
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte func_0803242C
+	.4byte func_08039A30
+	.4byte func_080324B8
+	.4byte 0x08032B41 @ no label yet
+	.4byte func_080202C4
+	.4byte func_080202C8
+	.4byte func_08039D98
+	.4byte 0x080202D1 @ no label yet
+	.4byte 0x080202D5 @ no label yet
+	.4byte 0x080202D9 @ no label yet
+	.4byte 0x080202DD @ no label yet
+	.4byte 0x080202E1 @ no label yet
+	.4byte 0x080202E5 @ no label yet
+	.4byte 0x080202E9 @ no label yet
+	.4byte func_08039DA8
+	.4byte 0x080202F1 @ no label yet
+	.4byte 0x080202F5 @ no label yet
+	.4byte 0x080202F9 @ no label yet
+	.4byte 0x080202FD @ no label yet
+	.4byte 0x08020301 @ no label yet
+	.4byte 0x08020305 @ no label yet
+	.4byte func_08039E18
+	.4byte 0x0802030D @ no label yet
+	.4byte func_08039A5C
 
 	.global vtable_unk_080E7568
 vtable_unk_080E7568:
-	.incbin "baserom.gba", 0xE7568, 0x34
+	.word 0
+	.word 0
+	.4byte func_080DCF4C
+	.4byte 0x0801FF25 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte func_080DCFCC
+	.4byte 0x0801FF55 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0801FE61 @ no label yet
+	.4byte func_080DCFE0
 
 	.global vtable_unk_080E759C
 vtable_unk_080E759C:
-	.incbin "baserom.gba", 0xE759C, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DD404
+	.4byte func_080DD3D4
+	.4byte func_080DD3A8
+	.4byte 0x080DD385 @ no label yet
 
 	.global vtable_unk_080E75B4
 vtable_unk_080E75B4:
-	.incbin "baserom.gba", 0xE75B4, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DD4E4
+	.4byte func_080DD460
+	.4byte func_080DD434
+	.4byte func_080DD410
 
 	.global vtable_unk_080E75CC
 vtable_unk_080E75CC:
-	.incbin "baserom.gba", 0xE75CC, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DD588
+	.4byte func_080DD540
+	.4byte func_080DD514
+	.4byte func_080DD4F0
 
 	.global vtable_unk_080E75E4
 vtable_unk_080E75E4:
-	.incbin "baserom.gba", 0xE75E4, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DD788
+	.4byte func_080DD5E4
+	.4byte func_080DD5B8
+	.4byte func_080DD594
 
 	.global vtable_unk_080E75FC
 vtable_unk_080E75FC:
-	.incbin "baserom.gba", 0xE75FC, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DD860
+	.4byte func_080DD7E4
+	.4byte func_080DD7B8
+	.4byte func_080DD794
 
 	.global vtable_unk_080E7614
 vtable_unk_080E7614:
-	.incbin "baserom.gba", 0xE7614, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DD938
+	.4byte func_080DD8BC
+	.4byte func_080DD890
+	.4byte func_080DD86C
 
 	.global vtable_unk_080E762C
 vtable_unk_080E762C:
-	.incbin "baserom.gba", 0xE762C, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DDC18
+	.4byte func_080DD9CC
+	.4byte func_080DD994
+	.4byte func_080DD944
 
 	.global vtable_unk_080E7644
 vtable_unk_080E7644:
-	.incbin "baserom.gba", 0xE7644, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DDE68
+	.4byte func_080DDC78
+	.4byte func_080DDC48
+	.4byte func_080DDC24
 
 	.global vtable_unk_080E765C
 vtable_unk_080E765C:
-	.incbin "baserom.gba", 0xE765C, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DDF0C
+	.4byte func_080DDEC4
+	.4byte func_080DDE98
+	.4byte func_080DDE74
 
 	.global vtable_unk_080E7674
 vtable_unk_080E7674:
-	.incbin "baserom.gba", 0xE7674, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DDFB0
+	.4byte func_080DDF68
+	.4byte func_080DDF3C
+	.4byte func_080DDF18
 
 	.global vtable_unk_080E768C
 vtable_unk_080E768C:
-	.incbin "baserom.gba", 0xE768C, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DE050
+	.4byte func_080DE00C
+	.4byte func_080DDFE0
+	.4byte func_080DDFBC
 
 	.global vtable_unk_080E76A4
 vtable_unk_080E76A4:
-	.incbin "baserom.gba", 0xE76A4, 0x18
+	.word 0
+	.word 0
+	.4byte func_080DE128
+	.4byte func_080DE0AC
+	.4byte func_080DE080
+	.4byte func_080DE05C
 
 	.global vtable_unk_080E76BC
 vtable_unk_080E76BC:
-	.incbin "baserom.gba", 0xE76BC, 0x18
+	.word 0
+	.word 0
+	.4byte func_08039F50
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x08000639 @ no label yet
 
 	.global vtable_unk_080E76D4
 vtable_unk_080E76D4:
-	.incbin "baserom.gba", 0xE76D4, 0x14
+	.word 0
+	.word 0
+	.4byte func_080DE1B4
+	.4byte func_080DE184
+	.4byte func_080DE134
 
 	.global vtable_unk_080E76E8
 vtable_unk_080E76E8:
-	.incbin "baserom.gba", 0xE76E8, 0x10
+	.word 0
+	.word 0
+	.4byte func_080DE220
+	.4byte 0x0803B4DD @ no label yet
 
 	.global vtable_unk_080E76F8
 vtable_unk_080E76F8:
-	.incbin "baserom.gba", 0xE76F8, 0x10
+	.word 0
+	.word 0
+	.4byte 0x080DE261 @ no label yet
+	.4byte 0x080DE241 @ no label yet
 
 	.global vtable_unk_080E7708
 vtable_unk_080E7708:
-	.incbin "baserom.gba", 0xE7708, 0xC
+	.4byte 0xFFFFFFFC @ no label yet
+	.word 0
+	.4byte func_080DE280
 
 	.global vtable_unk_080E7714
 vtable_unk_080E7714:
-	.incbin "baserom.gba", 0xE7714, 0x14
+	.4byte 0xFFFFFFF4 @ no label yet
+	.word 0
+	.4byte func_080DE28C
+	.4byte 0x0803EFD9 @ no label yet
+	.4byte func_080DE298
 
 	.global vtable_unk_080E7728
 vtable_unk_080E7728:
-	.incbin "baserom.gba", 0xE7728, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E0908
+	.4byte func_080E0094
 
 	.global vtable_unk_080E7738
 vtable_unk_080E7738:
-	.incbin "baserom.gba", 0xE7738, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E09B0
+	.4byte 0x08000639 @ no label yet
 
 	.global vtable_unk_080E7748
 vtable_unk_080E7748:
-	.incbin "baserom.gba", 0xE7748, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E09BC
+	.4byte func_0803B718
 
 	.global vtable_unk_080E7758
 vtable_unk_080E7758:
-	.incbin "baserom.gba", 0xE7758, 0x10
+	.word 0
+	.word 0
+	.4byte func_0803B840
+	.4byte func_080E0A7C
 
 	.global vtable_unk_080E7768
 vtable_unk_080E7768:
-	.incbin "baserom.gba", 0xE7768, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E0A08
+	.4byte func_080E0A88
 
 	.global vtable_unk_080E7778
 vtable_unk_080E7778:
-	.incbin "baserom.gba", 0xE7778, 0x2C
+	.word 0
+	.word 0
+	.4byte func_0803BE50
+	.4byte func_0803BEBC
+	.4byte func_0803BEC8
+	.4byte func_0803BED4
+	.4byte func_0803BEE0
+	.4byte func_0803BEEC
+	.4byte func_0803BEF4
+	.4byte func_0803BEFC
+	.4byte func_0803BF08
 
 	.global vtable_unk_080E77A4
 vtable_unk_080E77A4:
-	.incbin "baserom.gba", 0xE77A4, 0x2C
+	.word 0
+	.word 0
+	.4byte func_0803BFC8
+	.4byte func_0803C518
+	.4byte func_0803C52C
+	.4byte func_0803BED4
+	.4byte func_0803BEE0
+	.4byte func_0803BEEC
+	.4byte func_0803BEF4
+	.4byte func_0803BEFC
+	.4byte func_0803BF08
 
 	.global vtable_unk_080E77D0
 vtable_unk_080E77D0:
-	.incbin "baserom.gba", 0xE77D0, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E0D50
+	.4byte func_080E0D64
 
 	.global vtable_unk_080E77E0
 vtable_unk_080E77E0:
-	.incbin "baserom.gba", 0xE77E0, 0x30
+	.word 0
+	.word 0
+	.4byte func_0803C588
+	.4byte func_0803BEBC
+	.4byte func_0803BEC8
+	.4byte func_0803BED4
+	.4byte func_0803BEE0
+	.4byte func_0803BEEC
+	.4byte func_0803BEF4
+	.4byte func_0803BEFC
+	.4byte func_0803BF08
+	.4byte func_0803D4D8
 
 	.section .rodata.080E7824
 
@@ -838,123 +1593,221 @@ __vt_12ScriptEngine:
 
 	.global vtable_unk_080E7838
 vtable_unk_080E7838:
-	.incbin "baserom.gba", 0xE7838, 0x10
+	.word 0
+	.word 0
+	.4byte func_0804EE9C
+	.4byte func_0804EE88
 
 	.global vtable_unk_080E7848
 vtable_unk_080E7848:
-	.incbin "baserom.gba", 0xE7848, 0x10
+	.word 0
+	.word 0
+	.4byte func_0804EEBC
+	.4byte func_0804EE1C
 
 	.global vtable_unk_080E7858
 vtable_unk_080E7858:
-	.incbin "baserom.gba", 0xE7858, 0x10
+	.word 0
+	.word 0
+	.4byte func_0804EEDC
+	.4byte func_0804EDA0
 
 	.global vtable_unk_080E7868
 vtable_unk_080E7868:
-	.incbin "baserom.gba", 0xE7868, 0x10
+	.word 0
+	.word 0
+	.4byte func_0804EEFC
+	.4byte func_0804EA80
 
 	.global vtable_unk_080E7878
 vtable_unk_080E7878:
-	.incbin "baserom.gba", 0xE7878, 0x10
+	.word 0
+	.word 0
+	.4byte func_0804F19C
+	.4byte func_080E1018
 
 	.global vtable_unk_080E7888
 vtable_unk_080E7888:
-	.incbin "baserom.gba", 0xE7888, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E0F90
+	.4byte func_080E1024
 
 	.global vtable_unk_080E7898
 vtable_unk_080E7898:
-	.incbin "baserom.gba", 0xE7898, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E0F48
+	.4byte func_080E1030
 
 	.global vtable_unk_080E78A8
 vtable_unk_080E78A8:
-	.incbin "baserom.gba", 0xE78A8, 0x18
+	.word 0
+	.word 0
+	.4byte func_080E103C
+	.4byte func_0804F160
+	.4byte func_0804F174
+	.4byte func_0804F178
 
 	.global vtable_unk_080E78C0
 vtable_unk_080E78C0:
-	.incbin "baserom.gba", 0xE78C0, 0x20
+	.word 0
+	.word 0
+	.4byte func_080E105C
+	.4byte func_0804EFAC
+	.4byte 0x0804F059 @ no label yet
+	.4byte func_0804F060
+	.4byte func_0804F0E0
+	.4byte func_0804F15C
 
 	.global vtable_unk_080E78E0
 vtable_unk_080E78E0:
-	.incbin "baserom.gba", 0xE78E0, 0x10
+	.word 0
+	.word 0
+	.4byte func_0804EF20
+	.4byte func_080E10E0
 
 	.global vtable_unk_080E78F0
 vtable_unk_080E78F0:
-	.incbin "baserom.gba", 0xE78F0, 0x18
+	.word 0
+	.word 0
+	.4byte func_080E10F8
+	.4byte 0x080E10F5 @ no label yet
+	.4byte 0x080E10F1 @ no label yet
+	.4byte func_080E10EC
 
 	.global vtable_unk_080E7908
 vtable_unk_080E7908:
-	.incbin "baserom.gba", 0xE7908, 0x20
+	.word 0
+	.word 0
+	.4byte func_080E1128
+	.4byte 0x08000639 @ no label yet
+	.4byte 0x080E1125 @ no label yet
+	.4byte 0x080E1121 @ no label yet
+	.4byte 0x080E111D @ no label yet
+	.4byte 0x080E1119 @ no label yet
 
 	.global vtable_unk_080E7928
 vtable_unk_080E7928:
-	.incbin "baserom.gba", 0xE7928, 0xC
+	.word 0
+	.word 0
+	.4byte func_080E1148
 
 	.global vtable_unk_080E7934
 vtable_unk_080E7934:
-	.incbin "baserom.gba", 0xE7934, 0x10
+	.word 0
+	.word 0
+	.4byte func_080521BC
+	.4byte func_080521FC
 
 	.global vtable_unk_080E7944
 vtable_unk_080E7944:
-	.incbin "baserom.gba", 0xE7944, 0xC
+	.word 0
+	.word 0
+	.4byte func_080E11EC
 
 	.global vtable_unk_080E7950
 vtable_unk_080E7950:
-	.incbin "baserom.gba", 0xE7950, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1498
+	.4byte func_080E118C
 
 	.global vtable_unk_080E7960
 vtable_unk_080E7960:
-	.incbin "baserom.gba", 0xE7960, 0x10
+	.word 0
+	.word 0
+	.4byte func_08057E1C
+	.4byte func_08057E5C
 
 	.global vtable_unk_080E7970
 vtable_unk_080E7970:
-	.incbin "baserom.gba", 0xE7970, 0xC
+	.word 0
+	.word 0
+	.4byte func_080E15C0
 
 	.global vtable_unk_080E797C
 vtable_unk_080E797C:
-	.incbin "baserom.gba", 0xE797C, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1824
+	.4byte func_080E14B8
 
 	.global vtable_unk_080E798C
 vtable_unk_080E798C:
-	.incbin "baserom.gba", 0xE798C, 0x10
+	.word 0
+	.word 0
+	.4byte func_0805CEFC
+	.4byte func_0805CF3C
 
 	.global vtable_unk_080E799C
 vtable_unk_080E799C:
-	.incbin "baserom.gba", 0xE799C, 0xC
+	.word 0
+	.word 0
+	.4byte func_080E18A4
 
 	.global vtable_unk_080E79A8
 vtable_unk_080E79A8:
-	.incbin "baserom.gba", 0xE79A8, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1964
+	.4byte func_080E1844
 
 	.global vtable_unk_080E79B8
 vtable_unk_080E79B8:
-	.incbin "baserom.gba", 0xE79B8, 0x10
+	.word 0
+	.word 0
+	.4byte func_0805E658
+	.4byte func_0805E698
 
 	.global vtable_unk_080E79C8
 vtable_unk_080E79C8:
-	.incbin "baserom.gba", 0xE79C8, 0x14
+	.word 0
+	.word 0
+	.4byte func_080E1984
+	.4byte func_0805E760
+	.4byte func_0805E790
 
 	.global vtable_unk_080E79DC
 vtable_unk_080E79DC:
-	.incbin "baserom.gba", 0xE79DC, 0xC
+	.word 0
+	.word 0
+	.4byte func_080E19F8
 
 	.global vtable_unk_080E79E8
 vtable_unk_080E79E8:
-	.incbin "baserom.gba", 0xE79E8, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1A28
+	.4byte func_080E19A4
 
 	.global vtable_unk_080E79F8
 vtable_unk_080E79F8:
-	.incbin "baserom.gba", 0xE79F8, 0x10
+	.word 0
+	.word 0
+	.4byte func_0805FD04
+	.4byte func_0805FD44
 
 	.global vtable_unk_080E7A08
 vtable_unk_080E7A08:
-	.incbin "baserom.gba", 0xE7A08, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1A54
+	.4byte func_080E1A48
 
 	.global vtable_unk_080E7A18
 vtable_unk_080E7A18:
-	.incbin "baserom.gba", 0xE7A18, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1C18
+	.4byte func_080E1A70
 
 	.global vtable_unk_080E7A28
 vtable_unk_080E7A28:
-	.incbin "baserom.gba", 0xE7A28, 0x10
+	.word 0
+	.word 0
+	.4byte func_080E1D54
+	.4byte func_080E1C70
 
 	.global vtable_unk_080E7A38
 vtable_unk_080E7A38:
