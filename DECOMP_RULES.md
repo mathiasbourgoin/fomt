@@ -265,6 +265,24 @@ de la constante. Généralisation directe de l'anti-pattern #1 (masques) à
 un autre contexte de matérialisation de littéral : laisser le
 compilateur choisir la forme, ne pas la deviner depuis le désassemblage.
 
+### 11. Un "spill" apparent avant un mur de pression de registres peut
+être une variable-copie explicite de la source, pas un artefact
+d'allocateur
+
+Avant de conclure qu'un near-miss d'1 instruction sur une fonction à
+forte pression de registres est un mur d'allocateur (irrécupérable) :
+vérifier si le désassemblage relit une valeur depuis un emplacement
+mémoire/registre DIFFÉRENT de celui où elle vient d'être écrite. Si oui,
+c'est probablement une VARIABLE-COPIE explicite dans la source C
+originale (`u32 br_tile_x = tile_x;` -- l'écriture initiale EST le
+"spill" apparent, sa seule relecture plus tard EST le "reload" apparent),
+pas un artefact de l'allocateur. A débloqué `DrawGlyphAt`/`func_0804E4AC`
+(round 9, agent `fable`) après 4 tentatives fermées à tort comme "mur
+d'allocateur agbcp" -- voir `DECOMP_ARCHIVE.md` pour le détail complet
+(4 variantes du même idiome dans une seule fonction). Généralise à toute
+future cible de la classe "pression de registres" : chercher l'aliasing
+explicite avant d'abandonner.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans

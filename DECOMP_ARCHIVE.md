@@ -81,33 +81,37 @@ même pic de pression de registres.
   toujours inliné par agbcp, son élimination du branchement redondant
   opère sur l'IDENTITÉ DE REGISTRE, pas l'identité de variable source --
   aucune des 5 formulations testées n'a préservé le second check).
-- `func_0804E4AC` (`DrawGlyphAt`, plain) -- **RETIRÉE de la liste des
-  cibles priorisées (round 8), pas juste dépriorisée.** Historique
-  complet : round 3, échec total (20 octets d'écart dès la 1re
-  instruction) ; round 6, shape-hunt systématique convergé à un
-  near-miss d'UNE instruction de 2 octets (250/252 octets, spill+reload
-  redondant de `tile_x` avant le blit BR) ; round 7, piste "profondeur
-  d'imbrication des `if`" testée et fermée (aucun effet isolable, confondu
-  avec la pression de registres réelle) ; round 8, piste "ce qui se passe
-  entre les appels `CpuFastSet` de BL et TR" testée et fermée -- tracé
-  instruction par instruction, aucune des deux zones ne touche
-  `r4`(`tile_x`)/`r5`/`r8`, donc aucun effet de bord n'explique le spill.
-  **4 tentatives sérieuses, 3 reconstructions C indépendantes retombant
-  sur EXACTEMENT le même écart d'1 instruction** -- signal net d'un mur
-  d'allocateur de registres réel (probablement un artefact interne à
-  `agbcp`, slot de spill réservé tôt par une passe puis consommé
-  opportunément par une passe ultérieure au site d'usage textuellement le
-  plus tardif, indépendant de toute restructuration C testée). 2 probes
-  empiriques supplémentaires testées et négatives : ordre de déclaration
-  inversé -> écart PIRE (118/121) ; lecture forcée via pointeur `volatile`
-  de `tile_x` juste au site BR -> bien pire (132 instructions). **Round 9
-  (agent modèle "fable", worktree w22) : lancé en pari ("on ne sait
-  jamais") -- voir `SESSION_NOTES.md` round 9/w22 pour le résultat.**
-  `func_0804E5AC` (variante recoloration, même forme attendue) n'a jamais
-  été tentée -- pas la peine avant que le corps plain ne matche. Si
-  retenté un jour au-delà du pari round 9 : la seule piste non essayée
-  identifiée est de comparer avec la décompilation Ghidra amont de
-  `StanHash/fomt` pour cette adresse, si elle existe.
+- ~~`func_0804E4AC` (`DrawGlyphAt`, plain)~~ -- **MATCHÉE round 9 (agent
+  modèle "fable", worktree `w22`, commit `247e6f3`), le mur de 2 octets
+  est tombé.** Rounds 3/6/7/8 avaient tous convergé sur le même écart
+  irréductible d'1 instruction (un "spill fantôme" de `tile_x` juste
+  avant le blit BR), attribué à un artefact de l'allocateur `agbcp` --
+  **ce diagnostic était FAUX**. La vraie cause : l'original C source
+  **alias les valeurs dans des variables COPIES redondantes, et c'est la
+  copie -- pas l'original -- que le blit suivant relit** :
+  ```c
+  u32 tile_x = x >> 3;
+  u32 br_tile_x = tile_x;   // aucun registre en moins : l'init EST le str,
+                            // son seul usage BR EST le ldr
+  ```
+  Le même idiome se répète 4 fois dans la fonction avec des variantes :
+  `grid_rows` copie `height_tiles` (le clip guard relit le temp `r0`
+  chaud, `has_bottom` relit la copie chez `ip`) ; une variable
+  `right_addr` unique partagée par les blits TR et BR (pseudo-globale,
+  aucune liaison locale -> séquence `mov`/`adds` à 3 opérandes) ;
+  l'adresse BR construite par trois réassignations successives ; un seul
+  `return kind` atteint via `goto` (inverse la course d'allocation
+  `sb`/`sl` entre `kind` et `dest`) ; ordre initialisé-avant-déclaration-
+  nue (slot de pile `0x84` vs `0x88`). **Généralisation pour toute future
+  cible "pression de registres"** : avant de conclure à un mur
+  d'allocateur, chercher si le désassemblage relit une valeur depuis un
+  emplacement mémoire/registre DIFFÉRENT de celui où elle vient d'être
+  écrite -- si oui, c'est probablement une variable-copie explicite dans
+  la source, pas un artefact. Vérifié bit-exact (harnais rapide 256/256,
+  seul le padding final de 2 octets diffère -- zéro-rempli par
+  `align_sections.sh` dans le vrai build -- puis `make compare` complet).
+  Pas encore mergé dans `main` (worktree `w22` toujours actif, poursuit
+  sur `func_0804E5AC` la variante recoloration).
 - `func_08008980` (callee bloquant de `func_08004C68`) -- **caractérisée
   en détail round 9/w21**, confirmée classe "pression de registres" par
   inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur
