@@ -4075,3 +4075,97 @@ après le split (docs uniquement).
   structure du fichier. Au prochain merge, router leurs nouvelles
   entrées de table/historique vers `DECOMP_ARCHIVE.md`, pas
   `DECOMP_RULES.md`.
+
+## 2026-08-20, worktree w26/`parallel-26` -- généralisation du scan
+"méthode sœur" (angle 1a), 4 fonctions matchées
+
+Mission : continuer la chasse aux familles structurelles non cataloguées
+depuis `dc8689a` (base commune avec w24, pas encore mergé dans cette
+branche). Deux angles proposés : (1a) généraliser le scan de w24 --
+`vtable_unk_ADDR` déjà connu SANS `__builtin_new`, ou l'inverse -- à
+toute combinaison, pas seulement les paires destructeur/constructeur déjà
+vues ; (1b) `bl __builtin_new`/`__builtin_delete` sans vtable connu ;
+(2) accesseurs voisins de `gUnk_0300040C`.
+
+Script Python (`/tmp/w26_scan_vtable_families.py`, non commité --
+jetable) : parse tout `asm/*.s` en blocs `thumb_func_start`, exclut les
+`func_ADDR` déjà présents dans un `src/*.cc`, et catégorise le reste par
+(a) référence un `vtable_unk_ADDR` déjà connu d'un `src/*.cc` matché
+SANS `__builtin_new`, (b) appelle `__builtin_new`/`__builtin_delete`
+SANS référencer de vtable connu. Angle 1b a produit ~150 hits mais quasi
+tous dans les gros fichiers `code_linkonce.s`/`code_080B3C3C.s`/
+`code_809E804.s` (templates COMDAT, classe "pression de registres" ou
+famille infaisable `Unpack` déjà fermée) ou des lots homogènes de petites
+fonctions déjà pressenties ailleurs (`code_entities_08034CEC.s`,
+candidat de blob caché non encore vérifié, laissé de côté faute de
+temps) -- pas creusé plus loin ce round. **Angle 1a n'a donné que 8
+hits**, bien plus exploitable : 4 se sont avérés être de vrais
+constructeurs/init-steps sœurs de destructeurs déjà matchés.
+
+**4 fonctions matchées, 3 commits** :
+
+- `func_08004C48` (`25ff995`) -- constructeur de base, sibling direct de
+  `func_08004C54` (tout premier destructeur "riche" matché, round 4/w4).
+  Stamp vtable + `return self`, dernière fonction de son fichier déjà
+  découpé (`asm/code_08004C0C.s`) -- split en queue trivial. Appelé
+  depuis un site de placement-new dans `asm/code_linkonce.s`
+  (`movs r0,#4; bl __builtin_new; bl func_08004C48`), confirmant le rôle
+  constructeur plutôt qu'un simple helper de stamp.
+- `func_080098DC` (`6f788cc`) -- init-step sibling de la classe
+  documentée dans `src/code_080099EC.cc` (round 9/w18, blob caché).
+  Fonction mi-fichier (pas adjacente à un split existant) dans le gros
+  monolithe `asm/code_08008DE8.s` -- découpage standard en 3 (avant/
+  cible/après). Délègue à deux helpers opaques encore non portés
+  (`func_08009984`, `func_080098AC`).
+- `func_080D79CC` + `func_080D7AD4` (`7201ee1`) -- paire de constructeurs
+  d'un même sous-objet dont le teardown est déjà connu dans
+  `func_08008A68.cc` (round 9/w21) : même vtable pair
+  (`vtable_unk_080E5B0C`/`vtable_unk_080E5B18`), même corps
+  byte-identique, seule différence l'offset d'embedding (`self` direct
+  vs `self-0x1c`) -- motif déjà documenté pour la famille des
+  destructeurs "riches". Une fonction non apparentée
+  (`func_080D7AAC`, vtable/global différents) sépare les deux cibles
+  dans le même fichier monolithique -> split en 5 morceaux
+  (avant/cible1/milieu-non-porté/cible2/après).
+
+**Piège vécu et corrigé avant tout commit** (méthode w26, à généraliser
+dans `DECOMP_RULES.md` si récidive) : le premier découpage du fichier
+`code_080D6DB8.s` a supprimé silencieusement un blob `.byte` caché de
+116 octets (label local `.L080D79F8`, PAS de `thumb_func_start`) coincé
+entre le pool littéral de `func_080D79CC` et `func_080D7AAC` -- attrapé
+immédiatement par la vérification taille `readelf .text` (44 octets
+compilés contre 224 attendus) AVANT tout `make compare`, donc jamais
+committé de mauvais état. Corrigé en re-diffant contre
+`git show HEAD:asm/code_080D6DB8.s` et en recollant les octets exacts en
+tête du nouveau fichier, avant `func_080D7AAC`. Ce blob (3 séquences
+quasi identiques de ~28 octets, ne différant que par la cible d'un
+`bl`) ressemble à un troisième membre de famille de blob caché non
+décodé -- **piste non explorée, à reprendre un jour** (candidat
+`0x080D79F8`, 116 octets, dans `asm/code_080D7AAC.s`).
+
+**Piste angle 2 (voisins de `gUnk_0300040C`)** : enumérée
+(`gUnk_03000400`/`402`/`408`/`410`/`414`/`418`/`41C`/`420`/`430`/`450`/
+`0CD4`) mais fermée rapidement -- `gUnk_03000404` est référencé par
+`func_0800736C`, déjà classé "pression de registres" (échec documenté,
+`DECOMP_ARCHIVE.md`) ; `gUnk_03000410`/`03000414` appartiennent à une
+famille de constructeurs/destructeurs (`vtable_unk_080E5B54`/
+`vtable_unk_080E8594`) partiellement effleurée ce round
+(`func_080D7AAC`/`func_080D7B04` laissés en asm brut, non caractérisés)
+-- piste réelle mais pas creusée faute de budget ; le reste
+(`gUnk_03000418`/`41C`/`420`) vit dans le gros fichier
+`asm/code_080C7F00.s`, usage `r8`/`sb` intensif -- signal "pression de
+registres"/famille `Unpack`, pas engagé sans vérification préalable.
+
+### Repo state at end of round 10/w26
+
+- 3 nouveaux commits (`25ff995`, `6f788cc`, `7201ee1`), 4 fonctions
+  matchées au total.
+- `make compare` bit-exact (`sha1sum -c fomt.sha1` -> `Réussi`) sur
+  rebuild propre après chaque commit, y compris après correction du
+  piège du blob caché.
+- Aucun label `.LADDRESS` dupliqué détecté pour les adresses nouvellement
+  matchées.
+- `origin` intact, rien poussé, aucune PR. Worktree solo (`w26`/
+  `parallel-26`), pas de conflit observé avec les autres agents en cours
+  (w24 travaille sur un ensemble d'adresses disjoint, pas encore mergé
+  dans cette branche).
