@@ -6627,3 +6627,83 @@ aucun résidu.
   utilisés tout du long -- signal "pression de registres", pas attaqué).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `git status --short` vide après commit.
+
+## Round w44 (worktree `parallel-44`, branche `parallel-44`) -- extension du
+scanner de blobs cachés à TOUTE taille, sweep complet : 0 nouveau candidat
+
+Consigne : `scan_hidden_code_blobs.py` ne couvre que les blobs `.byte` de
+4-40 octets (angle mort documenté -- w39 avait trouvé le blob de 1084
+octets juste après cette limite, exploré par w41). Mission : écrire une
+variante qui cherche des blobs cachés de TOUTE taille sur l'ensemble
+d'`asm/*.s`, au cas où il en resterait d'autres, de taille intermédiaire ou
+plus grande, jamais catalogués.
+
+### Nouveau script : `tools/scripts/scan_hidden_code_blobs_v2.py`
+
+Généralise la détection de `scan_hidden_code_blobs.py` sur deux axes :
+- **Pas de plafond de taille** (`MAX_BLOB_BYTES=40` supprimé) : chaque bloc
+  `.byte` pur candidat est désassemblé/évalué par l'heuristique Thumb,
+  quelle que soit sa taille (le script v1 se contentait de LISTER les
+  blobs > 40 octets dans un worklist "medium_blocks" non vérifié, sans
+  jamais tenter le décodage dessus).
+- **Fusion des runs multi-blocs** : v1 exige que le bloc `.byte` candidat
+  soit immédiatement suivi d'un vrai `thumb_func_start` (ou de la fin de
+  fichier) -- si DEUX blocs `.byte` purs se suivent consécutivement entre
+  deux fonctions réelles, seul le DERNIER du groupe peut satisfaire ce test
+  et les précédents étaient silencieusement ignorés, à n'importe quelle
+  taille. v2 fusionne tout run maximal de blocs `.byte` purs consécutifs
+  entre deux fonctions (ou entre la dernière fonction et l'EOF) en un seul
+  candidat, peu importe le nombre de sous-blocs.
+
+Le reste de la méthode (parsing par blocs top-level, décodeur Thumb partiel
+maison, heuristique de plausibilité) est repris à l'identique de v1 --
+seule la sélection des candidats change. `v2` ne remplace pas `v1` (les
+deux se lancent), c'est un filet plus large jeté par-dessus.
+
+### Résultat du sweep complet (128 fichiers `asm/*.s`)
+
+`v2` trouve exactement les 2 mêmes candidats que la section "medium
+blocks, not auto-verified" de `v1` -- confirmant qu'il n'existe **aucun**
+run multi-blocs caché par la limitation de v1 dans l'état actuel du dépôt,
+et qu'aucun blob de taille intermédiaire/plus grande n'a été manqué :
+
+1. `asm/code_08050E98.s` `.L08050EE4`, 124 octets, `prev=func_08050EBC`,
+   `next=<EOF>`.
+2. `asm/code_actor_0809BFE8.s` `.L0809E1B4`, 288 octets, `prev=func_0809E1A4`,
+   `next=<EOF>`.
+
+Les deux étaient **déjà connus et déjà documentés** :
+
+- `.L08050EE4` (124 octets) = les 2 premiers fragments du blob de 1084
+  octets cartographié par w41 (`SESSION_NOTES.md`, section "Round w41"),
+  jamais matchés : `func_08050EE4` (88 octets, ctor vtable + bitfield,
+  near-miss "masque construit par négation") + pool littéral 16 octets +
+  `func_08050F4C` (18 octets, normalisation booléenne `v?1:v`, near-miss
+  "copie explicite élidée par notre compilateur"). Désassemblé à la main
+  ce round pour confirmer que le contenu est bien identique à la
+  cartographie w41 (`arm-none-eabi-objdump -D -bbinary -marmv4t
+  -Mforce-thumb --adjust-vma=0x08050EE4` sur les 124 octets bruts,
+  resynchronisé à la main après le pool littéral de 16 octets) --
+  confirmé octet pour octet, aucune nouvelle piste tentée n'a débloqué
+  `func_08050F4C` (essai `!!(v)` façon anti-pattern #12 : toujours 16
+  octets au lieu de 18, notre compilateur élide quand même la copie
+  explicite). Toujours en `.byte`, non commité.
+- `.L0809E1B4` (288 octets) = dead-end confirmé DEUX fois déjà (round
+  w23 puis un round ultérieur, voir `DECOMP_ARCHIVE.md` ligne ~474) --
+  aucun appelant symbolique trouvable, pas de nouvelle piste ce round.
+
+Aucun match commité ce round : les deux seuls candidats "medium" visibles
+sont des near-miss/dead-end déjà exploités à fond par des rounds
+précédents, pas de nouvelle cible. Le scan à 4-40 octets (`v1`) confirme
+aussi 0 candidat court, comme attendu (dernier scan exhaustif au round 9).
+
+### État du worktree en fin de round
+
+- Aucun match, aucun commit de code porté.
+- 1 fichier ajouté et NON commité : `tools/scripts/scan_hidden_code_blobs_v2.py`
+  (outil réutilisable pour les prochains rounds -- à commiter séparément
+  si Mathias le valide, laissé en `git status --short` pour inspection).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- Pas de `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` générés ce round (aucune
+  tentative de compilation appliquée au dépôt, seulement un harnais
+  scratch `/tmp` déjà nettoyé).

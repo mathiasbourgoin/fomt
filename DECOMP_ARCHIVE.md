@@ -507,13 +507,32 @@ jamais utilisée dans ce dépôt).
   compile-time, cf. `SESSION_NOTES.md` round w39 pour le détail complet
   des 2 hypothèses déjà fermées.
 - Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
-  (**1084 octets**, entre `func_08050EBC` et `func_08051320`) --
-  découvert round w39, **angle mort du scanner automatique**
-  (`scan_hidden_code_blobs.py` ne couvre que 4-40 octets, ce bloc est
-  27x plus gros). Contenu non analysé (candidat premier mot `push
-  {r4,r5,r6,lr}` plausible -- probablement PLUSIEURS fonctions
-  distinctes). Candidat sérieux pour un futur round dédié : nécessite un
-  désassemblage manuel complet avant tout port, pas encore fait.
+  (**1084 octets** à l'origine, entre `func_08050EBC` et `func_08051320`) --
+  découvert round w39 (**angle mort du scanner automatique**,
+  `scan_hidden_code_blobs.py` ne couvre que 4-40 octets, ce bloc était 27x
+  plus gros), **cartographié entièrement par w41** : 8 fonctions
+  distinctes séparées par 4 pools littéraux (détail complet,
+  `SESSION_NOTES.md` round w41). **5/8 matchées** (`func_08050F60`,
+  `func_08050F70`, `func_080512B8`, `func_080512C8`, `func_080512D0`,
+  commit `0ba5e82`). Restent en `.byte`, dans le nouveau
+  `asm/code_08050E98.s`/`asm/code_08050F74.s`/`asm/code_080512D8.s` issus
+  du découpage w41 :
+  - `func_08050EE4` (88o) et `func_080512D8` (60o+pool) -- même classe de
+    near-miss "masque construit par négation" que `func_08050E98`/
+    `func_08050EBC` ci-dessus (agbcp plie systématiquement le masque en
+    immédiat direct, jamais par `negs` à l'exécution).
+  - `func_08050F4C` (18o) -- near-miss "copie explicite élidée" (`v?1:v`
+    normalisation booléenne), reconfirmé round w44 (essai `!!(v)` façon
+    anti-pattern #12 : toujours 16 octets au lieu de 18).
+  - `func_08050F74` (44o) -- near-miss registre r4/r5 échangé + wraparound
+    `__umodsi3`, détail `SESSION_NOTES.md` round w41.
+  - `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o) -- 3 fonctions
+    "pression de registres" (`r8`/`r9`/`sl` vivants dans le corps),
+    identifiées mais jamais tentées, candidates pour escalade `fable`.
+  Round w44 (sweep étendu `scan_hidden_code_blobs_v2.py`, toute taille) a
+  reconfirmé que ces fragments sont les SEULS candidats "medium" restants
+  dans tout `asm/*.s` avec `.L0809E1B4` ci-dessous -- aucun nouveau blob
+  caché de taille intermédiaire/plus grande ailleurs dans le dépôt.
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
