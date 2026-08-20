@@ -276,7 +276,29 @@ converger plus vite pendant la phase de tâtonnement.
 | `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
 | `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
+| `func_0809A518` | destructeur "riche" de la famille des ~23, 2 enfants (offset+4 MI, offset+8 plain) | 6 (w7) | `95a55f3` |
+| `func_080C7ED0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e902a6c` |
+| `func_080BC8C0` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `3f33b7d` |
+| `func_080B3C0C` | destructeur "riche", 1 enfant offset+4 (MI) | 6 (w7) | `e5a8f43` |
 
+## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
+le premier slot déclaré
+
+Confirmé round 6 en lisant les octets bruts de `vtable_unk_080E5A88`
+(`func_08004C54`, déjà vérifiée bit-exact round 4) directement dans
+`baserom.gba` : mot0/mot1 = `0`, mot2 (offset +8) = le destructeur, mot3
+(offset +12) = la méthode virtuelle suivante déclarée. **Toute classe C++
+écrite dans ce dépôt pour matcher un vtable existant doit donc compter
+le premier slot utile à l'offset +8, pas +0** -- une classe locale avec UNE
+SEULE méthode virtuelle déclarée (pas de destructeur) place cette méthode
+à l'offset +8 automatiquement, ce qui matche directement le pattern
+`ldr rX, [rY, #8]` vu dans la famille des "23 destructeurs riches"
+(`func_08004C54`) sans qu'il faille ajouter un destructeur ou une méthode
+placeholder pour "pousser" le slot -- la première tentative round 6 a fait
+exactement cette erreur (ajouté un destructeur virtuel + une méthode
+placeholder en pensant "reconstituer" 3 slots utiles) et a produit
+l'offset +16 au lieu de +8, corrigé en ne déclarant QUE la méthode
+réellement appelée.
 ## Mécanique de découpage d'une section `.text.code_ADDR` (linkonce/COMDAT)
 
 Contrairement à un fichier `asm/*.s` monolithique en `.text` implicite,
@@ -311,10 +333,15 @@ sur un build propre AVANT de toucher au fichier.
 ## Prochaines cibles priorisées (voir `SESSION_NOTES.md` round 4-5 pour le détail complet)
 
 1. ~~`func_080E09B0`~~ -- matché round 5.
-2. La famille de ~23 destructeurs "plus riches" (vtable + teardown
-   d'enfant via appel virtuel) -- **ne pas deviner le layout du champ
-   enfant à l'offset +4 avant de le caractériser côté dépôt patch**
-   (Ghidra sur 2-3 exemples).
+2. ~~La famille de ~23 destructeurs "plus riches"~~ -- layout du/des
+   champ(s) enfant CARACTÉRISÉ round 6 (`w7`), directement depuis le
+   désassemblage (pas besoin de Ghidra en fait) : voir la section
+   "Layout des vtables sous `-fvtable-thunks`" ci-dessus. 4 exemples
+   matchés round 6 (`func_0809A518`, `func_080C7ED0`, `func_080BC8C0`,
+   `func_080B3C0C`). Reste ouvert : les ~19 autres sites de la famille
+   (le round 6 n'a traité que la moitié haute des adresses,
+   `code_linkonce.s` compris, pas encore attaqué -- cf.
+   `SESSION_NOTES.md` round 6 "What's left in this family").
 3. Reste ouvert depuis les rounds 1-3 : la fonction documentée
    `franglais_transition_ctl_query` côté dépôt patch (`0x08050DF0`,
    NdR : ce nom-là vient de `docs/*.md` du dépôt patch, uniquement comme
