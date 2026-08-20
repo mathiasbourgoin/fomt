@@ -6,7 +6,7 @@
 
 	.global gUnk_084F90CC
 gUnk_084F90CC:
-	.incbin "baserom.gba", 0x4F90CC, 0x16D4
+	.incbin "build/franglais_font_084F90CC.bin"
 
 	.global gUnk_084FA7A0
 gUnk_084FA7A0:

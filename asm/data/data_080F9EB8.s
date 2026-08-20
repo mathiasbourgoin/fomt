@@ -3332,39 +3332,40 @@ gUnk_08117B5C:
 
 	.global gUnk_08117B68
 gUnk_08117B68:
-	.incbin "baserom.gba", 0x117B68, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x00, 0xC
 
 	.global gUnk_08117B74
 gUnk_08117B74:
-	.incbin "baserom.gba", 0x117B74, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x0C, 0xC
 
 	.global gUnk_08117B80
 gUnk_08117B80:
-	.incbin "baserom.gba", 0x117B80, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x18, 0xC
 
 	.global gUnk_08117B8C
 gUnk_08117B8C:
-	.incbin "baserom.gba", 0x117B8C, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x24, 0xC
 
 	.global gUnk_08117B98
 gUnk_08117B98:
-	.incbin "baserom.gba", 0x117B98, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x30, 0xC
 
 	.global gUnk_08117BA4
 gUnk_08117BA4:
-	.incbin "baserom.gba", 0x117BA4, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x3C, 0xC
 
 	.global gUnk_08117BB0
 gUnk_08117BB0:
-	.incbin "baserom.gba", 0x117BB0, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x48, 0xC
 
 	.global gUnk_08117BBC
 gUnk_08117BBC:
-	.incbin "baserom.gba", 0x117BBC, 0xC
+	.incbin "build/franglais_font_08117B68.bin", 0x54, 0xC
 
 	.global gUnk_08117BC8
 gUnk_08117BC8:
-	.incbin "baserom.gba", 0x117BC8, 0x21EC0
+	.incbin "build/franglais_font_08117B68.bin", 0x60, 0xC
+	.incbin "baserom.gba", 0x117BD4, 0x21EB4
 
 	.global gUnk_08139A88
 gUnk_08139A88:
