@@ -5300,3 +5300,96 @@ plus longtemps que le corps plain (elle n'est pas seule dans ce cas :
   confirmer l'absence d'erreur de lien -- aucune référence non définie ni
   symbole dupliqué.
 - `origin` non touché, rien poussé, pas de PR.
+
+## Round 11 (worktree w33, branche `parallel-33`) -- placement constructors, balayage exhaustif angle 1
+
+Consigne : reprendre l'angle "constructeurs de placement" (round 10/w24)
+en vérifiant si la liste avait été balayée exhaustivement, puisqu'un autre
+agent (w32) travaillait en parallèle sur les vtables/callers -- angle
+volontairement différent pour éviter tout recoupement.
+
+**Méthode** : reproduction du script du round 10/w24 (non commité à
+l'époque, refait ici) -- parcours de tous les blocs `thumb_func_start` de
+`asm/*.s`, filtre sur "contient un littéral `vtable_unk_ADDR` ET un `bl
+__builtin_new`", croisé avec `arm-none-eabi-nm build/src/*.o | grep '
+T func_'` (build propre fait au préalable, `build/franglais_stub.bin`
+factice `head -c 4096 /dev/zero`) pour exclure tout ce qui est déjà porté.
+153 blocs candidats trouvés au total ; la grande majorité sont de gros
+`Run()` de scène qui référencent des vtables et appellent `__builtin_new`
+de façon incidente (plusieurs objets construits dans un même corps), pas
+la forme resserrée de constructeur de placement -- filtré manuellement en
+inspectant le désassemblage brut de chaque candidat à ligne-compte réduit
+(<=100 lignes, 1-2 vtables). 15 sites retenus comme correspondant
+clairement à la forme "constructeur de placement" déjà documentée.
+
+**Résultat : 15/15 matchés et commités** (`d6fabdf`) -- voir
+`DECOMP_ARCHIVE.md` section "Round 11 (w33)" pour le détail complet des
+noms, adresses, et des 3 sous-variantes (dont 2 réellement nouvelles :
+layout inversé `func_080756B0`, layout étendu self+0xc/self+0x10
+`func_0807D070`/`func_08088168`).
+
+**Piège vécu et corrigé avant tout commit** : 4 des 15 sites
+(`func_08077C40`, `func_0807B038`, `func_0807D070`, `func_0807E438`)
+avaient un blob `.byte` caché (fonction non matchée, pas de
+`thumb_func_start`) collé entre leur propre fin et la fonction réelle
+suivante -- mon script de découpage naïf (calqué sur la méthode
+`DECOMP_RULES.md`, généralisée pour gérer plusieurs cibles dans un même
+fichier) capturait tout le bloc jusqu'au PROCHAIN `thumb_func_start`, donc
+incluait silencieusement ce blob dans la partie "supprimée" au lieu de le
+laisser dans le nouveau fichier de queue. Détecté en comparant la taille
+`.text` du `.o` fraîchement compilé à l'écart d'adresse réel
+(`next_addr - this_addr` calculé sur le `fomt.elf` lié) : 4 fonctions sur
+15 montraient un `.o` plus PETIT que l'écart attendu (44-224 octets
+manquants selon le site). Corrigé en réinjectant le blob `.byte` intact
+(recopié depuis les fichiers extraits en scratch avant leur suppression)
+dans le nouveau fichier `asm/code_NEXT.s`, juste avant le `thumb_func_start`
+réel qui suit. Revérifié après coup : rebuild complet, `fomt.map` confirme
+que tous les symboles en aval (`func_08077CE0`, `func_0807B0F0`,
+`func_0807D194`, `func_0807E4B8`, et les autres fonctions déjà portées
+juste après chaque site à un seul candidat) retombent exactement sur leur
+adresse vanilla attendue -- aucun décalage résiduel.
+
+**Vérification appliquée à chacun des 15, standard officiel
+`DECOMP_RULES.md`** : harnais rapide (compilateur+assembleur, comparaison
+octet à octet contre le désassemblage brut original) pendant le
+tâtonnement, PUIS taille `.text` du `.o` du build propre comparée à
+`next_addr - this_addr`, PUIS diff de désassemblage borné à cette taille
+exacte contre `baserom.gba` (`--adjust-vma=0x08000000`) -- bit-exact sur
+les 15. Rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map`)
+avant le commit : lien réussi sans référence non définie ni symbole
+dupliqué ; `sha1sum -c fomt.sha1` échoue comme attendu (payload franglais
+intentionnellement non-vanilla, non-signal documenté dans
+`DECOMP_RULES.md`). Aucune étiquette `.LADDRESS` résiduelle trouvée pour
+aucune des 15 adresses matchées (`grep -rl` vérifié individuellement pour
+chacune).
+
+**État du worktree en fin de round** : propre (`git status --short`
+vide), un seul commit ajouté depuis `main`/point de départ (`d6fabdf`,
+15 fonctions dans un seul commit -- justifié par le fait que toutes ont
+été vérifiées ensemble dans le même cycle de rebuild final, contrairement
+au cas "un blob = un commit" du scan de blobs cachés qui concerne des
+candidats indépendants les uns des autres). `origin` non touché, rien
+poussé, pas de PR.
+
+**Cibles explorées mais écartées pour ce round** (candidats du même scan,
+risque/complexité jugés trop élevés pour ce budget, laissés pour un futur
+round) :
+- `func_08083A7C` (asm/code_08082184.s) : même famille mais avec 7
+  paramètres au total (4 registres + 4 arguments passés sur la pile aux
+  offsets `sp+0x28/0x2c/0x30/0x34`) et 7 champs stockés (self+0 à
+  self+0x1c) -- ABI/layout nettement plus complexe que les 2 sous-
+  variantes étendues confirmées ce round, pas tenté par prudence.
+- `func_08092570` (asm/code_08090EC4.s) : la valeur "volée" de
+  l'out-param est stashée sur la pile et son ADRESSE (pas la valeur) est
+  passée à l'appel d'init opaque -- signature de la classe de difficulté
+  "assignation de champ SmartPtr" déjà documentée comme difficile
+  (7 hypothèses testées et négatives sur `func_08004C68`, cf.
+  `DECOMP_ARCHIVE.md`) ; pas tenté pour ne pas rouvrir ce chantier sans
+  budget dédié.
+- `func_0806D8C8`, `func_080DB320`, `func_080DB658`, `func_08004B58`,
+  `func_08004B94` : variantes avec dispatch virtuel de destructeur en fin
+  de corps (`bl _call_via_r2` sur le champ volé) ou construction
+  composite imbriquée (helper 4 ou 0xc octets construit sur pile puis
+  passé à un `func_080041DC` déjà connu) -- shape différente de la
+  famille standard, pas creusées faute de temps ce round, laissées comme
+  piste pour un futur agent.
