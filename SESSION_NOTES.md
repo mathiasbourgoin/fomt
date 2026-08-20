@@ -5613,3 +5613,131 @@ round) :
   passé à un `func_080041DC` déjà connu) -- shape différente de la
   famille standard, pas creusées faute de temps ce round, laissées comme
   piste pour un futur agent.
+
+## Round w36 (worktree `parallel-36`) -- angle "blob medium w32" épuisé, nouveau blob trouvé et matché : `func_08075678`/`func_08075690`
+
+Consigne : reprendre `.L0809E1B4` (`asm/code_actor_0809BFE8.s`, 288 octets,
+piste ouverte depuis round 10/w23 puis recontrôlée round "3 angles neufs"/w32)
+en tentant d'analyser ses 4 callees encore en asm pour deviner un contexte
+d'appel, ou en cherchant un appel indirect (table de dispatch).
+
+### `func_0809E1B4` : confirmé dead-end, rien de neuf
+
+Relecture indépendante de `SESSION_NOTES.md` a révélé que ce blob a en fait
+déjà eu un round dédié complet et bien plus tôt que ce que l'archive
+laissait penser : **round 10 (worktree w23)** l'avait déjà entièrement
+désassemblé, compris structurellement (fonction "format une valeur dans un
+buffer de message à offsets scatter", `if`/`else` sur `loc.map`, 2x2 helpers
+`func_0809D79C/D7D8/D418/D470` encore en asm) et tenté **~10 réécritures C
+structurelles distinctes**, toutes convergeant sur le MÊME symptôme unique :
+un swap de registres `r4`/`r5` entre `idx` et un pointeur de table
+d'offsets, jugé relever d'une heuristique interne d'allocation de registres
+d'`agbcp` non atteignable par changement de forme C (voir détail complet
+`SESSION_NOTES.md` round 10/w23, section "`func_0809E1B4`, ~288-byte..."). Le
+verdict explicite de ce round était : ne pas retenter par simple
+restructuration C sans nouvelle piste (ex. hint de registre via `asm()`,
+technique inédite dans tout ce dépôt -- vérifié ici : `grep -rn 'asm(' src/*.cc`
+et `grep -rln 'register '` ne remontent rien, confirmant qu'aucune fonction
+déjà portée n'utilise cette technique).
+
+Contrôles indépendants effectués ce round (négatifs, confirment w32) :
+- Aucun appelant symbolique ni indirect : `grep` de `0809E1B4`/`0809E1B5`
+  sur tout `asm/`/`src/` -> 0 hit hors le label lui-même.
+- Les 4 callees (`func_0809D79C`/`D7D8`/`D418`/`D470`) n'ont aucun autre
+  site d'appel dans tout le dépôt (chacun un seul `bl`, celui de
+  `func_0809E1B4`).
+
+**Verdict : pas de nouvelle piste, pas de nouvelle tentative** -- 10
+tentatives sérieuses déjà consommées par un round antérieur avec un
+diagnostic explicite et stable, aucune technique inédite disponible sans
+sortir du style C pur du dépôt. Pas de fichier modifié pour cette cible.
+
+### Bascule méthode sœur -- `DECOMP_ARCHIVE.md` "Autres cibles ouvertes" : entièrement périmée
+
+Vérification de chaque entrée de la section avant de choisir une cible :
+- `franglais_transition_ctl_query` (`0x08050DF0`) : **déjà matché**
+  (confirmé round "3 angles neufs"/w32, entrée obsolète).
+- Table de dispatch script (`0x0803F900`) : écartée -- même famille que
+  les candidats "dispatch/composite constructor" repris en parallèle par
+  w35 (consigne explicite d'éviter le recoupement).
+- `func_08010F14` : déjà matché (round 8/w17), pas une cible, entrée à
+  visée seulement documentaire.
+- `asm/code_entities_08034CEC.s` (160 octets) : **déjà matché** (round
+  10/w23, commit `0ae8f12`, groupe `func_0803A804`/7 fonctions) -- entrée
+  obsolète.
+- `asm/code_08010F54.s` (272 octets) : écartée par consigne explicite
+  (risque de chevauchement avec `franglais_boot_fsm_run`, classe
+  "pression de registres", sauf idée neuve -- aucune idée neuve identifiée
+  ce round).
+
+**Toutes les entrées de cette section sont donc soit obsolètes soit hors
+périmètre pour ce round** -- ménage à faire dans `DECOMP_ARCHIVE.md` (2
+entrées obsolètes à retirer : `franglais_transition_ctl_query`,
+`code_entities_08034CEC.s`).
+
+### Nouveau blob trouvé et matché : `func_08075678`/`func_08075690`
+
+Re-exécution de `tools/scripts/scan_hidden_code_blobs.py` (sweep anti-doublon
+systématique) : en plus du blob `.L0809E1B4` déjà connu, révèle un
+**nouveau candidat "medium" jamais catalogué** :
+`asm/code_0807565C.s` `.L08075678` (56 octets, `prev=func_0807565C`,
+`next=<EOF>`) -- absent de toutes les mentions précédentes dans
+`DECOMP_ARCHIVE.md`/`SESSION_NOTES.md`.
+
+Désassemblage manuel (`objdump -D -bbinary -marmv4t -Mforce-thumb
+--adjust-vma=0x08075678`) : **2 fonctions réelles distinctes**, bornes
+propres (24 + 32 octets, la 2e se terminant exactement à `0x080756B0`, début
+de `func_080756B0` déjà porté -- aucune ambiguïté de coupure) :
+
+- `func_08075678` (24 octets) : lit 2 champs (`+8`, `+16`) d'un pointeur de
+  struct reçu en r3 (4e argument), les transmet en 3e/4e argument (registre
+  + pile) à `func_08075334` (encore en asm, `asm/code_08070A08.s`), en
+  laissant r0/r1/r2 inchangés (transmis tels quels de l'appelant).
+- `func_08075690` (32 octets, incl. pool littéral) : même schéma mais
+  indexe la table globale `gUnk_080FC024` (stride 8 octets) par r3 (index,
+  pas un pointeur), transmet `table[idx].f0`/`table[idx].f4`.
+
+`func_08075334` (callee commun, non porté) est une vraie fonction de
+gestion de file/tableau dynamique (`malloc`, ring buffer à `self+0x594`),
+appelée symboliquement 8 fois ailleurs dans `asm/code_08070A08.s` --
+suffisant pour ancrer le RÔLE des 2 wrappers (transmission de 2 arguments
+supplémentaires vers un push de file) sans avoir besoin de porter
+`func_08075334` lui-même. **Aucun appelant symbolique/indirect trouvé pour
+les 2 wrappers eux-mêmes** (grep négatif) -- même situation que
+`func_0809E1B4`, mais ici la sémantique des paramètres transmis est déduite
+de la forme du callee (constatée, pas inventée), pas d'un site d'appel
+direct.
+
+Exactement le même schéma "overload par pointeur vs overload par index
+appelant le même helper" déjà documenté pour `func_08011DC4`/`func_08011ED8`
+(round 10/w23).
+
+**Match confirmé du premier coup** (harnais rapide compilateur seul, sans
+itération) : taille `.text` de l'objet frais = `0x38` (56 octets, exact),
+diff de désassemblage de `fomt.elf` linké borné à
+`[0x08075678, 0x080756B0)` **byte-identique** à `baserom.gba`, y compris le
+décalage `bl func_08075334` résolu et l'adresse `0x080FC024` résolue dans le
+pool littéral. Nouveau fichier `src/code_08075678.cc`, `asm/code_0807565C.s`
+(blob retiré), `fomt.lds` (entrée `src/code_08075678.o(.text);` insérée
+juste après `asm/code_0807565C.o(.text);`, avant `src/code_080756B0.o(.text);`,
+suivant la convention documentée plus haut dans ce fichier). Commit
+`79feaf1`.
+
+Sweep anti-doublon post-ajout : `scan_hidden_code_blobs.py` reconfirme
+0 nouveau court blob, plus qu'1 seul "medium" restant (`.L0809E1B4`,
+dead-end confirmé ci-dessus).
+
+### Repo state en fin de round
+
+- 1 commit (`79feaf1`), vérifié par le standard officiel (taille `.text`
+  exacte + diff borné byte-identique sur `fomt.elf` linké vs
+  `baserom.gba`), pas de `make compare`/`sha1sum` bit-exact global possible
+  (raison `cb06198`, sans rapport).
+- `git status --short` vide après commit, aucun fichier de scratch laissé
+  (`/tmp/w36scratch/` hors dépôt).
+- `origin` intact, rien poussé, aucune PR.
+- Reste ouvert pour un futur round : `func_08075334` lui-même (le vrai
+  helper de push de file, non trivial : `malloc`, ring buffer à
+  `self+0x594`, 8 sites d'appel symboliques dans
+  `asm/code_08070A08.s` -- candidat sérieux pour un futur round dédié,
+  contexte d'appel abondant contrairement à `func_0809E1B4`).
