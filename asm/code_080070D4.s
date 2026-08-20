@@ -32,15 +32,3 @@ func_080070D4: @ 0x080070D4
     pop {r1}
     bx r1
     .align 2, 0
-
-    thumb_func_start func_08007110
-func_08007110: @ 0x08007110
-    ldr r0, [r0, #4]
-    ldr r1, .L08007118 @ =0x0000461C
-    adds r0, r0, r1
-    bx lr
-    .align 2, 0
-.L08007118: .4byte 0x0000461C
-.L0800711C:
-    .byte 0x01, 0x49, 0x40, 0x18
-    .byte 0x70, 0x47, 0x00, 0x00, 0x1C, 0x46, 0x00, 0x00

@@ -3256,3 +3256,246 @@ here have considered, rather than continuing to shape-hunt blind.
   update (`SESSION_NOTES.md`) is the only change in this worktree.
 - `origin` push URL untouched, nothing pushed, no PR, no network action
   against origin.
+||||||| 59d9b13
+
+## Round 8 (worktree w15) -- func_08004C68 callee sweep
+
+### Goal
+
+Assigned mission: work through `func_08004C68`'s 12+ still-undecompiled
+callees (per round 6's priority list -- the text-capture widget family
+`func_08007078`/`func_080070D4`/`func_08007110`/`func_080070A4`, the
+confirm-screen family `func_0800598C`/`func_08005A00`/`func_08005A3C`/
+`func_080059D0`, the selector-widget family `func_0806E9D8`/
+`func_0806EA30`/`func_0806EA6C`/`func_0806EA00`, and the 3 hardware
+callees `func_08008980`/`func_08008DB8`/`func_08008A68`), then re-attempt
+`func_08004C68` itself once enough callees are resolved.
+
+### 7 new matches this round (10/15 of the tracked callee list now done)
+
+Confirmed bit-exact via clean rebuild + `make compare`, one commit each
+(2 commits bundle 2 functions where a single monolithic-file split made
+them land together atomically -- see commit messages):
+
+| function | role | commit |
+|---|---|---|
+| `func_0806EA6C` | selector-widget byte getter, `*(self+4)+0x448` | `95de198` |
+| `func_08007110` | text-capture-widget pointer getter, `*(self+4)+0x461C` | `bbf7765` |
+| `func_08005A3C` | confirm-screen-widget byte getter, `*(self+4)+0x1A76` | `476d93c` |
+| `func_08007078` | text-capture-widget constructor (dtor `func_080070A4`) | `476d93c` |
+| `func_0800598C` | confirm-screen-widget constructor (dtor `func_080059D0`) | `9c50133` |
+| `func_0806E9D8` | selector-widget constructor | `9c50133` |
+| `func_08008DB8` | `m4aSongNumStartOrChange` u16-truncating wrapper | `b7e035a` |
+
+**New pattern confirmed**: all 3 widget families (text-capture, confirm-
+screen, selector) share the exact same **placement-constructor shape**
+already established structurally by the "richer destructor" family, just
+mirrored for construction instead of teardown: `*self = vtable_unk_ADDR;
+void *obj = operator new(SIZE); obj = InitFn(obj, ...args); *(self+4) =
+obj; return self;`. Verified identical byte-for-byte shape across all 3
+constructors (`func_08007078` size `0x4640`, `func_0800598C` size
+`0x1A78`, `func_0806E9D8` size `0x454`), only the vtable constant, alloc
+size, init-callee name/arity, and argument count/stack-passing differ.
+**Generalizable**: any future "constructor of a `self+4`-child-teardown
+family" member likely follows this exact shape -- write it first, verify
+size, done, no shape-hunting needed.
+
+**Getters generalize too**: 3 of the 4 byte/pointer getters ported this
+round (`func_0806EA6C`, `func_08007110`, `func_08005A3C`) are all the
+literal one-liner `*(u8|void*)((char*)(*(void**)(self+4)) + OFFSET)` --
+zero iteration needed, first quicktest pass matched every time.
+
+### Mechanical trap re-confirmed: literal pool vs trailing unlabeled
+bytes when splitting a monolithic `.s` file mid-function
+
+Hit once this round (`func_08005A3C`/`func_08007078` split of
+`asm/code_08005A00.s`), cost one wasted `make compare` cycle (caught
+cleanly, no broken commit): the sequence after a mid-file target
+function's own body is often **two distinct things back to back** --
+(1) the target's OWN literal pool (a `.LADDR: .4byte ...` label whose
+address is the function's own tail, already fully reproduced by the C
+port's compiler-generated pool) and (2) separately, **unlabeled raw
+Thumb bytes belonging to an uncatalogued NEXT function** (no
+`thumb_func_start`, just `.byte` dumps -- same phenomenon already noted
+round 7 for `0x08010F14`). **When cutting the "everything after the
+target" chunk into the new split file, start strictly AFTER the
+target's own literal-pool label, never at or before it** -- including
+that label duplicates 4 (or more) bytes that the ported C already
+emits on its own, shifting every following address by exactly that
+much and producing a huge cascading `bindiff.sh`/`asmdiff.sh` diff that
+looks unrelated to the actual (small, correct) function content. Size-
+check rule already in `DECOMP_RULES.md` ("vérifier taille puis
+contenu") catches this immediately (`readelf -S` on the ported `.o`
+matches the port's own expected size; the diff is entirely downstream).
+**At least 3 of these uncatalogued uninitialized-function tails were
+seen again this round** (`asm/code_0800711C.s`, inside
+`asm/code_08005A58.s` right after `func_08005A3C`'s pool, inside
+`asm/code_08008DE8.s` right after `func_08008DB8`) -- all left
+untouched/unlabeled, out of scope for this round's mission, flagged for
+whoever eventually catalogues the full symbol table.
+
+### Genuinely NOT converged this round: the "SmartPtr field assignment"
+shape (`func_080070D4`, `func_08005A00`)
+
+These two functions (identical shape, only the opaque init callee
+differs -- `func_08005B68` vs `func_080050F8`) are called by
+`func_08004C68` between/after each of the 3 name captures to store the
+freshly-built widget's result into the sequence's own state object.
+Disassembly (`asm/code_080070D4.s` before this round's split, 33
+instructions):
+
+```
+push {r4, lr}; sub sp, #0xc
+adds r4, r0, #0            @ r4 = field (param0 -- address of a SmartPtr<T>-shaped slot)
+ldr r1, [r1, #4]             @ r1 = *(param1 + 4)
+mov r0, sp
+bl func_08005B68               @ func_08005B68(&sp[0], r1) -- fills sp[0] via hidden-ptr/out-param convention
+ldr r2, [sp]                     @ r2 = sp[0]
+mov r0, sp
+str r0, [sp, #4]                   @ sp[4] = &sp[0]        <-- reference/alias slot, see below
+str r2, [sp, #8]                     @ sp[8] = r2 (raw copy)
+adds r1, r0, #0                        @ r1 = &sp[0]
+movs r0, #0
+str r0, [r1]                             @ sp[0] = 0 (through the alias)
+str r2, [r4]                               @ *field = r2
+ldr r1, [sp]                                 @ r1 = sp[0] (== 0)
+cmp r1, #0; beq skip
+    ldr r0,[r1]; ldr r2,[r0,#8]; adds r0,r1,#0; movs r1,#3; bl _call_via_r2   @ vt[2](r1, 3) -- provably dead, r1==0
+skip:
+adds r0, r4, #0; add sp, #0xc; pop {r4}; pop {r1}; bx r1
+```
+
+**What's established with confidence** (structural, from the bytes
+alone): this is `SmartPtr<T>`-shaped teardown logic identical in kind to
+the already-matched "richer destructor" family's child teardown
+(`if (child) { vt = *(void***)(child+4)... ` -- except here the check
+is on OFFSET 0 of the checked pointer, not offset+4, meaning whatever
+type is being torn down here has its OWN vtable at offset 0, i.e. is a
+"normal" single-inheritance polymorphic object, not a multi-inheritance
+child like the destructor family's). The `if (r1 != 0) vt[2](r1, 3)`
+tail is `SmartPtr<T>::~SmartPtr()`'s `delete inner;` compiled out, and
+it fires on a value **already known to be exactly 0** at that point in
+straight-line control flow -- meaning agbcp did NOT eliminate this
+dead branch (contrary to what happens when the same "if (x) ...;
+x=0;"-then-later-"if(x)" shape is written directly in hand-rolled C --
+confirmed by testing, see below).
+
+**What was tried, and why each attempt failed to reproduce this exact
+shape**:
+
+1. Hand-rolled C with an explicit `if (rhs.inner != nullptr) { ... }`
+   after nulling `rhs.inner` directly in a local `struct { void
+   *inner; }`: **agbcp folds the dead branch away entirely** (15
+   instructions produced vs. 33 expected) -- confirms agbcp DOES do
+   this one narrow dead-code elimination when the whole chain (null-
+   write, then read, then compare) is visible in one un-indirected
+   local variable within a few straight-line statements. This directly
+   contradicts the general "agbcp is weak/non-optimizing" prior from
+   `DECOMP_RULES.md`'s anti-pattern list -- **that prior needs
+   qualifying**: agbcp is weak on arithmetic/bitfield peepholes and
+   branch restructuring, but DOES do at least this one simple same-
+   variable dead-store-then-dead-load elimination. Not yet understood
+   exactly how narrow this optimization is (single local, single basic
+   block? more?) -- would need a dedicated micro-benchmark round to
+   characterize.
+2. `*field = func_08005B68(arg).Move()` (using the real
+   `SmartPtr<T>::Move()` from `include/smart_ptr.hh`, letting the
+   compiler-generated destructor of the anonymous temporary do the
+   dead check implicitly instead of a hand-written `if`): **still
+   folded away** (16 instructions) -- so it's not specifically the
+   *hand-written* `if` that's optimized; implicit compiler-inserted
+   destructor calls on a temporary get the same treatment when the
+   temporary's nulling and the destructor check are both in the same
+   local scope with nothing else observably touching the slot's
+   address in between.
+3. `SmartPtr<T> tmp(func_08005B68(arg));` (naming a local initialized
+   directly from another function's SmartPtr-by-value return):
+   **does not compile** -- hits the already-documented private-no-op-
+   copy-ctor trap (`DECOMP_RULES.md`, "Piège `SmartPtr<T>`"), confirmed
+   to also apply to plain local-variable initialization, not just
+   `return` statements as previously documented. **Extending that
+   rule**: `SmartPtr<T> local(FunctionReturningSmartPtrByValue());`
+   NEVER compiles under this codebase's `SmartPtr<T>`, regardless of
+   context (return statement, local init, or reference-parameter
+   binding, see attempt 4) -- only construction from a raw `T*` (the
+   explicit ctor) is legal for naming a local.
+4. Two-step version with a custom local class exposing
+   `operator=(MySmartPtr &rhs)` (hypothesis: the "reference alias"
+   slot at `sp+4` in the target is the machine-level trace of a
+   reference PARAMETER of an inlined `operator=(SmartPtr&)`, which
+   would explain why the null-check survives -- writes through an
+   *aliasing pointer* the narrow peephole from attempt 1 can't see
+   through): **does not compile**, `agbcp` rejects binding a non-const
+   reference parameter directly to an rvalue temporary
+   (`func_08005B68(arg)` used directly as the argument expression) --
+   this IS standard-conforming C++ (pre-C++11, no rvalue refs), so this
+   avenue requires a named lvalue temporary bound to the reference,
+   which reopens attempt 3's private-copy-ctor wall for any SmartPtr-
+   typed named local initialized from a SmartPtr-by-value return.
+
+**Honest state**: not converged, no working hypothesis left untested
+that doesn't hit one of these two walls (dead-code folding when
+straight-line, or a compile error when routed through a reference/named
+copy). The `sp+4`/`sp+8` "store address-of-self then store value-copy"
+double-write immediately after the `func_08005B68` call is the one
+piece of the disassembly not yet explained by ANY tested hypothesis --
+worth a fresh angle next round: possibly a *by-value* struct-return
+convention detail specific to a 2-word type (not `SmartPtr<T>`'s 1
+word) that has been misidentified as `SmartPtr<T>`-shaped, or a
+different helper class entirely (e.g. an iterator/reference-counted
+handle used only for this specific field-assignment idiom, not the
+same `SmartPtr<T>` used everywhere else in this repo). **Classifying
+this as a new, distinct difficulty class from both "register pressure"
+and the already-documented `SmartPtr<T>` return-statement trap** --
+recommend a dedicated round with budget to test 3-4 more C++ shape
+hypotheses before falling back to "infeasible in C" the way `Unpack`
+was, which has NOT been established here (unlike `Unpack`, nothing
+here violates the ABI itself -- this is a shape-hunting problem, not a
+structural one).
+
+### Not attempted this round (budget)
+
+- `func_0806EA30` (selector-widget setter counterpart to
+  `func_0806EA6C`'s getter): calls `func_0806DB38` first, which is a
+  genuine "register pressure" class function (`r8`+`sb`+`sl` used in
+  its body, ~180+ lines, multiple nested calls) per the existing
+  `DECOMP_RULES.md` classification -- **not attempted**, flagged
+  consistent with that class's "don't retry without dedicated budget"
+  rule. Note `func_0806EA30` ITSELF might still be portable calling
+  `func_0806DB38` as an opaque callee (same trick used throughout this
+  round for other opaque `InitFn`s) -- worth a quick, cheap try next
+  round even without decompiling `func_0806DB38`'s body, since only
+  `func_0806EA30`'s OWN shape matters for a match, not its callee's.
+- `func_08008980` (hardware.s, `sb`/`r8` used in its own prologue --
+  register-pressure signal) and `func_08008A68` (hardware.s, shorter,
+  not yet disassembled in full) -- not attempted, no budget left this
+  round. `func_08008980` should be treated with the same caution flag
+  as `func_0806EA30` (register-pressure signature present) before
+  attempting; `func_08008A68` looked short in a first glance and may be
+  tractable -- good first candidate for whoever picks this up.
+- `func_08004C68` itself: **NOT attempted this round.** With 10/15
+  callees now resolved (bit-exact matched or already-matched before
+  this round) and 5 still open (2 in the newly-characterized "SmartPtr
+  field assignment" class directly blocking two of the three name-
+  capture call sites, 3 not yet attempted), and given round 6's prior
+  finding that the full ~150-instruction port ALSO needs to resolve the
+  double-vtable-stamp-via-genuine-subclass question (`SmartPtr<T>`
+  return trap) independent of the callee signatures -- judged, honestly,
+  still out of reach of a single round's budget. Recommend: close the
+  remaining 5 callees (or at least establish firm prototypes for all of
+  them, which does NOT require their bodies to be bit-exact-ported,
+  only correctly shaped extern declarations) before the next
+  `func_08004C68` attempt.
+
+### Repo state at end of round 8
+
+- 7 new commits (`95de198`, `bbf7765`, `476d93c`, `9c50133`,
+  `b7e035a`, see table above -- 2 of the 7 matched functions are
+  bundled into 2 of these commits since a single monolithic-file split
+  produced both atomically).
+- `make compare` bit-exact (`sha1sum -c fomt.sha1` -> `Réussi`) on a
+  full clean rebuild after every commit in this round, no exceptions.
+- `origin` push URL untouched, nothing pushed, no PR, no network action
+  against origin. No concurrent-session activity observed (other
+  worktrees `w16`/`w17` mentioned as active in parallel on unrelated
+  targets, per the mission brief -- no interference seen in `git log`).

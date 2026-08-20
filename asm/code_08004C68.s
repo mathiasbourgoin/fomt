@@ -1604,38 +1604,3 @@ func_08005800: @ 0x08005800
     .align 2, 0
 .L08005984: .4byte 0x00001A75
 .L08005988: .4byte 0x00001A76
-
-    thumb_func_start func_0800598C
-func_0800598C: @ 0x0800598C
-    push {r4, r5, r6, lr}
-    mov r6, sb
-    mov r5, r8
-    push {r5, r6}
-    sub sp, #4
-    adds r4, r0, #0
-    adds r6, r1, #0
-    mov r8, r2
-    mov sb, r3
-    ldr r5, [sp, #0x1c]
-    ldr r0, .L080059C8 @ =vtable_unk_080E5AA4
-    str r0, [r4]
-    ldr r0, .L080059CC @ =0x00001A78
-    bl __builtin_new
-    str r5, [sp]
-    adds r1, r6, #0
-    mov r2, r8
-    mov r3, sb
-    bl func_08004EFC
-    str r0, [r4, #4]
-    adds r0, r4, #0
-    add sp, #4
-    pop {r3, r4}
-    mov r8, r3
-    mov sb, r4
-    pop {r4, r5, r6}
-    pop {r1}
-    bx r1
-    .align 2, 0
-.L080059C8: .4byte vtable_unk_080E5AA4
-.L080059CC: .4byte 0x00001A78
-
