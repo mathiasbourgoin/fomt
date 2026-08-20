@@ -1053,3 +1053,95 @@ session log:
   a plausible-looking but fake C port, per the project's non-negotiable
   "never commit a non-matching match" discipline (which extends here to
   "never even attempt one once infeasibility is established").
+
+## Round 6 -- `func_08010F54` triaged as register-pressure class (not
+attempted); its 4 tiny GameState flag-setter callees matched instead
+
+Target for this round, per brief: `GameState`/`Farm` functions documented
+in the franglais patch repo but not yet in a `.cc`. The patch repo's
+commit `9636a71` (`src/code_0800E2E4.cc` here, already on this branch)
+names `func_08010F54` (`asm/game_state.s`) as the day-rollover, with
+`GameState+0x08/0x0C/0x10` confirmed in an emulator (weather/forecast/
+date block).
+
+### `func_08010F54` itself: triaged out, not attempted
+
+Read the full disassembly (~570 lines, `0x08010F54`-`0x080113AA` before
+tail cleanup) before touching anything. This is squarely the
+"register-pressure" difficulty class documented in `DECOMP_RULES.md`
+(3 failures out of 3 attempts on that class so far) -- worse, actually:
+it uses `r4`-`r7` + `r8`/`sb`/`sl`/`ip` simultaneously through the ENTIRE
+body (not just prologue/epilogue), contains a 14-way jump table
+(building-upgrade dispatch), a second 2-level indirect jump table
+lookup, five near-identical `Bachelorette` rival-event checks, a
+per-season weighted-random weather roll, and multiple calls into
+already-matched code (`DayUpdate__4FarmiRC8GameDate`,
+`DayUpdate__3Dog`, `method_0800AB08__9FieldPlot6Season`,
+`FarmHouse`/`Coop`/`Barn` upgrade methods). Per `DECOMP_RULES.md`'s own
+explicit warning ("ne pas re-tenter cette classe sans budget de
+plusieurs rounds dédiés"), this was **not attempted** this round --
+would need a dedicated multi-round budget, not a single-target session.
+Documented here as read/understood/triaged rather than silently
+skipped, so the next round doesn't re-read it from scratch: the callee
+list above is a fairly complete map of what it touches.
+
+### Fallback per brief step 2: 4 tiny `GameState` flag-setter siblings, matched
+
+While reading `func_08010F54`, found it calls three trivial one-basic-
+block sibling functions from inside its upgrade jump table --
+`func_08010F30`/`func_08010F3C`/`func_08010F48` (`this` = same `r6`
+GameState pointer as the rollover itself), each just
+`*(u8*)this |= <bit>` for bits `0x02`/`0x04`/`0x08` of byte 0. A fourth
+sibling, `func_08010F24` (bit `0x01`, same byte), sits immediately
+before them in `asm/game_state.s` and is called from the script-VM side
+(`asm/code_0803EE94.s`, twice) on a GameState pointer read from a
+context field at offset `~0x350/0x354` -- independent confirmation that
+these 4 functions all operate on the same object type as
+`func_08010F54`'s `this`, not a coincidence of a shared byte-flag
+idiom. (Bits `0x01` and `0x10` of that same byte 0 are explicitly
+cleared at the very top of `func_08010F54`, consistent with these being
+once-per-day flags the rollover resets.)
+
+All 4 are single basic block, 2-3 instructions of real work, no branches,
+no `bl`, `r0`/`r1`/`r2` only -- the "peu de valeurs vivantes" class that
+`DECOMP_RULES.md` notes matches on the first or second try. Matched
+first try. No known C++ class exists yet for this GameState object (no
+vtable, no confirmed field layout beyond the handful of offsets in
+`src/code_0800E2E4.cc`), so per the "C libre vs méthode C++" rule these
+stayed as plain C functions taking a raw `void *`, same style as the
+existing `Unk_0800E324`-adjacent code in that same file.
+
+### Mechanics
+
+Split `asm/game_state.s` at the `func_08010F24`/`func_08010F54` boundary
+(monolithic-file method from `DECOMP_RULES.md`): the head (up to but not
+including `func_08010F24`, 1483 lines) stays `asm/game_state.s`; the tail
+(from `func_08010F54` onward, the untouched register-pressure function
+and everything after it in the file) became a new `asm/code_08010F54.s`
+with the standard header prepended. The 48 bytes in between (4 functions
+x 12 bytes, `0x08010F24`-`0x08010F54`) became `src/game_state.cc`.
+`fomt.lds`: replaced the single `asm/game_state.o(.text);` entry with
+`asm/game_state.o(.text); src/game_state.o(.text);
+asm/code_08010F54.o(.text);` in that order, same pattern as prior
+rounds. Verified `.text` size of `build/src/game_state.o` is exactly
+`0x30` (48) bytes before comparing content, then `rm -rf build fomt.gba
+fomt.elf fomt.map && make compare` -- bit-exact (`sha1sum -c fomt.sha1`
+succeeded) on the first attempt.
+
+### Repo state at end of round 6
+
+- One new commit expected (this file + the 4-function match, all staged
+  together): `asm/game_state.s` (truncated), `asm/code_08010F54.s`
+  (new), `src/game_state.cc` (new), `fomt.lds` (3-line split). `make
+  compare` verified bit-exact via full clean rebuild before committing.
+- No parallel-session activity observed (`git log`/`git status` matched
+  what this round itself produced, HEAD was `43c9148` at round start).
+- `origin` untouched, nothing pushed, no PR.
+- Next steps for whoever picks up `func_08010F54` itself: budget a
+  dedicated multi-round pass, not a fallback slot in a mixed-target
+  round. Two smaller adjacent leads if a lighter task is wanted instead:
+  `func_08010F04` (getter, bit `0x10` of the same GameState byte 0 --
+  same trivial shape as the 4 matched this round, just not contiguous
+  in the `.s` file so needs its own small split) and `func_08010F1C`
+  (getter on byte 3, needs the exact bitfield width worked out before
+  writing the C, unlike the plain single-bit getters/setters).

@@ -98,6 +98,8 @@ SECTIONS
         asm/more_items.o(.text);
         asm/game_scene.o(.text);
         asm/game_state.o(.text);
+        src/game_state.o(.text);
+        asm/code_08010F54.o(.text);
         src/code_08011FE8.o(.text);
         asm/code_08012028.o(.text);
         src/entity.o(.text);
