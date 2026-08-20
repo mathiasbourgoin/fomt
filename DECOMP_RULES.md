@@ -403,6 +403,51 @@ premier, vérifier si la constante en cause est shift-décomposable AVANT
 de chercher encore une forme C -- si non, fermer la piste plutôt que de
 continuer à itérer.
 
+### 16. Masque de clear construit par négation (`movs #N; negs`) sur un champ
+de largeur FIXE : c'est le codegen d'une vraie affectation de bitfield
+struct, pas un artefact d'expression `v & ~mask` à deviner
+
+Near-miss root-causé pour de bon round w49 (`func_08050EE4`/
+`func_080512D8`, après 2 échecs w39/w41 sur `v & ~0x3F`/`v & ~0x1F` en
+`u8`/`u32` local) : quand le désassemblage construit le masque de clear
+d'un champ via `movs rX,#N; negs rX,rX` (`N` = largeur du champ codée en
+positif, `~mask = -(mask+1) = -N`) plutôt qu'un immédiat direct, **et que
+la largeur du champ est FIXE à la compilation** (pas un paramètre
+d'appel), ce n'est presque jamais reproductible en écrivant `v & ~mask`
+à la main sur un entier brut -- agbcp plie systématiquement ce genre
+d'expression en immédiat direct, quelle que soit la formulation
+(variable locale nommée ou non, `u8` ou `u32`). **C'est le codegen normal
+d'agbcp pour une vraie affectation `self->champ = valeur;` sur un membre
+`: N` d'un `struct` C avec bitfields** (style déjà utilisé partout dans ce
+dépôt, `barn.hh`/`coop.hh`/`bachelorette.hh`) : le compilateur choisit lui-
+même l'unité d'accès (octet/demi-mot/mot) la plus étroite qui couvre
+entièrement le champ visé, et matérialise le masque de clear via
+négation quand `largeur_masque+1` tient dans un immédiat 8 bits (sinon,
+littéral pool 32 bits direct pour le masque déjà négé). Modéliser le
+mot/octet packé comme un vrai `struct { u32 a:5; u32 b:10; ...};` et
+assigner champ par champ (dans l'ordre du désassemblage, cf. règle 5)
+reproduit l'unité d'accès ET la construction du masque, y compris le cas
+où 2 bitfields de largeur 1 partageant le MÊME octet se retrouvent
+fusionnés en un seul `ldrb`/`strb` (un seul accès mémoire couvrant les 2
+micro-champs). **Signal pratique pour distinguer ce cas du cas non
+résolu** (masque construit à partir d'un paramètre d'appel dynamique,
+ex. `func_08050E98`/`func_08050EBC`, toujours ouvert) : si le "masque" à
+appliquer vient d'un REGISTRE ARGUMENT (pas d'un littéral connu à la
+lecture du désassemblage), ce n'est PAS une simple affectation de
+bitfield à largeur fixe -- cette règle ne s'applique pas, ne pas
+retenter la modélisation bitfield-struct sans nuance.
+
+**16bis. Reste de l'écart après le fix bitfield-struct, spécifique aux
+constructeurs : si le désassemblage restaure `lr` dans un registre
+scratch DIFFÉRENT de celui qu'une version `void` naïve produit (ex.
+`pop {r1}; bx r1` au lieu de `pop {r0}; bx r0`), essayer `return self;`
+(ou `return self_;`) explicite avant de chercher ailleurs** -- une fois
+`r0` occupé par la valeur de retour vivante (convention ARM/CFront pour
+les ctors, cf. règle 9/`SmartPtr`), agbcp restaure `lr` dans le prochain
+registre scratch libre (`r1`) plutôt que `r0`. Vu 2 fois d'affilée same
+round (`func_08050EE4`, `func_080512D8`) : le fix bitfield seul ne
+suffisait pas tant que la fonction restait typée `void`.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
