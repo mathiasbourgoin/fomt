@@ -528,3 +528,51 @@ jamais utilisée dans ce dépôt).
   déjà documenté (`DECOMP_RULES.md` #13). `func_080324BC` lui-même reste
   non porté (`r8`/`sb` utilisés tout du long -- signal "pression de
   registres", pas attaqué).
+- **`func_08050E68` (`asm/code_08050E68.s`) : PAS une cible valide, à
+  RETIRER définitivement** (découvert round w43) -- ce "thunk" (`ldr
+  r3,=0x08801C25; bx r3`, tail jump direct) pointe vers
+  `0x08801C24`, une adresse qui tombe dans `franglais_payload_start`-
+  `franglais_payload_end` (`0x08800000`-`0x08801000`, région réservée par
+  CE dépôt pour le payload du patch franglais), PAS dans la ROM vanilla
+  (`baserom.gba` fait 8 Mo, `0x08000000`-`0x087FFFFF` seulement). C'est un
+  point d'accroche du patch déjà injecté dans le désassemblage, pas du
+  code de jeu original -- le porter documenterait le mécanisme du patch,
+  pas le jeu.
+- **`func_0803A798`/`func_0803BF78`, 2 cibles caractérisées mais non
+  portées (round w43)** : `func_0803A798` (`asm/code_08039A5C.s`, juste
+  avant le groupe `func_0803A804`) alloue 0x20o, construit un `Location`
+  local partiellement initialisé (motif `func_08011ED8`) puis appelle
+  **`AEntity::AEntity(GameObject*, Location const&)` -- DÉJÀ implémentée
+  dans `src/entity.cc`, pas une boîte noire** -- via placement-new, puis
+  stampe une 2e vtable (`vtable_unk_080E7568`) à +0x14. Layout exact du
+  `Location` local à élucider (3 paires `ldrh`/`ldrb` chevauchantes,
+  masques `0xFC00`/`3`) avant de coder. `func_0803BF78`
+  (`asm/code_0803A8A4.s`) n'est PAS lui-même "pression de registres" mais
+  appelle en boîte noire `func_0803BDFC` (qui l'est, voir ci-dessous) ;
+  stampe ensuite `vtable_unk_080E77A4` à +4 (écrase celle du callee),
+  alloue 0x41Co, appelle l'opaque `func_080E0A94`, initialise 4 champs
+  octet à `self+0xc..0xf`. Nécessite de reconfirmer précisément les
+  arguments pile de l'appel à `func_0803BDFC` avant de coder. Voir
+  `SESSION_NOTES.md` round w43 pour le détail complet.
+- **Nouvelle classe de near-miss "ordre d'évaluation des arguments d'appel"
+  (round w43)** : `func_08037B48`/`func_08037B80` (`asm/code_08037A04.s`)
+  -- ctor trivial (vtable + `new(0x44)` + `bl func_08037008(obj,a1,a2,
+  LITERAL_r3,LITERAL_pile)` + vtable @+0x14 + return obj), taille
+  identique à la cible (0 octet d'écart) mais ORDRE inversé : la cible
+  calcule l'argument pile (5e) AVANT l'argument registre `r3` (4e,
+  littéral), alors que 6 formulations C testées (littéral inline,
+  variable nommée seule sur chaque argument, les deux en variables,
+  ordre de déclaration inversé, struct POD par valeur) produisent
+  systématiquement l'ordre inverse (r3 d'abord). Piste non testée : le
+  vrai 4e argument dépend peut-être d'un registre déjà occupé (pas un
+  littéral nu), ou le nombre réel d'arguments diffère. Candidat probable
+  pour un 2e cas : `func_08037A5C`/`func_08037AD0` (même fichier, mêmes
+  callees `func_08037008`+`func_08037244`, PLUS un near-miss
+  masque-par-négation déjà connu sur `self+0x44 & ~3`) -- pas testés,
+  probablement affectés par les deux classes à la fois.
+- **2 nouvelles fonctions "pression de registres" (round w43)** :
+  `func_0803BDFC` (`asm/code_0803A8A4.s`) et `func_08083A7C`
+  (`asm/code_08082184.s`) -- `r8`/`sb`(/`sl`) vivants à travers 2 `bl`
+  successifs (`__builtin_new` puis un helper 7-8 arguments). Ne pas
+  tenter sans budget dédié ; utilisables en boîte noire par des wrappers
+  dérivés plus simples (cf. `func_0803BF78` ci-dessus).

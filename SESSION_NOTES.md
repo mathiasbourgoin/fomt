@@ -6627,3 +6627,146 @@ aucun résidu.
   utilisés tout du long -- signal "pression de registres", pas attaqué).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
 - `git status --short` vide après commit.
+
+## Round (worktree `w43`, branche `parallel-43`) -- ZÉRO match commité,
+mais 4 découvertes actionnables pour un futur round (dont une piste de
+sécurité importante) + nouvelle classe de near-miss caractérisée
+
+Consigne : choisir une cible fraîche en évitant le recoupement avec `w42`
+(qui couvre les 3 sites restants de `func_080324BC`). Après lecture de
+`DECOMP_RULES.md`/`DECOMP_ARCHIVE.md` en entier, ce round a exploré 3
+pistes distinctes -- aucune n'a abouti à un match committable, mais
+chacune a produit un résultat utile documenté ci-dessous. Rebuild propre
+initial (`rm -rf build ... && make compare`) confirmé sain avant de
+commencer (LD réussit, `sha1sum` échoue comme attendu depuis `cb06198`).
+
+### Découverte 1 (importante) : `func_08050E68` n'est PAS une cible de
+décompilation valide -- son literal cible pointe dans le PAYLOAD FRANGLAIS,
+pas dans la ROM vanilla
+
+`func_08050E68` (`asm/code_08050E68.s`, laissé non tenté par w39 : "thunk
+d'un genre différent, `ldr r3,=ADDR; bx r3`") a de nombreux appelants
+symboliques (`asm/code_08012028.s`, `asm/code_0805E760.s` x21,
+`asm/code_08093220.s`). Désassemblage : `ldr r3,=0x08801C25; bx r3` (tail
+jump direct sans `push`/`pop`/`mov lr,pc` -- pas un simple thunk
+forward). **Le literal `0x08801C25` (bit thumb mis, cible réelle
+`0x08801C24`) tombe dans `franglais_payload_start`-`franglais_payload_end`
+(`0x08800000`-`0x08801000`, vérifié dans `fomt.map` après rebuild) : la
+région de 4 Ko que CE dépôt lui-même réserve pour le payload du patch
+franglais, PAS une adresse de la ROM vanilla (`baserom.gba` ne fait que
+8 Mo = `0x08000000`-`0x087FFFFF`, confirmé `stat` -- `0x08800000` est
+au-delà).** Autrement dit : ce "thunk" est déjà un point d'accroche du
+patch franglais (hook injecté dans le désassemblage vanilla, tail-jump
+vers le payload custom), pas du code de jeu original à décompiler.
+**Retirer `func_08050E68` de toute liste de cibles futures** -- toute
+tentative de le "porter en C" comme thunk vanilla serait une erreur de
+méthode (on documenterait involontairement le mécanisme du patch, pas le
+jeu original). Aucun fichier modifié pour cette découverte (juste lecture
++ un rebuild jetable, `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés
+après).
+
+### Découverte 2 : nouvelle classe de near-miss caractérisée -- ordre
+d'évaluation des arguments d'appel (littéral registre vs littéral pile)
+
+Méthode sœur (scan double-critère vtable+`__builtin_new`, déjà utilisé
+w40/w41) élargi aux blocs non encore portés, en excluant `func_080324BC`
+(scope w42) : 11 candidats trouvés, 2 déjà connus dead-end
+(`func_080DB320`/`658`, famille "assignation de champ"). Parmi les
+nouveaux, `func_08037B48`/`func_08037B80` (`asm/code_08037A04.s`, ~46
+octets chacun) : ctor trivial (`vtable + operator new(0x44) + bl
+func_08037008(obj,a1,a2,LITERAL_r3,LITERAL_pile) + store vtable @+0x14 +
+return obj`), callee `func_08037008` traité en boîte noire (asm non
+porté, pas de signal pression de registres visible dans ce callee lui-
+même au premier coup d'œil -- pas vérifié en détail).
+
+**Near-miss caractérisé, taille identique (0/46 octets d'écart), un seul
+défaut d'ORDRE** : la cible calcule d'abord l'argument 5 (pile, un
+littéral entier stocké via `movs r0,#N; str r0,[sp]`, DEUX instructions
+consécutives sans rien entre les deux), PUIS charge l'argument 4
+(registre `r3`, un littéral `u32`) juste avant le `bl`. **Toute
+formulation C testée (6 variantes)** -- littéral pile inline + littéral
+r3 inline ; variable nommée pour la pile seule ; variable nommée pour le
+registre seule ; les deux en variables nommées (dans les deux ordres de
+déclaration) ; argument pile passé comme petit struct POD par valeur au
+lieu d'un `int` nu -- **produit systématiquement l'ordre INVERSE** :
+`ldr r3,=LITERAL` D'ABORD, PUIS `movs r0,#N; str r0,[sp]`. agbcp semble
+toujours matérialiser le littéral du 4e argument (registre `r3`, libre,
+aucun conflit) avant de traiter le 5e (pile), quelle que soit la
+structuration du C source -- comportement stable et reproductible sur
+les 6 variantes, jamais contredit. **Hypothèse non testée** (budget
+épuisé ce round) : peut-être que le VRAI argument 4 n'est pas un littéral
+`u32` nu mais une expression dépendant d'un REGISTRE déjà occupé (pas
+juste `movs`), ce qui forcerait un ordre de calcul différent -- ou alors
+la vraie signature de `func_08037008` a un NOMBRE d'arguments différent
+de 5 (ex. un struct passé par référence plutôt que 2 scalaires séparés).
+**Pas commité** (aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` --
+tout le tâtonnement est resté dans un harnais scratch hors dépôt,
+`/tmp/w43scratch/`, jamais appliqué au dépôt). À ajouter comme classe de
+difficulté nommée si un 2e cas apparaît ailleurs (candidat probable :
+`func_08037A5C`/`func_08037AD0`, mêmes fichier/famille, mêmes callees
+`func_08037008`+`func_08037244`, PLUS un near-miss masque-par-négation
+déjà connu sur un champ bitfield `& ~3` à `self+0x44` -- pas testés ce
+round faute de temps, mais very probablement affectés par LES DEUX
+classes de near-miss à la fois).
+
+### Découverte 3 : 2 nouvelles fonctions "pression de registres" à éviter
+
+`func_0803BDFC` (`asm/code_0803A8A4.s`) et `func_08083A7C`
+(`asm/code_08082184.s`) : les deux utilisent `r8`/`sb`(/`sl` pour la
+première) comme valeurs vivantes À TRAVERS un `bl __builtin_new` PUIS un
+second `bl` vers un helper à 7-8 arguments -- signal d'alerte explicite
+de `DECOMP_RULES.md`. **Ne pas tenter sans budget dédié.** Utile à
+savoir : ces deux fonctions sont elles-mêmes appelées comme boîte noire
+par des ctors DÉRIVÉS plus simples (`func_0803BF78` appelle
+`func_0803BDFC` ; un ctor non identifié appelle probablement
+`func_08083A7C` de la même façon) -- exactement le même schéma que
+`func_08007EE14`/`func_08008980` dans la saga `func_08004C68` : le
+wrapper dérivé peut rester une cible valide même si le callee de base est
+hors de portée.
+
+### Découverte 4 : `func_0803A798` et `func_0803BF78`, 2 cibles fraîches
+caractérisées mais NON portées (candidates sérieuses pour un prochain
+round)
+
+- **`func_0803A798`** (`asm/code_08039A5C.s`, juste avant le groupe déjà
+  matché `func_0803A804`/round 10-w23) : alloue 0x20 octets, construit un
+  `Location` local partiellement initialisé (motif déjà connu, cf.
+  `func_08011ED8`) puis appelle **`__7AEntityP10GameObjectRC8Location`
+  == `AEntity::AEntity(GameObject*, Location const&)`, DÉJÀ implémentée
+  dans `src/entity.cc`** (pas une boîte noire asm -- un vrai symbole C++
+  déjà porté, directement appelable) via placement-new sur l'objet neuf,
+  puis stampe une SECONDE vtable (`vtable_unk_080E7568`) à l'offset
+  +0x14 (base MI secondaire), stocke un paramètre à +0x18, un flag octet
+  à +0x1c=1. Le détail exact du layout de bits du `Location` local (3
+  paires `ldrh`/`ldrb` avec masques `0xFC00`/`3` qui SE CHEVAUCHENT sur
+  les octets 0-4, pas 3 champs indépendants) reste à élucider précisément
+  avant de coder -- probablement un bitfield packé différent de la
+  `Location` 3-champs déjà connue dans `include/actor.hh`, à vérifier
+  champ par champ avant d'écrire le C.
+- **`func_0803BF78`** (`asm/code_0803A8A4.s`, juste après le groupe
+  register-pressure `func_0803BDFC`) : NE VIT PAS lui-même dans la classe
+  "pression de registres" (aucun `r8`/`sb`/`sl` dans son propre corps),
+  bien qu'il appelle `func_0803BDFC` (qui l'est) en boîte noire avec 6
+  arguments (3 registres littéraux + 3 arguments pile, dont 5 poussés
+  sur SA PROPRE pile mais SEULEMENT 3 relus côté callee -- à vérifier si
+  les 2 "en trop" sont bien des locales réutilisées plus loin ou un
+  artefact de lecture imprécise de ce round, pas confirmé avec
+  certitude). Stampe ensuite une SECONDE vtable (`vtable_unk_080E77A4`,
+  écrasant celle posée par `func_0803BDFC`), alloue 0x41C octets, appelle
+  un helper opaque `func_080E0A94`, puis initialise 4 champs octet
+  (`self+0xc..0xf`). Shape prometteur (chaîne de construction C++
+  classique base->dérivé) mais nécessite de reconfirmer précisément
+  quelles valeurs vont sur la pile de l'appel à `func_0803BDFC` avant de
+  coder -- pas fait ce round faute de temps.
+
+### État du worktree en fin de round
+
+- **Aucun commit** -- zéro match vérifié bit-exact ce round malgré 3
+  pistes creusées en profondeur (l'ordre d'arguments de la découverte 2
+  a résisté à 6 reformulations C systématiques).
+- Tout le tâtonnement (harnais rapide) est resté dans `/tmp/w43scratch/`,
+  jamais appliqué au dépôt.
+- `git status --short` vide après nettoyage (`rm -rf build fomt.gba
+  fomt.elf fomt.map` + suppression d'un fichier stub jetable créé pour le
+  rebuild de vérification de la découverte 1).
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
