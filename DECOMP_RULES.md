@@ -60,6 +60,20 @@ dès que le désassemblage montre une paire `lsls`/`lsrs` sans littéral.
 Vu 2 fois, généralise (`func_0800736C` round 2, `func_0804E8F0`/
 `func_0804E958` round 3).
 
+### 1bis. Formule pour déduire la largeur/position exacte d'un bitfield
+lu via double-shift AVANT d'écrire le C
+
+Quand le désassemblage lit directement un champ via `ldrb`/`ldrh`/`ldr`
+suivi d'une paire `lsls #S1` puis `lsrs #S2` (sans `ands` entre les deux),
+c'est l'extraction d'un champ non-signé de largeur `N = 32 - S2` bits,
+démarrant au bit `P = (32 - S1) - N` du mot chargé. Vérifié round 7
+(`func_08010F04`, `S1=27,S2=31` -> 1 bit à `P=4` soit masque `0x10` ;
+`func_08010F1C`, `S1=25,S2=26` -> 6 bits à `P=1` soit masque `0x7E>>1`).
+Écrire le C en double-shift littéral (`(u32)(champ) << S1 >> S2`), pas en
+`(champ >> P) & mask`, cohérent avec l'anti-pattern #1 ci-dessous -- les
+deux formes ont le même résultat arithmétique mais seule la première
+reproduit l'absence de `ands`/littéral dans le désassemblage cible.
+
 ### 2. Branches "mortes" redondantes -> `switch`/`default` explicite,
 pas `if`/`else if`
 
@@ -503,6 +517,8 @@ dispatch virtuel. Corrigé en qualifiant :
 | `func_08080DC4`, `func_08081A70`, `func_08082144`, `func_08083AEC`, `func_08085528`, `func_080881AC`, `func_0808AB68`, `func_0808C59C`, `func_0808ED08`, `func_08090E84`, `func_080925C4`, `func_080931E0`, `func_08093A88` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), même corps que `func_0809A518` | 7 (w12) | `e1b1931`, `1f085cf`, `7c09c6d`, `0271566`, `91f7ebe`, `5b09238`, `0f8825f`, `3c6bf9f`, `7631bff`, `228b133`, `9b04a4d`, `d1cc3d2`, `ef78680` (1 commit/fonction) |
 | `func_080C0D44` | destructeur "riche", 1 enfant offset+4 (MI) | 7 (w12) | `18e8b5e` |
 | `func_080E41B0` | destructeur "riche", 2 enfants (offset+4 MI, offset+8 plain), **variante sans restamp de vtable propre** (aucun `str r0,[r4]`/littéral `vtable_unk_...` dans le corps -- nouveau sous-cas, cf. section dédiée ci-dessous) | 7 (w12) | `ae97047` |
+||||||| 88b3c2e
+| `func_08010F04`, `func_08010F1C` | getters `GameState` (bit `0x10` octet 0 ; champ 6 bits octet 3 bits[1:6]) -- complètent les 4 setters round 6 | 7 (w14) | (voir `git log`) |
 
 ## Layout des vtables sous `-fvtable-thunks` : 2 mots nuls de préfixe avant
 le premier slot déclaré
@@ -759,6 +775,19 @@ suit cette convention plutôt que `r0` direct).
    liste (round dédié worktree `parallel-1`) : classe "ABI partagée
    entre `bl`", structurellement infaisable en C, cf. section dédiée
    ci-dessus. Ne pas re-tenter.
+||||||| 88b3c2e
+||||||| 43c9148
+5. ~~`func_08010F04`, `func_08010F1C`~~ -- matchés round 7 (w14), voir
+   tableau des matchs ci-dessus. Piste annexe découverte en les portant,
+   pas encore traitée : un getter GameState NON catalogué (pas de
+   `func_ADDR`/`thumb_func_start` dans le `.s` d'origine, actuellement de
+   simples `.byte` bruts) à `0x08010F14`, juste après `func_08010F0C`
+   dans `asm/code_08010F0C.s` -- décodage manuel confirme du vrai code
+   Thumb valide (`ldrh [r0,#2]; lsls #23; lsrs #25; bx lr`, champ 7 bits
+   à `P=2` d'un halfword). Avant de le porter : déterminer s'il a un
+   symbole officiel quelque part (vérifier Ghidra/le dépôt patch) plutôt
+   que d'en inventer un.
+||||||| 43c9148
 4. `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
    la FSM de démarrage documentée dans `docs/ENGINE.md` (round 27 côté
    dépôt patch). Dimensionnée round 6 : 0x6F4 octets (~800 lignes de

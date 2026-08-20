@@ -21,6 +21,25 @@
 // very start of func_08010F54 (`ldrb/bic #0x11/strb`), consistent with
 // these being once-per-day flags.
 
+// GameState bit-field getter on byte 3 of the same object (see the note
+// above for the byte-0 flag setters). Placed first in this file so the
+// compiled object's .text order matches its address (0x08010F1C, right
+// before func_08010F24 at 0x08010F24 -- the two happen to be exactly
+// contiguous, so no separate object/lds entry is needed for this one).
+// Disassembly is a double-shift with NO `ands`/literal pool (`ldrb
+// [self+3]`, `lsls #25`, `lsrs #26`), which pins the extracted field to
+// exactly bits [1:6] (6 bits wide, value range 0-63) of that byte:
+// solving `S1 = 32-(P+N)`, `S2 = 32-N` for `S1=25`, `S2=26` gives `N=6`,
+// `P=1`. Bits 0 and 7 of this byte are left untouched by this getter, so
+// they carry unrelated flags not otherwise characterized yet. Per
+// DECOMP_RULES.md anti-pattern #1, written as a literal double-shift
+// rather than `(byte >> 1) & 0x3F` to match the no-mask-instruction shape
+// of the original.
+EC u32 func_08010F1C(void * self)
+{
+    return (u32)(*((u8 *)self + 3)) << 25 >> 26;
+}
+
 EC void func_08010F24(void * self)
 {
     *(u8 *)self |= 0x01;
