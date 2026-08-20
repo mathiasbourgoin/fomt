@@ -8361,3 +8361,109 @@ round. Ni l'un ni l'autre n'est commité (vérifié `git status --ignored`).
   `GetDesc`, 6 fonctions) et `src/code_0800E2E4.cc`
   (`franglais_season_of`) -- `farmer_stamina` reste dans le périmètre de
   l'agent qui le traite déjà en parallèle.
+
+## Round w56 (worktree local, branche `parallel-56`) -- conversion du dernier hook restant, `franglais_season_of`, en trampoline à taille fixe
+
+### Contexte
+
+Dernier des 4 hooks C++ à convertir (`GetString` fait en w53,
+`farmer_stamina` en w54, `GetName`/`GetDesc` x3 en w55) : mesuré à
+l'instant sur `main` fusionné, résidu uniforme de **-32 octets** sur
+tout le binaire à partir de `func_0800E4E0` (première fonction
+symbolisée après le point d'injection) jusqu'à la fin de la ROM.
+
+### Localisation
+
+`src/code_0800E2E4.cc`, fonction `func_0800E324` (hook
+`franglais_season_of`, macro `FRANGLAIS_franglais_season_of =
+0x08801944u` dans `include/franglais_poc.hh`). Le corps C++ avant fix :
+un cast vers un pointeur de fonction brut + appel + `return`, compilant
+à **16 octets** (mesuré par `objdump -h build/src/code_0800E2E4.o`,
+offset `func_0800E324` = 0x40, taille totale du fichier = 0x50).
+
+### Piège rencontré -- mauvaise taille cible au premier essai
+
+Première hypothèse (par analogie avec les rounds précédents) : taille
+vanilla = `next_addr - this_addr` entre `func_0800E324` et le
+**prochain symbole `func_` existant**, `func_0800E4E0` (dans
+`src/farmer.cc`) = `0x1BC` = 444 octets. **Fausse** : appliquée telle
+quelle (macro `FRANGLAIS_TRAMPOLINE("0x08801945", "215")`, .text mesuré
+= exactement 444 octets pour la fonction isolée), le rebuild complet a
+montré un delta de **+396** sur tout le binaire après ce point au lieu
+de 0 -- pire qu'avant (`-32` -> `+396`). Cause : `func_0800E4E0` n'est
+**pas** adjacent à `func_0800E324` dans le layout linké réel -- il y a
+entre les deux un bloc de **396 octets d'assembleur brut non
+symbolisé** (une autre fonction vanilla jamais matchée, invisible dans
+la table des symboles `func_`) qui occupe déjà exactement sa place et
+ne doit pas être empiété. La bonne taille ne peut donc pas se déduire
+de la table des symboles `func_` seule quand un hook est immédiatement
+suivi d'une zone non matchée -- il faut désassembler `baserom.gba`
+directement au point du hook.
+
+Taille vanilla réelle, mesurée par désassemblage direct de
+`baserom.gba` :
+```
+arm-none-eabi-objdump -D -b binary -m arm -Mforce-thumb --adjust-vma=0x08000000 \
+  --start-address=0x0800E324 --stop-address=0x0800E390 -EL baserom.gba
+```
+`push {lr}` ... `pop {r1}` / `bx r1` se termine à `0x0800e352`, la
+fonction (non matchée) suivante commence à `0x0800e354` -> taille
+exacte = **0x30 (48) octets**, cohérente avec `16 + 32` (les 32 octets
+de résidu observés avant fix).
+
+### Fix appliqué
+
+`src/code_0800E2E4.cc`, `func_0800E324` : corps remplacé par
+`FRANGLAIS_TRAMPOLINE("0x08801945", "17")` (macro déjà existante dans
+`include/franglais_poc.hh`, utilisée telle quelle par les 6 hooks de
+`item.cc` en w55 -- aucune nouvelle macro nécessaire). `nop_count = 17`
+dérivé empiriquement (compilé, mesuré, ajusté) pour atteindre
+exactement 48 octets. Commentaire inline en anglais expliquant la
+taille réelle, le piège du calcul par soustraction de symboles, et la
+référence croisée vers `FRANGLAIS_TRAMPOLINE`.
+
+### Vérification
+
+- `arm-none-eabi-objdump -h build/src/code_0800E2E4.o` : `.text` total
+  0x70, offset de `func_0800E324` = 0x40 -> taille isolée = **0x30 (48)
+  octets exactement**.
+- Désassemblage du trampoline lié (`objdump -d fomt.elf
+  --start-address=0x0800E324 --stop-address=0x0800E354`) : `ldr r3,
+  [pc,#36]` / `bx r3` / 17 `nop` (`46c0`) / `.word 0x08801945` / `bx lr`
+  (épilogue mort agbcp) = 48 octets pile, aucun octet de trop ni en
+  moins.
+- **Diff octet à octet** entre `fomt.gba` et `baserom.gba` sur la plage
+  `0x0000E354`-`0x0000E4E0` (le bloc de 396 octets d'assembleur brut non
+  symbolisé juste après le hook, identifié comme la cause du piège
+  ci-dessus) : **identique bit pour bit**, preuve directe que ce bloc
+  n'a pas été empiété et que le trampoline a la bonne taille, pas
+  seulement en apparence.
+- Rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map` +
+  `head -c 4096 /dev/zero > build/franglais_stub.bin` + `make -j`) :
+  lien réussi, aucune référence non définie, aucune définition
+  multiple. `sha1sum -c fomt.sha1` échoue comme attendu depuis `cb06198`
+  (non-signal, payload franglais réellement lié).
+- **`arm-none-eabi-nm fomt.elf` sur les 2707 symboles `func_ADDR` de
+  toute la ROM : delta (adresse liée - adresse nominale) = 0 PARTOUT,
+  sans une seule exception.** Signal de clôture de toute la campagne de
+  conversion trampoline : les 4 hooks (`GetString`, `farmer_stamina`,
+  `GetName`/`GetDesc` x3, `season_of`) sont maintenant tous des
+  trampolines à taille fixe, et le résidu de décalage documenté depuis
+  plusieurs rounds dans `DECOMP_RULES.md` a totalement disparu.
+- **Vérification visuelle en jeu (mGBA) NON EFFECTUÉE**, même raison que
+  les rounds précédents : ce dépôt lie un `build/franglais_stub.bin`
+  factice (zéros), pas le vrai payload franglais (qui vit dans le dépôt
+  séparé `harvest-moon-franglais`) -- hors mandat de ce round
+  (fomt-decomp uniquement).
+
+### État du worktree en fin de round
+
+- 1 fichier modifié : `src/code_0800E2E4.cc`.
+- `build/`/`fomt.gba`/`fomt.elf`/`fomt.map` nettoyés avant commit.
+  `baserom.gba`/`tools/agbcc/bin/*` restent gitignorés, jamais ajoutés.
+- `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+- **À remonter** : la campagne de conversion des 4 hooks C++ en
+  trampolines à taille fixe est terminée -- `DECOMP_RULES.md` (règle
+  "trampoline-partout") peut être mise à jour pour refléter que le
+  résidu de décalage documenté (+8, puis -32 selon les rounds) n'existe
+  plus, une fois ce round mergé sur `main`.
