@@ -74,6 +74,8 @@ SECTIONS
         src/code_0800371C.o(.text);
         asm/code_0800374C.o(.text);
         asm/new_game.o(.text);
+        src/code_08004B58.o(.text);
+        src/code_08004B94.o(.text);
         src/code_08004BDC.o(.text);
         asm/code_08004C0C.o(.text);
         src/code_08004C48.o(.text);
@@ -169,6 +171,7 @@ SECTIONS
         src/code_08069E14.o(.text);
         src/code_08069E58.o(.text);
         asm/code_08069E98.o(.text);
+        src/code_0806D8C8.o(.text);
         src/code_0806D918.o(.text);
         asm/code_0806D948.o(.text);
         src/code_0806E9D8.o(.text);
