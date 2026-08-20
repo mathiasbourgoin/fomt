@@ -218,6 +218,8 @@ SECTIONS
         src/code_0803A804.o(.text);
 
         asm/code_0803A8A4.o(.text);
+        src/code_0803BF78.o(.text);
+        asm/code_0803BFC8.o(.text);
         src/script_engine.o(.text);
         . = . + 0x108;
         asm/code_0803EE94.o(.text);
