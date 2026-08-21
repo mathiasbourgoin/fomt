@@ -11182,3 +11182,160 @@ Scratch utilisé : `/tmp/w89_notes/{w86,w87,w88}.md` (extraits de
 octets), `/tmp/w89scratch/div_test.cc`/`div_test2.cc` (harnais de
 vérification de la formule de division) -- tout hors dépôt, non
 committé.
+
+## Round w90 (worktree `w90`, branche `parallel-90`) -- énumération précise
+des 13 callés opaques bloquant `franglais_transition_impl_tick`, 3
+tentatives de portage rapprochées mais AUCUN match bit-exact, verdict
+honnête sur 3 pièges agbcp différents rencontrés
+
+Mission reçue : porter, un par un, les callés opaques de
+`franglais_transition_impl_tick` en commençant par les plus simples
+d'après `w86`/`w89` (`func_08007D4C`, `func_080074C0`, puis
+`func_08008F0C`, `func_0805E99C`), chaque match vérifié isolément
+(`make compare` ou diff octet-à-octet) avant tout commit. `parallel-89`
+n'était pas encore fusionné dans `main` au moment où ce worktree a été
+créé -- fusionné en fast-forward en tout début de round (`git merge
+parallel-89`, propre, aucun conflit, seul `SESSION_NOTES.md` touché par
+`w86`-`w89`) pour disposer de la caractérisation complète avant de
+commencer.
+
+### 0. Énumération précise (pas seulement recopiée de `w89`) des callés
+appelés depuis le corps de la fonction
+
+`bl`/cible dans la plage `0x0804F7A4`-`0x08050342` (script `python3`
+sur `asm/code_0804E9C8.s:1638-3124`, comptage par symbole) : **13
+symboles de fonctions réelles distincts**, hors `__udivsi3` (intrinsèque
+compilateur, déjà résolu par `w89`) et `_call_via_r2`/`_call_via_r3`
+(dispatch virtuel générique, pas des callés à porter individuellement) :
+
+`func_080074C0`(x7), `func_08007D4C`(x9), `func_08008B6C`(x4),
+`func_08008B88`(x1), `func_08008CD0`(x1), `func_08008F0C`(x6),
+`func_080507D0`(x1), `func_08050868`(x1), `func_0805E850`(x1),
+`func_0805E8F0`(x2), `func_0805E99C`(x2), `func_080ADD08`(x1),
+`func_080ADD78`(x1), plus `sub_08050342` (pas un `bl` -- c'est la
+fonction voisine, cible du `b` final partageant l'épilogue, cf. `w86`
+§0 -- pas comptée ici).
+
+Vérifié via recherche textuelle sur tout `src/*.cc`/`*.hh` : AUCUN de
+ces 13 symboles n'a de corps réel porté (seules des mentions en
+commentaire ou un `extern "C"` déclaré en boîte noire existent, ex.
+`func_0805E8F0` déclaré/utilisé comme callé opaque dans
+`src/code_0803A804.cc` mais jamais lui-même porté). **Confirme le
+chiffre "13" (pas "17") comme le compte exact de vrais callés-fonctions
+distincts** -- l'écart avec le "17" cité par `w86`-`w89` vient
+probablement d'un comptage incluant `_call_via_r2`/`_call_via_r3`
+séparément et/ou `sub_08050342`, jamais clarifié précisément par les
+rounds précédents. **Nouveau chiffre de référence pour `parallel-91+` :
+0/13 callés-fonctions portés.**
+
+### 1. `func_080074C0` -- très proche, bloqué par une course d'allocation
+de registres (classe documentée règle 17/17bis)
+
+Fonction confirmée : accesseur sur `gUnk_03000404` (`Unk_hardware_03000404`,
+déjà déclaré dans `src/hardware.cc` avec EXACTEMENT le layout attendu :
+`unk_04[0x10]` un tableau de 16 `Unk_hardware_ent_080D6D98` -- déjà
+existant dans ce dépôt ! -- et `unk_44` bitmask u32). Signature
+`i32 func_080074C0(void *unused_self, u32 val)` : extrait un nibble
+(`val & 0xF` en double-shift), teste le bit correspondant de `unk_44`,
+compare un champ 16 bits de l'entrée `unk_04[nibble]` à un champ extrait
+de `val`, retourne `nibble` si tout correspond sinon `-1`.
+
+Convergence complète sur TOUTE la logique (idiome de test de nullité
+`rsbs`/`orrs`/`lsrs #0x1f` reproduit bit-exact avec
+`(u32)(-(i32)masked | (i32)masked) >> 31`, garde défensive `nibble<=0xf`
+morte reproduite, structure guard-clause + retour partagé). **Seul
+point résiduel** : la cible garde SIMULTANÉMENT deux valeurs vivantes
+dans des registres séparés jusqu'à la fin (`nibble` dans `r2`, une copie
+dans `r5`) parce que le registre de `nibble` (`r2`) se fait voler par la
+variable `match` (calculée juste avant le retour) -- alors que dans
+TOUTE reformulation testée ici, notre compilation choisit d'aliaser
+`nibble`/`match` sur des registres disjoints (`r2`/`r3` ou `r2` seul),
+n'ayant jamais besoin de la copie `r5` et donc jamais du `push
+{r4,r5,lr}` complet (on obtient `push {r4,lr}` + un `b.n` de saut
+superflu à la place). Reformulations testées sans succès : variable de
+copie explicite déclarée tôt (`n = nibble`), retour préparé de façon
+spéculative avant le test (`i32 result = (i32)n; ... if(!match) result=
+-1; return result;` -- soit dupliqua le calcul de `-1`, soit changea la
+course de priorité dans l'autre sens), ternaire `match ? n : -1`. Signal
+reconnu : **classe "course de priorité d'allocateur" documentée
+règle 17/17bis de `DECOMP_RULES.md`** -- candidat clair pour une
+escalade `fable` ciblée (piste seule, pas exécution complète) plutôt que
+d'autres tentatives `sonnet`.
+
+### 2. `func_08007D4C` -- structurellement quasi identique à (1), bloqué
+par un pliage d'adresse différent d'1 instruction
+
+Accesseur sur `gUnk_03000408` (nouveau global, PAS encore déclaré dans
+ce dépôt -- struct proposée : `bitmask[8]` (32o) + 4o de champ inconnu +
+tableau de 256 entrées 8o). Même moule que (1) (extraction d'un INDEX
+byte via un aller-retour pile `str`/`ldrb` -- confirmé nécessaire :
+utiliser `val` directement au lieu d'une copie locale `v` reproduit
+l'ORDRE exact `g-load` PUIS `str` d'adressage, cf. règle 5 -- puis même
+idiome de bitmask/nullité, storage-guard, retour d'un champ 10 bits via
+double-shift `<<22>>22`). **Taille et TOUTE la logique métier
+reproduites bit-exact SAUF un bloc de 5 instructions** : la cible
+calcule l'adresse de l'entrée en 5 étapes (copie base, `+0x20`
+immédiat, `shift idx*8`, `+4` immédiat SÉPARÉ, `add` final) puis lit les
+2 champs à des offsets `+0`/`+4` relatifs à CETTE adresse déjà décalée de
++4 ; toute formulation C testée ici (pointeur brut avec `+4` inclus dans
+l'expression, variable `p` intermédiaire, indexation par struct avec
+base décalée à `+0x24`) fait plier `agbcp` le `+4` dans les immédiats des
+`ldrh` plutôt que dans le calcul d'adresse lui-même (3-4 instructions au
+lieu de 5, mêmes valeurs finales lues, mais octets différents). Piste
+non tentée faute de temps : forcer le `+4` via une variable dont
+l'ADRESSE est prise ailleurs (cf. anti-pattern connu sur
+`func_08007D4C`... même nom que la cible, coïncidence) pour empêcher le
+pliage -- **à essayer en premier round suivant avant d'escalader**.
+
+### 3. `func_08008F0C` -- très proche, bloqué par une recopie de
+paramètre qu'aucune reformulation n'a supprimée
+
+Confirme le prototype déjà déduit par `w86` : construit un descripteur
+DMA de 4 mots (`{u32 zero; void *src; void *dest; u32 control;}`) à
+partir de `(desc, src, dest, count)`, avec un mot de contrôle calculé
+selon l'alignement (`0x84`/16 pour 4 octets, `0x80`/15 pour 2 octets,
+`0` si `src`/`dest`/`count` nul OU non aligné du tout -- bit 0 posé).
+**83 des 84 octets reproduits bit-exact** (structure complète des
+branchements, polarité du test d'alignement 4o -- initialement inversée,
+corrigée -- et les 2 formules de shift) ; **seul écart : une instruction
+`adds r1, rX, #0` de recopie que `agbcp` insère systématiquement avant
+le premier `orrs` de la combinaison `src|dest|count`, quel que soit
+l'opérande de départ testé (`src`, `dest`, ou `count` en tête), et même
+en réutilisant le PARAMÈTRE `src` lui-même comme accumulateur (`src |=
+dest; src |= count;`) au lieu d'une variable locale `combined` neuve.**
+5 reformulations testées, toutes produisent EXACTEMENT le même écart
+d'1 instruction (2 octets) -- signal clair d'un comportement intrinsèque
+d'`agbcp` (matérialisation systématique d'une nouvelle valeur de
+registre pour toute expression OR multi-opérandes, indépendamment de
+l'aliasing manuel tenté), pas un problème de forme C. Cf. limite 1 de la
+règle 17bis (paramètre de fonction, vivant dès l'entrée par
+construction ABI).
+
+### 4. Verdict honnête -- 0 commit ce round, 3 near-miss documentés
+précisément pour éviter de reperdre du temps dessus
+
+Discipline du dépôt respectée : aucune des 3 tentatives n'atteint le
+match octet-à-octet (vérifié par diff direct des `.text` compilés
+isolément contre les octets extraits de `baserom.gba`, PAS seulement le
+désassemblage) -- **aucun fichier `src/`/`asm/`/`fomt.lds` modifié,
+aucun commit de code ce round.** `func_0805E99C` (compositeur 2 sprites,
+priorité 4 de la mission) n'a pas été attaqué faute de temps restant
+après les 3 tentatives ci-dessus.
+
+**Chiffre mis à jour pour `parallel-91+` : 0/13 callés-fonctions opaques
+portés** (pas 17 -- cf. §0). Rounds suivants suggérés :
+1. Reprendre `func_08007D4C` en premier (le plus proche des 3, 1 seul
+   bloc de 5 instructions en cause) avec la piste "adresse-prise"
+   non testée ci-dessus.
+2. Escalader `func_080074C0` et `func_08008F0C` en `fable`-pistes-
+   seules (option 1 de la stratégie d'escalade, pas exécution complète)
+   si `func_08007D4C` se débloque et que le temps le permet -- les deux
+   sont des cas de course de priorité de registres qu'aucune
+   reformulation `sonnet` testée n'a résolus.
+3. `func_0805E99C` (compositeur 2 sprites) reste entièrement à
+   caractériser/tenter -- non touché ce round.
+
+Scratch utilisé : `/tmp/w90scratch/{t1,t2,t3}.cc`, `try{,2,3}.sh`
+(harnais de diff automatisé octet-à-octet réutilisable),
+`target_{080074C0,08007D4C,08008F0C}.bin` (extraits `baserom.gba`) --
+tout hors dépôt, non committé.
