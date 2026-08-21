@@ -19,6 +19,16 @@
 // no such CSE/value-numbering -- see DECOMP_RULES.md anti-pattern #2).
 // Reproduced literally below (a second `*a2` read, not the `stolen`
 // local) to match this exact reload.
+//
+// Register-allocation note (same family of pitfall as
+// src/code_08004B58.cc): assigning `*a2` straight into the address-taken
+// local `stolen` made agbcp spill it to its stack slot immediately,
+// ahead of the zero-store to `*a2` -- the original disassembly zeroes
+// `*a2` (`movs r0,#0; str r0,[r4]`) BEFORE spilling the stolen value to
+// the stack (`str r1,[sp]`), and keeps the read in r1 (not r0). Routing
+// the read through a non-address-taken temporary (`raw`) before aliasing
+// it to `stolen` reproduces both the exact register (r1) and the exact
+// instruction order.
 #include "prelude.h"
 
 extern u32 vtable_unk_080E5A68[];
@@ -35,8 +45,9 @@ EC void *func_080041DC(void *self, int a1, void **a2);
 EC void *func_08004B94(void *self, int a1, void **a2)
 {
     *(void **)self = vtable_unk_080E5A68;
-    void *stolen = *a2;
+    void *raw = *a2;
     *a2 = nullptr;
+    void *stolen = raw;
     void *obj = operator new(0x1a0);
     obj = func_080041DC(obj, a1, &stolen);
     *(void **)((char *)self + 4) = obj;
