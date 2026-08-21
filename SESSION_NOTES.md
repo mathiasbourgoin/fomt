@@ -10278,3 +10278,117 @@ déjà nommés dans ce fichier).
 Aucun fichier `asm/*.s` modifié ce round (caractérisation pure, pas de
 tentative de portage). `git status --short` propre, `origin` intact,
 rien poussé, aucune PR.
+
+## Round w76 (worktree `w76`) -- suite du sweep w70/w73, 8 gaps consommés,
+15 fonctions matchées, tous premier essai en harnais, gap count 54 -> 46
+
+Re-scan complet avec `scan_hidden_code_blobs_v2.py` : 54 gaps au début de
+ce round. Priorité donnée aux PETITS gaps (mission explicite), en
+excluant les cibles déjà exclues/bloquées (`func_08050C70`,
+`.L08037CDC`, `func_0809C4EC`, `func_08050EBC`/`08050E98`,
+`.L08037250`, `func_08075334`) et une cible "pression de registres"
+avérée (`.L0804EB64`, r8/r9/sl utilisés dans le CORPS, pas juste
+prologue/épilogue -- vérifié puis explicitement laissée de côté sans
+tentative, conforme à la règle DECOMP_RULES.md sur cette classe).
+
+**8 gaps matchés, 15 fonctions, 7 commits, tous vérifiés bit-exact**
+(harnais rapide + `make compare` relink complet + diff octet-à-octet
+isolé contre `baserom.gba`) :
+
+- **`func_080094E0`/`func_080094F8`/`func_08009508`** (52o,
+  `asm/code_08008DE8.s`, entre `func_080094B8` et l'orpheline
+  `func_08009514`) : 3 wrappers autour du champ `self+0xc` (déjà connu
+  `func_080094A4`/`func_080093A0`, accesseur/mutateur `i16` "son").
+  Détail notable : le 3e wrapper n'a PAS son propre épilogue -- son
+  adresse de retour de `bl` tombe directement sur ce qui portait le
+  label orphelin `func_08009514` (aucun appelant `bl` connu nulle part),
+  qui a donc été entièrement absorbé dans le corps de la fonction portée
+  et son label supprimé.
+- **`func_08069EB4`/`func_08069ED4`/`func_08069EF4`** (96o,
+  `asm/code_08069E98.s`, candidat caractérisé mais jamais attaqué depuis
+  w73) : 3 wrappers "nonzero-to-bool" (idiome `negs`/`orrs`/`lsrs #31`)
+  autour de `Barn::CountSheeps`/`Barn::CountCows`/`Coop::CountChickens`
+  déjà portés. Le pointeur `self+0x120` déréférencé n'est PAS un
+  `Farm*` direct : les offsets utilisés (Barn +0x5F0, Coop +0x410) sont
+  chacun exactement +0x14 par rapport aux offsets réels `Farm::coop`/
+  `Farm::barn` (`include/farm.hh`) -- pointe donc vers un objet
+  englobant encore non décompilé avec `Farm` inline à +0x14. Modélisé en
+  arithmétique de pointeur brute plutôt que d'inventer cette classe.
+- **`func_0801FD48`/`func_0801FD50`/`func_0801FD58`** ET leur duplicata
+  EXACT **`func_080ADB84`/`func_080ADB8C`/`func_080ADB94`** (24o chacun,
+  `asm/code_0801DE3C.s` et `asm/code_080A3774.s` respectivement) : même
+  trio d'accesseurs bruts (`i16` à +0xE, `i16` à +0xA, `u32` à +0 du
+  pointeur `self+4`), octets rigoureusement identiques aux deux
+  emplacements, mêmes callees voisins (`func_080A5A9C`/`func_080A59BC`)
+  -- confirmé comme un vrai doublon de table d'accesseurs dans la ROM,
+  pas un artefact de scan/merge (cf. piège documenté dans
+  DECOMP_RULES.md pour les doublons post-merge, vérifié non-applicable
+  ici : aucune trace de fusion récente sur ces deux fichiers). Les
+  offsets `+0xA`/`+0xE` correspondent au même objet "Location-like"
+  encore bloqué sur `.L08037CDC` (classe `Location` absente) -- gardé en
+  arithmétique brute pour ne pas préempter ce choix de nom/layout.
+- **`func_08075E00`** (36o, `asm/code_080756D0.s`, candidat caractérisé
+  mais jamais attaqué depuis w70) : 2 appels conditionnels au wrapper
+  DMA déjà connu `func_08008E64` (asm-only ; prototype à 3 arguments
+  `(void*, void*, u32)` récupéré directement depuis son corps compilé,
+  cohérent avec le style `CpuFastSet` de `func_08009790`). Le champ
+  `self+0x1C` sert À LA FOIS de test de nullité ET de 2e argument
+  littéral du 2e appel -- reproduit avec un seul local pour éviter un
+  rechargement `ldr` superflu chez agbcp.
+- **`func_08036E00`** (44o, `asm/code_08036DC4.s`, candidat "complexité
+  de constructeur" caractérisé mais jamais attaqué depuis w70) :
+  s'avère un DOUBLON exact du motif "entity factory" déjà connu
+  (`func_08035B38`/`src/code_08035B38.cc`, règle 13 DECOMP_RULES.md) --
+  même taille d'allocation (0x8c), même kind/subkind (4, 27), mêmes
+  littéraux (1, 0, 0, `false`). L'estimation w70 "gros effort, layout de
+  classe à comprendre" était basée sur la ressemblance de surface avec
+  les VRAIS constructeurs placement-new du même fichier, pas sur le
+  contenu réel de ce gap précis -- signal utile : ne pas se fier à la
+  ressemblance de voisinage seule pour prioriser/dé-prioriser un gap.
+- **`func_080AAF9C`/`func_080AAFB8`** (44o, `asm/code_080A3774.s`,
+  candidat "pression de registres" caractérisé w70 par ressemblance de
+  surface avec la fonction précédente -- qui, elle, utilise vraiment
+  r8/sb) : aucune des deux fonctions de ce gap ne touche r8/sb/sl/ip.
+  `func_080AAF9C` reforward vers `func_08008E64` (même wrapper DMA que
+  ci-dessus), gaté sur pointeur non-nul + discriminant `self+0`==2.
+  `func_080AAFB8` relit un index à `self+4`, l'envoie à `GetMapData`
+  (déjà nommée mais toujours asm-only), puis lit un octet à +0x24 de la
+  ligne retournée.
+
+**Cible examinée et explicitement écartée** (pas juste ignorée sans
+regarder) : `.L0804EB64` (288o, `asm/code_0804E9C8.s`) désassemblée en
+entier -- utilise `r8`/`r9`/`sl` dans le CORPS (pas seulement prologue/
+épilogue, ex. `mov r8,r1` puis relecture bien après), signal d'alerte
+explicite de DECOMP_RULES.md pour la classe "pression de registres" --
+laissée de côté sans tentative, conforme à la consigne "pas de budget
+dédié sans idée neuve".
+
+**Cible examinée et jugée hors scope pour ce round** : `.L0801D9BC`
+(392o, `asm/code_08012028.s`, entre `func_0801D9A8`/`func_0801DB44`) --
+désassemblage révèle une vraie table de saut (littéraux `.4byte`
+d'adresses internes au même fichier, ~40 entrées) au milieu du bloc :
+un unique gros `switch` compilé, pas une famille de petites fonctions
+sœurs comme les autres gaps de ce round. Nécessite un effort dédié de
+compréhension du contrôle de flux complet, pas tenté faute de budget --
+bon candidat pour un futur round avec budget dédié. Les 2 gaps
+nettement plus gros `.L08022C60`/`.L080238F4` (1704o/1724o,
+`asm/code_08022320.s`) n'ont pas été examinés du tout ce round (même
+classe de taille suggérant plusieurs fonctions ou une vraie grosse
+fonction à switch, mérite un examen dédié avant de s'engager).
+
+**Compte de gaps** : 54 -> 46 après ce round (8 consommés, 46 restants
+incluant tous les near-miss/cibles bloquées déjà documentées + les 3
+grosses cibles ci-dessus non examinées/écartées ce round).
+
+Méthode de vérification appliquée à chaque match, sans exception :
+harnais rapide (compilation+assemblage sans lien, diff de désassemblage
+contre les octets originaux) PUIS découpage du fichier `asm/*.s`
+monolithique (méthode standard DECOMP_RULES.md, en gérant les cas de
+double-découpage sur un fichier déjà scindé un round précédent) PUIS
+`rm -rf build fomt.gba fomt.elf fomt.map && make compare` (rebuild
+propre + relink complet, `sha1sum -c fomt.sha1` échoue comme attendu
+depuis `cb06198`, non-signal documenté) PUIS diff octet-à-octet direct
+`baserom.gba`/`fomt.gba` sur la région exacte affectée (fonctions
+portées + voisinage immédiat non touché, pour détecter tout décalage
+résiduel). `git status --short` propre après chacun des 7 commits.
+`origin` intact (URL cassée volontairement), rien poussé, aucune PR.
