@@ -411,6 +411,8 @@ SECTIONS
         asm/code_linkonce.o(.text.code_080E0EF0);
         src/code_080E41B0.o(.text);
         asm/code_080E41E8.o(.text);
+        src/code_080E44E4.o(.text);
+        asm/code_080E4510.o(.text);
 
         *(.gnu.linkonce.d.__vt_6AScene);
         *(.gnu.linkonce.d.__vt_13AUnk_0800080C);
