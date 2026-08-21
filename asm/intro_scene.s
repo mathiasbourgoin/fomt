@@ -5411,21 +5411,3 @@ func_080035C0: @ 0x080035C0
 .L080036F0: .4byte 0x00006B84
 .L080036F4: .4byte 0x00006CE8
 
-    thumb_func_start func_080036F8
-func_080036F8: @ 0x080036F8
-    push {r4, lr}
-    adds r4, r0, #0
-    ldr r0, .L08003714 @ =vtable_unk_080E5A18
-    str r0, [r4]
-    ldr r0, .L08003718 @ =0x00006D34
-    bl __builtin_new
-    bl func_08000914
-    str r0, [r4, #4]
-    adds r0, r4, #0
-    pop {r4}
-    pop {r1}
-    bx r1
-    .align 2, 0
-.L08003714: .4byte vtable_unk_080E5A18
-.L08003718: .4byte 0x00006D34
-

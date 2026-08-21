@@ -2790,28 +2790,3 @@ func_0805DFC4: @ 0x0805DFC4
 .L0805E61C: .4byte 0xFFFFFF00
 .L0805E620: .4byte 0xFFFFFC00
 
-	thumb_func_start func_0805E624
-func_0805E624: @ 0x0805E624
-	push {r4, r5, r6, lr}
-	adds r4, r0, #0
-	adds r6, r1, #0
-	adds r5, r2, #0
-	ldr r0, .L0805E650 @ =vtable_unk_080E79B8
-	str r0, [r4]
-	ldr r0, .L0805E654 @ =0x00000AF4
-	bl __builtin_new
-	adds r1, r5, #0
-	bl func_0805CF70
-	str r0, [r4, #4]
-	ldr r1, [r6]
-	movs r0, #0
-	str r0, [r6]
-	str r1, [r4, #8]
-	adds r0, r4, #0
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L0805E650: .4byte vtable_unk_080E79B8
-.L0805E654: .4byte 0x00000AF4
-
