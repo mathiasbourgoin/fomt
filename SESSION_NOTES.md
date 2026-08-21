@@ -9566,3 +9566,80 @@ lien complet avec `franglais_stub.bin` factice confirmés à chaque étape,
 `sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`). `git status
 --short` propre après les 2 commits, `origin` intact, rien poussé,
 aucune PR.
+
+## Round w72 (worktree `parallel-72`) -- 2 des 5 cibles moyennes de w70 attaquées, aucune matchée, 2 near-miss caractérisés
+
+Attaque de 2 des 5 cibles caractérisées mais non tentées par w70 (voir
+round w70 ci-dessus). **Aucun commit ce round** -- discipline "ne jamais
+commiter un match qui ne matche pas" respectée, `git status --short`
+propre en sortie.
+
+**Cible 1 -- `func_0809C4EC` (`asm/code_0809C32C.s`, 36o, entre
+`func_0809C4E4` et `func_0809C510`)** : vérifiée en priorité comme demandé
+(ressemblance avec la classe ouverte `func_08050E98`/`func_08050EBC`,
+masque de bitfield construit depuis un paramètre d'appel). Désassemblage :
+`bool IsFlagClear(void *self, u32 index)` -- si `index > 13`, retourne
+`true` (défaut) ; sinon calcule `mask = 1 << (index & 0x1F)`, teste
+`*(u32*)self & mask` via l'idiome "nonzero-to-bool" (`negs`/`orrs`/`lsrs
+#31`), et retourne l'inverse (bit clair). **La piste "masque = lecture
+d'un autre bitfield côté appelant" ne s'applique PAS ici** : contrairement
+à `08050E98`/`08050EBC` (masque combiné passé en argument), ici le masque
+est un simple `1 << (index & 0x1F)` calculé localement à partir de
+l'index -- pas un masque fourni par l'appelant. Structurellement plus
+simple que son cousin (pas de `bics`, juste un test de bit). Formulation
+`u32 mask=0; if (index<=13) mask=1u<<(index&0x1F); u32 word=*(u32*)self;
+bool set=!!(word&mask); return !set;` reproduit **15 des 17 instructions
+à l'identique**, y compris l'ordre exact et les registres jusqu'à
+`orrs r0,r1` -- seules les 3 dernières instructions (`lsrs`/`movs
+#1`/`eors`) divergent : la cible stocke le booléen final dans `r2` et
+charge la constante `1` dans `r0` (`lsrs r2,r0,#31; movs r0,#1; eors
+r0,r2`), notre version garde le résultat dans `r0` et charge `1` dans
+`r1` (`lsrs r0,r0,#31; movs r1,#1; eors r0,r1`) -- même calcul, mêmes
+registres vivants, rôles inversés. **Confirmé : c'est exactement la même
+classe de near-miss pur d'allocation de registre que `func_08050EBC`**
+(cf. `DECOMP_ARCHIVE.md`), pas un problème de structure. 12 formulations
+testées (`!!`+`!` séparés, `1^set`, `set==0`, `set` typé `u32` au lieu de
+`bool`, variable renommée, inline direct sans variable `set`, `volatile`)
+-- toutes soit reproduisent le near-miss identique (`bool` intermédiaire
+nécessaire pour déclencher l'idiome `negs`/`orrs`/`lsrs`, cf. règle 12-like)
+soit divergent plus largement (`==0`/comparaison directe compile en
+branchement `cmp`/`bne`, pas en forme arithmétique). Non résolu, non
+commité -- candidat pour une future tentative `fable` (stratégie
+d'escalade DECOMP_RULES.md) si un budget dédié est alloué : l'écart est
+maintenant resserré à 3 instructions sur 17, structure entièrement
+comprise.
+
+**Cible 2 -- `.L08037250` (`asm/code_08036DC4.s`, 28o, entre
+`func_08037244` et `func_0803726C`)** : confirme l'hypothèse w70 ("Location
+locale" zéro-initialisée puis copiée en structure complète). Désassemblage :
+alloue 8o sur la pile, écrit 4 `strh` de la constante 0 (aux offsets 0/2/4/6
+depuis DEUX registres différents -- `mov r3,sp` calculé en premier pour les
+offsets 2/4/6, `mov r2,sp` calculé ensuite pour l'offset 0 seul), relit les
+8o comme 2 mots, les écrit à `self+0x34`/`self+0x38`. Tenté comme
+`struct PACKED Loc4 { u16 a,b,c,d; }` local + `asm volatile("":: "r"(&loc)
+:"memory")` (barrière anti-repliement nécessaire : sans elle, agbcp
+constant-propage tout le corps en 2 `str` directs vers `self`, sans passer
+par la pile -- confirmé sur 5 variantes sans barrière, y compris
+`memset(&loc,0,sizeof(loc))` qui appelle une vraie fonction `bl` au lieu
+d'inliner). **Avec `PACKED` + barrière** (`Loc4 loc; loc.a=loc.b=loc.c=
+loc.d=0;`) : reproduit la taille exacte (28o), les 4 `strh` corrects
+(largeur d'accès correcte -- sans `PACKED`, merge en 2 `str` mot ; testé
+et confirmé), l'ordre des lectures/écritures -- mais avec UN SEUL registre
+de base (`mov r1,sp` réutilisé pour les 4 champs) au lieu des DEUX
+registres distincts de la cible. Hypothèse tentée pour expliquer la
+distinction `field a` vs `group b/c/d` (déclarer `a` et un
+sous-struct `{b,c,d}` séparément, ou via 2 pointeurs typés différemment
+`Loc4*`/`u16*` sur le même objet) : soit re-fusionné en 1 seul registre
+par CSE implicite (struct imbriqué), soit fait apparaître un accès
+`Loc4*` en `strb` (bitfield-like, pas le bon type d'accès) au lieu du
+`strh` voulu -- aucune formulation testée (7 variantes) n'a reproduit les
+2 registres distincts SANS casser autre chose. Non résolu, non commité.
+Piste non épuisée : la vraie source a probablement 2 variables locales
+adjacentes distinctes (pas un seul struct de 4 champs) -- à retenter avec
+un contrôle plus fin de l'ordre de déclaration/l'allocateur de pile
+d'agbcp plutôt que la modélisation "un seul struct".
+
+Rebuild : aucun changement appliqué au dépôt (les 2 cibles restent en
+`.byte` brut, non portées) -- pas de `make compare` nécessaire pour ce
+round, `git status --short` confirmé propre avant et après. `origin`
+intact, rien poussé, aucune PR.

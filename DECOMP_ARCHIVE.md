@@ -684,6 +684,22 @@ jamais utilisée dans ce dépôt).
   w70) ; 5 cibles moyennes restent caractérisées mais non portées :
   - `asm/code_08036DC4.s` `.L08037250` (28o) -- pattern "Location
     locale zéro-initialisée puis copiée" (motif `func_08011ED8`).
+    **Round w72 : tentée, PAS résolue, near-miss caractérisé.**
+    `struct PACKED Loc4 {u16 a,b,c,d;}` local + barrière
+    `asm volatile("":: "r"(&loc):"memory")` (nécessaire -- sans elle
+    agbcp constant-propage tout en 2 `str` directs vers `self`, aucune
+    pile utilisée) reproduit la taille exacte (28o) et les 4 `strh`
+    corrects (largeur d'accès, `PACKED` nécessaire aussi pour ça --
+    sans lui, merge en 2 `str` mot), mais avec UN SEUL registre de base
+    (`mov r1,sp` réutilisé 4x) alors que la cible en utilise DEUX
+    (`mov r3,sp` calculé en premier pour les offsets 2/4/6, `mov r2,sp`
+    calculé ensuite pour l'offset 0 seul) -- suggère que la vraie
+    source a 2 variables locales adjacentes distinctes (pas 1 seul
+    struct de 4 champs), piste non épuisée (7 variantes tentées :
+    sous-struct imbriqué refusionné par CSE implicite, 2 locals
+    séparés jamais adjacents en pile, pointeurs `Loc4*`/`u16*` typés
+    différemment produisant un mauvais `strb` au lieu de `strh`). Voir
+    `SESSION_NOTES.md` round w72 pour le détail complet.
   - `asm/code_08036DC4.s` `.L08036E00` (44o) -- vrai ctor C++
     (`__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi`) + stamp vtable,
     nécessite le layout de classe complet.
@@ -691,10 +707,22 @@ jamais utilisée dans ce dépôt).
     à `func_08008E64` (non porté), complexité moyenne.
   - `asm/code_actor_0809BFE8.s` `.L0809C4EC` (36o) -- test de bit
     dynamique sur un paramètre d'appel (masque pas connu à la lecture
-    du désassemblage) : **ressemble fortement à la classe non résolue
-    `func_08050E98`/`func_08050EBC` ci-dessus** (masque construit
-    depuis un paramètre dynamique), à vérifier en priorité si cette
-    classe est un jour reprise.
+    du désassemblage). **Round w72 : vérifiée en priorité comme prévu,
+    hypothèse "masque = lecture d'un autre bitfield côté appelant"
+    ÉCARTÉE pour cette fonction précise** -- contrairement à
+    `func_08050E98`/`func_08050EBC` (masque combiné fourni en argument
+    par l'appelant), ici le masque est un simple `1 << (index & 0x1F)`
+    calculé localement à partir du paramètre `index`, pas un masque
+    externe. Structure entièrement comprise (`bool IsFlagClear(void
+    *self, u32 index)`, retourne `true` si `index>13` ou si le bit
+    `index` de `*(u32*)self` est clair), 15/17 instructions reproduites
+    à l'identique, **mais confirme partager EXACTEMENT la même classe
+    de near-miss pur d'allocation de registre que `func_08050EBC`** sur
+    les 3 dernières instructions (le booléen final et la constante `1`
+    échangent de registre entre notre version et la cible). 12
+    formulations testées sans fermer l'écart -- voir `SESSION_NOTES.md`
+    round w72. Bon candidat pour une escalade `fable` future (stratégie
+    DECOMP_RULES.md), commun aux deux fonctions de cette classe.
   - `asm/code_080A3774.s` `.L080AAF9C` (44o+) -- appelle
     `func_0803A8A4`, déjà signalé "pression de registres" plus haut.
   Egalement : `func_08008D10` (`asm/code_08008D10.s`) porté comme
