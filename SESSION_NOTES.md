@@ -10993,3 +10993,192 @@ la mission, même sans match complet. `git status --short` propre en fin
 de round, rien commité côté code (seul ce fichier et
 `DECOMP_ARCHIVE.md` sont modifiés). Scratch utilisé :
 `/tmp/w80_scratch/{target,body}.dis` (hors dépôt, non committé).
+
+## Round w89 (worktree `w89`, branche `parallel-89`) -- formule de division
+`__udivsi3` de l'animation d'ouverture/fermeture de boîte résolue et
+vérifiée en harnais isolé ; toujours 0 match commité sur
+`franglais_transition_impl_tick`, verdict honnête sur la faisabilité
+d'un match complet en un seul round
+
+Mission reçue : assembler la fonction ENTIÈRE (2974o) en intégrant la
+boucle de texte propre de `parallel-87`/`parallel-88` (`git show
+b4c784d`/lecture directe des branches, non fusionnées dans `main`), la
+caractérisation pseudo-C de `parallel-86` (phases 1/2/4/5/6, tronc commun
+a-g), et en résolvant en priorité la formule des deux divisions
+`__udivsi3` du bloc (f) (animation d'ouverture de boîte) -- avec comme
+objectif ultime un commit bit-exact de la fonction entière si possible.
+
+### 0. Localisation exacte du compteur d'animation -- CORRECTION d'un
+point non résolu par `w86`
+
+`w86` notait "diviseur `9` sur `self+0x1F8` (compteur d'animation, `r6`)"
+sans avoir vérifié D'OÙ ce `r6` provient réellement. Relecture directe de
+`asm/code_0804E9C8.s` juste avant le bloc `.L08050270` (la division) :
+`ldrb r6, [r7, #0xc]` (ligne `569` du désassemblage extrait) -- **`r6`
+au moment de la division est en fait `self+0xC`, EXACTEMENT LE MÊME
+octet de timer que celui décrémenté par la Phase 1** (`self+0xC`,
+`bls`->9 valeurs 0..8 gérées identiquement, cf. `w86` §2 phase 1), PAS
+`self+0x1F8`. Le garde `cmp r6,#8; bhi .L0804FC0E` (sinon `b
+.L08050270`) confirme : quand ce timer est **> 8**, on saute DIRECTEMENT
+à la boucle de texte priorité 1 (`.L0804FC0E`, l'adresse même de la
+cible `w86`/`w87`/`w88`!) ; quand il est **<= 8** (9 valeurs possibles :
+0..8), on va DIRECTEMENT au calcul de division, **sans jamais exécuter
+la boucle de texte ce cycle-là**. Ça explique enfin le diviseur `9` :
+c'est le nombre de valeurs 0..8 du timer d'ouverture de boîte, pas une
+constante arbitraire, et ça relie pour la première fois la Phase 1
+(décompte du timer) au bloc (f) (division) comme DEUX consommateurs du
+MÊME champ `self+0xC`, avec un antagonisme direct (boîte encore en
+ouverture => pas de texte affiché ce cycle).
+
+### 1. Formule de division reconstruite et vérifiée bit-exact en
+harnais isolé (`arm-none-eabi-cpp`+`agbcp`, recette `DECOMP_RULES.md`
+"Itération rapide")
+
+Désassemblage cible (`.L08050270`-`.L080502DA`, les deux appels
+`__udivsi3`) :
+
+```
+lsls r0, r6, #3      ; counter*8
+subs r0, r0, r6       ; counter*7
+lsls r0, r0, #3       ; counter*56
+movs r1, #9
+bl __udivsi3           ; q1 = counter*56/9  (UNSIGNED)
+adds r5, r0, #0
+lsrs r0, r5, #0x1f     ; motif standard de division SIGNÉE par 2
+adds r0, r5, r0
+asrs r0, r0, #1         ; half_y = (s32)q1 / 2
+movs r4, #0x84
+subs r4, r4, r0          ; top_y = 132 - half_y
+lsls r0, r6, #4        ; counter*16
+subs r0, r0, r6         ; counter*15
+lsls r0, r0, #4         ; counter*240
+movs r1, #9
+bl __udivsi3             ; q2 = counter*240/9 (UNSIGNED)
+lsrs r2, r0, #0x1f
+adds r2, r0, r2
+asrs r2, r2, #1          ; half_x = (s32)q2 / 2
+movs r1, #0x78
+subs r1, r1, r2           ; left_x = 120 - half_x
+lsls r2, r1, #8
+adds r1, r1, r0            ; left_x + q2 (PAS de masque logiciel -- strh tronque)
+orrs r2, r1                 ; packed_x = (left_x<<8) | (left_x+q2)
+[... strh vers [sp+0x90]/[sp+0x7c+0x40], PUIS ...]
+lsls r0, r4, #8
+adds r4, r4, r5              ; top_y + q1
+orrs r0, r4                   ; packed_y = (top_y<<8) | (top_y+q1)
+[... strh vers les mêmes bases + 2/+0x44 ...]
+```
+
+`counter=0x84=132` et `counter=0x78=120` sont des pivots FIXES ; à
+`counter=8` (dernier cycle avant bascule vers le texte) : `q1=8*56/9=49`
+(division entière, pas 56 exact -- **la boîte n'atteint PAS
+exactement les bords d'écran au dernier tick de compteur**, cohérent
+avec un chevauchement d'1 frame avec la boucle de texte plutôt qu'une
+transition pile poil alignée) ; à `counter=0` : `q1=0`, `top_y=132`,
+`packed_y` dégénère en une ligne de hauteur nulle à `y=132` -- **boîte
+fermée (ligne plate)**. Confirme le rôle "animation d'ouverture/
+fermeture par interpolation linéaire entière" déjà pressenti par `w86`,
+avec les deux bornes cette fois PROUVÉES (132 et 120, pas juste
+"probablement une interpolation").
+
+**Point non élucidé restant sur ce point précis** (mineur) : le facteur
+X ne va pas jusqu'à occuper tout l'écran (240px) à `counter=8` (`q2=8*
+240/9=213`, pas 240) -- cohérent avec l'observation ci-dessus (dernier
+tick avant bascule texte, pas la valeur "grand ouvert" finale), mais pas
+vérifié dynamiquement (aucun accès mGBA ce round, uniquement lecture
+statique + harnais).
+
+**Vérification en harnais isolé** (`/tmp/w89scratch/div_test2.cc`,
+signature synthétique `(u32 counter, StageBuf*)`, PAS la vraie fonction)
+: compile avec `agbcp -O2 -fhex-asm`, produit EXACTEMENT le motif
+`__udivsi3` x2 (pas `__divsi3` -- piège rencontré en 1re tentative :
+`u8 counter` promu en `int` par les règles de promotion C fait
+apparaître `__divsi3` SIGNÉ ; corrigé en typant `counter` comme
+paramètre `u32` directement, ce qui force la multiplication/division en
+arithmétique non signée dès la 1re passe -- cohérent avec le fait que
+`self+0xC` est chargé par `ldrb` -- un octet -- mais que sa valeur
+promue au moment de CETTE expression doit déjà être `u32`, pas `int`),
+le même motif de division-par-2 signée (`lsr #0x1f; add; asr #1`), les
+mêmes pivots `0x84`/`0x78`, le même ordre de calcul (Y calculé et
+stocké dans `top_y`/`half_y` PUIS X calculé PUIS stocké AVANT que Y
+soit finalement empaqueté et stocké -- reproduit l'ordre exact du
+désassemblage cible), et surtout : **aucun masque logiciel nécessaire
+sur le octet bas empaqueté** -- écrire `(u8)(...)` ou un cast/troncature
+explicite fait APPARAÎTRE un `lsl/lsr` de troncature absent de la
+cible ; la version qui matche laisse le compilateur s'appuyer sur la
+troncature implicite du `strh` final (16 bits), pas une leçon nouvelle
+mais une confirmation directe de l'anti-pattern #1/#4bis de
+`DECOMP_RULES.md` généralisée à ce contexte précis. Fichier
+`/tmp/w89scratch/div_test2.cc` (hors dépôt, non committé, signature
+synthétique -- ne peut PAS constituer un match, cf. discipline `w87`
+§1).
+
+### 2. Verdict honnête -- pas de tentative d'assemblage de la fonction
+entière ce round, et pourquoi
+
+Budget du round consacré en priorité (1) à la question explicitement
+posée en priorité 4 par la mission (la formule de division, résolue et
+vérifiée ci-dessus) et (2) à la lecture complète du désassemblage des
+2974 octets pour vérifier indépendamment la carte de `w86`. Constat
+confirmé sans changement par rapport à `w86`/`w87`/`w88` : **0/17
+callés opaques ont un corps déjà porté** dans ce dépôt à l'adresse
+exacte (`func_08007D4C`, `func_080074C0`, `func_08008F0C`,
+`func_0805E99C`, `func_080ADD78`, `func_0805E850`, `func_08050868`,
+`func_080507D0`, `func_08008B6C`/`_88`/`08008CD0`, `_call_via_r2`/`r3`
+compris) -- pour toute portion de la fonction qui les appelle, écrire
+un prototype C sans avoir porté leur corps réel resterait pure
+spéculation sur leur signature exacte (cf. `DECOMP_RULES.md` anti-
+pattern #3, déjà cité par `w86`). Ni `w86`, ni `w87`, ni `w88`, ni ce
+round n'ont réussi à porter le corps d'AUCUN de ces 17 callés -- c'est
+le vrai goulot d'étranglement, pas la caractérisation elle-même
+(complète depuis `w86`) ni la boucle de texte (propre depuis `w88`) ni,
+maintenant, la formule de division (résolue ce round).
+
+Tenter d'assembler et de compiler les **7 phases + 7 sous-blocs du
+tronc commun + boucle texte + 46 sites `bl`** en une seule fonction
+`src/code_0804F7A4.cc`, avec des prototypes DEVINÉS pour 17 callés
+jamais vérifiés, aurait un risque élevé de produire un `.o` qui
+"ressemble" au bon désassemblage sans être bit-exact -- et comme la
+fonction n'a AUCUNE frontière interne committable (un seul
+`thumb_func_start`, pas de sous-fonctions), il n'existe **aucune
+possibilité de commit partiel** : soit la fonction ENTIÈRE matche à
+l'octet près après un rebuild complet + diff borné (`DECOMP_RULES.md`
+"Vérifier taille puis contenu"), soit rien n'est commité. Conforme à la
+discipline non négociable du dépôt ("ne jamais commiter un match qui ne
+matche pas"), et à l'instruction explicite de la mission ("ne pas
+forcer une tentative non vérifiée à travers") : **ce round ne commite
+aucun fichier `src/`/`asm/`/`fomt.lds`**, seul ce fichier est modifié.
+`git status --short` propre en fin de round.
+
+### 3. Étape précise suggérée pour `parallel-90+`
+
+L'estimation de `w86` (4-6 rounds restants après la caractérisation
+complète) reste globalement valable, MAIS elle sous-estimait le vrai
+verrou : ce n'est pas l'assemblage de la FSM elle-même (mécanique, "no
+structural unknowns" par bloc), c'est le **portage des 17 callés
+opaques**, dont AUCUN n'a encore de corps réel dans ce dépôt après 4
+rounds dédiés (`w86`-`w89`). Prochaine étape concrète et priorisée :
+1. Porter en priorité les 2 callés les plus fréquents et les plus
+   simples d'après leur signature d'appel déjà confirmée par `w86`/
+   ce round : `func_08007D4C` (lookup tuile, 4 sites d'appel dans
+   cette seule fonction) et `func_080074C0` (accesseur similaire, 3+
+   sites) -- motif "accesseur" répété, probablement rapide une fois
+   attaqué comme groupe (déjà noté par `w80`).
+2. Puis `func_08008F0C` (signature d'ordre d'arguments déjà confirmée
+   par `w86` : `(src, descriptor, vram_dest, count)`) et
+   `func_0805E99C` (compositeur 2 sprites, partage le shadow-OAM avec
+   la boucle texte -- cf. `w86` §2e).
+3. Seulement une fois ces callés portés (avec un VRAI corps vérifié,
+   pas un prototype deviné), tenter l'assemblage complet de
+   `franglais_transition_impl_tick`, bloc par bloc en s'appuyant sur le
+   pseudo-C `w86` + la boucle texte propre `w88` + la formule de
+   division ce round -- en gardant à l'esprit qu'un match ne pourra
+   être vérifié/commité qu'en UNE fois, la fonction n'ayant pas de
+   frontière interne.
+
+Scratch utilisé : `/tmp/w89_notes/{w86,w87,w88}.md` (extraits de
+`SESSION_NOTES.md` des branches non fusionnées, hors dépôt),
+`/tmp/w89_scratch/func.s` (désassemblage complet extrait des 2974
+octets), `/tmp/w89scratch/div_test.cc`/`div_test2.cc` (harnais de
+vérification de la formule de division) -- tout hors dépôt, non
+committé.
