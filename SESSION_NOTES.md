@@ -12068,3 +12068,225 @@ OAM-like complet, et la boucle englobante `source_list`/`dest_array`).
 
 Scratch utilisé : `/tmp/w90scratch4/{try.sh,t_*.cc,target_*.bin,
 reference_HEAD.gba,build.log}` -- hors dépôt, non committé.
+
+## Round w96 (worktree `w90`, branche `parallel-90`) -- première tentative
+de compilation complète de `func_0805E99C`, near-miss structurel, aucun
+match, correction importante de la cartographie largeur/hauteur de w95
+
+Mission : attaquer directement le compositeur `func_0805E99C` (648
+octets), seule pièce restante de `franglais_transition_impl_tick`
+encore jamais compilée, en s'appuyant sur la caractérisation complète
+héritée de w92/w94/w95. Verdict : la sémantique COMPLÈTE de la fonction
+a été extraite et vérifiée instruction par instruction (voir §1,
+corrige un point de w95), un premier essai de compilation intégrale a
+été fait (voir §2) -- proche structurellement (même nombre de blocs de
+contrôle, même formules arithmétiques) mais PAS byte-exact : environ
+560/648 octets diffèrent, la cause profonde identifiée étant
+l'allocation de registres hauts (r8/r9/r10) que agbcc résiste à
+reproduire exactement. Aucun fichier `src/`/`asm/`/`fomt.lds` touché,
+rien commité. Compteur inchangé : **10/13**.
+
+### 0. Protocole
+
+Scratch dans `/tmp/w90scratch5` (créé ce round, `/tmp/w90scratch4` de
+w95 avait disparu comme d'habitude). `try.sh` simplifié par rapport aux
+rounds précédents : compile un seul `.cc` via le pipeline EXACT du
+Makefile (`arm-none-eabi-cpp $(CPPFLAGS) fichier.cc | agbcp
+$(CXXFLAGS) -o fichier.s`, sans les flags `-quiet`/`-nostdinc` erronés
+d'un premier brouillon qui faisait planter `arm-none-eabi-cpp`),
+`align_sections.sh`, assemblage, puis extrait la fonction visée du
+`.o` via `objdump -t` (adresse+taille du symbole) et `objcopy
+--only-section=.text`, diffé octet à octet contre la plage cible
+extraite de `baserom.gba`. Aucune tentative de build complet ce round
+(le near-miss était trop large pour justifier le coût d'un rebuild
+intégral -- la vérification "0 diff sur la ROM entière" n'a donc pas
+été exercée, cohérent avec le fait que rien n'a été commité).
+
+### 1. Sémantique complète de `func_0805E99C` (relecture ligne à ligne
+du désassemblage `asm/code_0805E860.s`, confirmée par des essais de
+compilation)
+
+Signature confirmée (inchangée depuis w94) :
+`func_0805E99C(DestArray *dest_array, SourceEntry *source_list, u32
+source_count, CompositeDesc *desc)`.
+
+**CORRECTIF IMPORTANT sur w95** : la note w95 §2 affirme que pour
+`shape==1` (large), `sb`=largeur/`r6`=hauteur. C'est l'INVERSE. Preuve
+directe par le site d'appel à `func_0805EC24` (`asm/code_0805E860.s`,
+juste après le bloc table) : `adds r2, r6, #0` (3e argument =
+`width`) / `mov r3, sb` (4e argument = `height`), et la signature de
+`func_0805EC24` déjà matée (w95) est `(out_x, out_y, width, height,
+angle_coeffs)`. Donc **`r6` = largeur, `sb` = hauteur**, dans TOUTE la
+fonction (y compris le test de culling écran `.L0805EB04`, qui
+compare bien `x+largeur` à 240 et `y+hauteur` à 160 avec cette
+cartographie -- avec l'ancienne cartographie de w95 le test de
+culling n'aurait aucun sens). Formule shape/size elle-même inchangée
+et confirmée exacte (carré : `8<<size` ; large/haut : grande dimension
+`8<<((size+1)/2+1)`, petite dimension `8` si `size==1` sinon
+`grande/2` ; `shape==1` => hauteur=petite/largeur=grande, `shape==2`
+=> l'inverse).
+
+Corps complet reconstruit (pseudo-C, forme qui a servi de point de
+départ à l'essai §2) :
+
+```c
+struct SourceEntry { u32 attr01; u32 word1; };          // 8 octets, entrée source
+struct DestEntry   { u32 attr01; u16 attr2; u16 pad; };  // 8 octets, "shadow OAM"
+struct DestArray   { u8 count; u8 pad[3]; DestEntry entries[128]; };
+struct CompositeDesc {
+    i16 x; i16 y;           // +0x0, +0x2 (ldrsh -- signé malgré valeurs positives au call site)
+    u16 unk4; u16 unk6;     // +0x4, +0x6 (ldrh -- non signé), remplis par func_080074C0/func_08007D4C (w91)
+    u16 unk8; u16 pad_a;    // +0x8 (ldrh), +0xa (jamais lu)
+    u32 unk_c;              // +0xc
+    u8 flags; u8 unk11;     // +0x10 (bits flip), +0x11 (bits shape/size/index table)
+    u16 pad_12;              // +0x12 (jamais lu)
+    u32 mode;                // +0x14 -- dispatch principal (0=culling+flip, sinon table+affine ; ==3 correction pivot)
+    u8 unk18;                // +0x18
+};
+
+for (p = source_list; p != source_list+source_count; p++) {
+    u32 word0 = p->attr01, word1 = p->word1;             // word0 = attr0(low16)|attr1(high16) empaqueté
+    u32 shape = (word0<<16)>>30;    // attr0 bits[15:14]
+    u32 size  = word0>>30;          // attr1 bits[15:14]
+    i32 x = (i32)(word0<<7)>>23;    // attr1 bits[8:0] signé (X, 9 bits)
+    i32 y = *(i8*)&word0;           // attr0 bits[7:0] signé (Y, 8 bits) -- lu via cast pointeur,
+                                     // pas via masque registre : c'est ce qui force word0 en mémoire
+                                     // (sp) pour le reste de la fonction (confirmé : TOUTES les
+                                     // relectures/écritures de word0 passent par la pile dans la cible).
+    // largeur/hauteur : formule shape/size ci-dessus (r6=largeur, sb=hauteur)
+
+    u32 mode = desc->mode;          // doit être une VARIABLE LOCALE (pas desc->mode répété) pour que
+                                     // agbcc l'alloue à r8 et la garde vivante à travers l'appel à
+                                     // func_0805EC24 (registre callee-saved) -- confirmé par essai.
+    if (mode == 0) {
+        if (desc->flags & 1) { x = -(x+width);  /* toggle bit28 (hflip) de word0 */ }
+        if (desc->flags & 2) { y = -(y+height); /* toggle bit29 (vflip) de word0 */ }
+    } else {
+        u8 d11 = desc->unk11;
+        word0 = (word0&0xF1FFFFFF)|((d11&7)<<25);          // bits[27:25]
+        word0 = (word0&0xEFFFFFFF)|(((d11>>3)&1)<<28);     // bit28 (hflip, valeur directe pas toggle)
+        word0 = (word0&0xDFFFFFFF)|(((d11>>4)&1)<<29);     // bit29 (vflip, idem)
+        u32 idx = d11 & 0x1F;
+        u8 *base = (u8*)dest_array + 4 + idx*32;            // relit une "ligne" de 32 octets DANS
+                                                              // dest_array (4 DestEntry consécutives)
+        i16 coeffs[4] = { base[6..7], base[0xe..0xf], base[0x16..0x17], base[0x1e..0x1f] }; // les 4
+                          // champs .attr2 des 4 DestEntry de la ligne -- construction par PAIRES de
+                          // u32 intermédiaires avant copie finale dans coeffs[4] (voir §2, idiome pas
+                          // entièrement reproduit)
+        func_0805EC24(&x, &y, width, height, coeffs);       // aiguille l'affine déjà maté (w95)
+        if (mode == 3) { x -= width/2; y -= height/2; }      // correction pivot, idiome division
+                                                              // signée par 2 standard
+    }
+
+    x += desc->x; y += desc->y;
+
+    if (mode == 0) {
+        if (x+width<=0 || x>0xEF || y+height<=0 || y>0x9F)
+            goto skip_write;   // culling écran (240x160), UNIQUEMENT en mode 0
+    }
+
+    // assemblage du mot attr01 final
+    word0 = (word0&0xFFFFFF00)|(u8)y;
+    word0 = (word0&0xFFFFFCFF)|((mode&3)<<8);
+    word0 = (word0&0xFFFFF3FF)|((desc->unk_c&3)<<10);
+    word0 = (word0&0xFFFFEFFF)|((desc->unk18&1)<<12);
+    word0 = (word0&0xFE00FFFF)|((x&0x1FF)<<16);
+    // assemblage du mot word1 final (relit desc->unk6/unk8/unk4)
+    word1 = (word1&0xFFFFFC00)|(((word1&0x3FF)+desc->unk6)&0x3FF);
+    word1 = (word1&0xFFFFF3FF)|((desc->unk8&3)<<10);
+    word1 = (word1&0xFFFF0FFF)|(((((word1>>12)&0xF)+desc->unk4)&0xF)<<12);
+
+    if (dest_array->count <= 0x7F) {
+        entry = dest_array + 4 + count*8;   // pointeur brut, pas indexation de struct
+        entry->attr01 = word0; entry->attr2 = (u16)word1;
+        dest_array->count++;
+    }
+  skip_write: ;
+}
+```
+
+Toute cette sémantique a été vérifiée exacte instruction par
+instruction contre le désassemblage cible (pas de zone d'ombre
+restante -- contrairement à w94/w95, il ne reste plus de "structure de
+contrôle claire mais forme C incertaine").
+
+### 2. Essai de compilation intégrale -- near-miss structurel, PAS matché
+
+Le C ci-dessus (raffiné au fil de ~5 itérations, fichiers
+`/tmp/w90scratch5/t1.cc`/`t2.cc`) compile SANS ERREUR et produit une
+fonction de forme quasi identique (mêmes branches, mêmes constantes,
+même nombre de blocs), mais systématiquement plus COURTE que la cible
+(592-596 octets contre 648) avec ~555-565 octets différents dès le
+10e octet (le prologue lui-même diffère : la cible réserve 44 octets
+de pile -- `sub sp, #0x2c` -- la nôtre 32 -- `sub sp, #0x20`).
+
+Cause racine identifiée (pas résolue) : **répartition des 3 registres
+hauts disponibles (r8/r9/r10, après r7=desc et r11(fp)/r12(ip) non
+utilisés) entre les 5 valeurs qui se disputent une résidence
+registre** sur toute la boucle : `desc` (r7, jamais en cause),
+`source_list` (curseur de boucle), `dest_array`, `mode`, `width`
+(r6, bas, jamais en cause), `height`. La cible alloue r10=source_list,
+r8=mode, r9=height, et laisse **dest_array ENTIÈREMENT résident en
+pile** (rechargé à chaque usage via `ldr [sp,#0x24]`, alors que rien
+ne force ça sémantiquement -- dest_array est juste le 4e "candidat
+registre" que l'allocateur d'agbcc a refusé). Nos essais successifs
+ont fait basculer dest_array tantôt en r9 (t1 sans variable `mode`
+locale), tantôt en r10 (t1 avec variable `mode` locale -- ce qui a
+alors délogé `source_list`, qui elle-même termine en pile). Aucune des
+formes C essayées (variable `mode` locale ou non, boucle `for`
+vs `do/while`, indexation de struct vs arithmétique de pointeur brut
+pour l'écriture finale) n'a réussi à convaincre agbcc de laisser
+`dest_array` hors registre tout en gardant `source_list` dedans
+SIMULTANÉMENT -- les 2 changements semblent être un jeu à somme nulle
+avec seulement 3 emplacements hauts disponibles pour 4 candidats
+(`source_list`, `dest_array`, `mode`, `height`). Hypothèse non testée
+restante : il manque peut-être une 5e variable candidate dans le vrai
+source (un champ que nous avons fusionné ou omis) dont la présence
+"absorberait" un registre différemment et rétablirait l'équilibre
+observé dans la cible -- ou alors l'ordre lexical exact des accès à
+`dest_array` (actuellement : 1 fois dans la branche table, 1 fois en
+fin de boucle) doit être différent (accès supplémentaire non identifié
+?).
+
+Point positif accessoire : le **bloc de construction de `coeffs[4]`**
+(4 halfmots `.attr2` lus depuis `dest_array`) a été percé une seconde
+fois -- la cible ne l'écrit PAS comme 4 affectations directes à un
+tableau `i16[4]` (testé : produit des `strh` directs, aucun rapport
+avec la cible) mais comme **deux valeurs `u32` intermédiaires**
+(`raw0 = attr2_0 | (attr2_1<<16)`, calcul pur registre, aucune lecture
+mémoire ; `raw1 = attr2_2; raw1 |= attr2_3<<16;`, DEUX affectations
+séparées qui déclenchent un vrai read-modify-write avec lecture de
+mémoire non initialisée sur la moitié basse) **copiées ensuite en bloc
+dans le tableau `i16[4]` final** juste avant l'appel à
+`func_0805EC24`. Cette forme (`u32 raw0/raw1` + copie) reproduit
+fidèlement l'ASYMÉTRIE observée (premier mot: aucune lecture mémoire ;
+second mot: une lecture mémoire non initialisée puis un second champ
+résident registre) dans un test isolé à faible pression de registres
+(`/tmp/w90scratch5/t_coeffs2.cc`) -- mais il n'a pas été confirmé que
+cette forme survit intacte une fois plongée dans la pression de
+registres réelle de la fonction complète (le diff observé au niveau de
+la fonction entière est dominé par le désaccord de layout de pile en
+amont, qui décale toutes les adresses et rend la comparaison de ce
+sous-bloc peu concluante en l'état).
+
+### 3. Ce qui reste (3/13, inchangé)
+
+- `func_0805E99C` (compositeur, 648 octets) : sémantique 100%
+  élucidée (§1, avec correctif de cartographie largeur/hauteur sur
+  w95). Premier essai de compilation intégrale proche mais pas
+  byte-exact (§2) -- le blocage est un problème PUR d'allocation de
+  registres hauts (4 candidats pour 3 emplacements), pas un problème
+  de sémantique. Prochaine piste recommandée : explorer d'autres
+  formes lexicales pour UNE SEULE variable à la fois (par exemple
+  `height`, jamais touchée ce round) pendant qu'on fixe les 3 autres,
+  pour isoler laquelle des 4 doit changer de forme pour libérer le bon
+  registre ; ou chercher, dans le désassemblage cible, un 5e usage de
+  `dest_array` qui aurait été manqué et qui expliquerait pourquoi
+  l'original le maintient en pile malgré la pression.
+- `func_0805E8F0` (101 lignes) : near-miss w93 sur la rotation de
+  boucle, pas retouché depuis w93.
+- `func_08050868` (323 lignes), `func_080ADD78` (233 lignes) :
+  toujours pas caractérisés au-delà de leur taille.
+
+Scratch utilisé : `/tmp/w90scratch5/{try.sh,t1.cc,t2.cc,t_coeffs.cc,
+t_coeffs2.cc,target.bin}` -- hors dépôt, non committé.
