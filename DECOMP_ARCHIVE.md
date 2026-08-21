@@ -586,13 +586,33 @@ jamais utilisée dans ce dépôt).
     manuel, et vérifier si la fonction est un ctor candidat au `return
     self`.
   - `func_08050F4C` (18o) -- near-miss "copie explicite élidée" (`v?1:v`
-    normalisation booléenne), reconfirmé round w44 (essai `!!(v)` façon
-    anti-pattern #12 : toujours 16 octets au lieu de 18).
-  - `func_08050F74` (44o) -- near-miss registre r4/r5 échangé + wraparound
-    `__umodsi3`, détail `SESSION_NOTES.md` round w41.
-  - `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o) -- 3 fonctions
-    "pression de registres" (`r8`/`r9`/`sl` vivants dans le corps),
-    identifiées mais jamais tentées, candidates pour escalade `fable`.
+    normalisation booléenne). Mécanisme root-causé pour de bon round w64
+    (`SESSION_NOTES.md`) : agbcc/agbcp fusionnent TOUJOURS `v`/`result`
+    dans un seul registre dès qu'aucun appel externe ne sépare la copie
+    du test (confirmé sur >12 formulations, y compris en C pur via
+    `agbcc` direct, écartant un artefact du frontend C++) ; une barrière
+    `asm volatile` force bien 2 registres séparés mais avec les rôles
+    `r0`/`r1` INVERSÉS par rapport à la cible (le compilateur alloue
+    systématiquement `r0` à la valeur qui survit jusqu'au retour, l'
+    inverse de la cible) ; seule une épingle de registre explicite
+    (`register ... asm("r0")`, sans précédent dans tout le dépôt, non
+    plausible comme vraie source pour un getter trivial) reproduit un
+    match octet pour octet -- non commité. Toujours ouvert, mais plus
+    aucune piste de reformulation C plausible identifiée.
+  - `func_08050F74` (44o) -- **MATCHÉ round w64** (`SESSION_NOTES.md`) :
+    le near-miss r4/r5 échangé + reload `__umodsi3` (w41) se résout en
+    introduisant des copies locales séparées des 2 paramètres assignées
+    via une instruction à part (`xx = x;`, pas `u32 xx = x;` combiné) --
+    contrairement à `func_08050F4C` ci-dessus, la présence d'un vrai
+    appel externe (`__umodsi3`) entre la copie et le test empêche le
+    fold, et l'allocation naturelle retombe alors directement dans le
+    bon sens. Découpage : `asm/code_08050F74.s` (ancien blob 836o)
+    remplacé par `src/code_08050F74.cc` + `asm/code_08050FA0.s` (792o
+    restants).
+  - `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o, désormais dans
+    `asm/code_08050FA0.s`) -- 3 fonctions "pression de registres"
+    (`r8`/`r9`/`sl` vivants dans le corps), identifiées mais jamais
+    tentées, candidates pour escalade `fable`.
   Round w44 (sweep étendu `scan_hidden_code_blobs_v2.py`, toute taille) a
   reconfirmé que ces fragments sont les SEULS candidats "medium" restants
   dans tout `asm/*.s` avec `.L0809E1B4` ci-dessous -- aucun nouveau blob

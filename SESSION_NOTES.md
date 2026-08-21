@@ -8952,3 +8952,163 @@ Commit propre : `asm/code_0803A8A4.s` (suppression du blob `.byte`),
 Reste ouvert dans ce fichier : `func_0803BDFC` (pression de registres,
 callee opaque de `func_0803BF78`) et `func_08083A7C` -- pas retentés ce
 round.
+
+## Round w64 (worktree `parallel-64`) -- match `func_08050F74` (near-miss
+r4/r5 root-causé pour de bon) ; `func_08050F4C` root-causé mécaniquement
+mais toujours PAS matché (mur confirmé, pas juste reconfirmé)
+
+Mission : reprendre les 2 near-miss `func_08050F4C`/`func_08050F74`
+laissés ouverts par w44 (`asm/code_08050F4C.s`, `asm/code_08050F74.s`),
+avec priorité sur le premier (18 octets, plus petit espace de formes).
+
+### `func_08050F4C` (18o, normalisation booléenne `v?1:v`) -- mécanisme
+enfin root-causé, toujours PAS matché
+
+Désassemblage exact de la cible (`arm-none-eabi-objdump -bbinary
+--adjust-vma=0x08050F4C` sur les 18 octets bruts, confirmé octet pour
+octet) :
+
+```
+push {lr}
+ldrb r0, [r0, #4]      ; v = self->flag (byte)
+adds r1, r0, #0        ; result = v   (copie explicite dans r1)
+cmp  r0, #0
+beq  skip
+movs r1, #1            ; result = 1
+skip:
+adds r0, r1, #0        ; return result (copie r1 -> r0)
+pop  {r1}
+bx   r1
+```
+
+**Plus d'une douzaine de formulations C testées ce round** (en plus de
+celles déjà réfutées par les rounds précédents) -- toutes replient
+la copie `r1` et reproduisent EXACTEMENT le même 16 octets (`ldrb r0,...;
+cmp r0,#0; beq; movs r0,#1; pop{r1}; bx r1`), quel que soit
+l'arrangement de surface :
+- `v != 0 ? 1 : v` (pas seulement `v ? 1 : v`) ;
+- variable intermédiaire nommée avec assignation SÉPARÉE (`result = v;`
+  puis `if (v) result = 1;`, statement à part, pas dans le même
+  `u32 result = v;`) ;
+- `goto`/label explicite, `do {} while(0)`, `switch` avec `case`/`default`
+  fall-through, retour anticipé à 2 `return` distincts ;
+- 2e paramètre factice pour occuper `r1` à l'entrée (n'a aucun effet, le
+  fold se produit quand même après réutilisation du registre) ;
+- fonction `static` séparée appelée en interne (agbcc l'INLINE quand même
+  au niveau RTL et refait le même fold -- pas un simple artefact du site
+  d'appel) ;
+- obfuscation algébrique de la copie (`v + 0`, `v | 0`, `+v`,
+  `v ? v : v`) -- toutes évaluées à `v` par le compilateur malgré sa
+  faiblesse générale, donc repliées quand même ;
+- **compilé en C pur via `agbcc` directement (pas `agbcp`/C++)** : même
+  résultat exact, donc ce n'est PAS un artefact du frontend C++ --
+  confirmé que le fold vient d'une passe RTL commune aux deux frontends.
+
+**Root-cause confirmé via 2 expériences positives** (qui PROUVENT le
+mécanisme sans donner un match plausible) :
+1. Une barrière `asm volatile ("" : "+r"(result) : "r"(v));` empêche
+   bien le compilateur de fusionner les deux valeurs -- obtient
+   effectivement 18 octets (9 instructions), MAIS avec les rôles
+   registre INVERSÉS par rapport à la cible : `v` atterrit dans `r1`,
+   `result` dans `r0`, alors que la cible charge `v` directement dans
+   `r0` (partagé avec le pointeur `self` mourant) et ne matérialise
+   `result` que dans `r1`. Confirmé sur PLUSIEURS variantes d'ordre des
+   opérandes de la contrainte asm (`"+r"(v):"r"(result)` vs
+   `"+r"(result):"r"(v)` vs `"+r"(v),"+r"(result)` groupés) -- toutes
+   donnent la MÊME allocation inversée, donc ce n'est pas un simple
+   artefact de l'ordre textuel des opérandes : agbcc semble toujours
+   assigner `r0` à la pseudo-valeur qui survit jusqu'au `return`, `r1` à
+   celle qui ne sert qu'au test -- l'inverse de ce que la cible fait.
+2. Des variables de registre explicites (`register u32 v asm("r0") = ...;
+   register u32 result asm("r1") = v;`) forcent l'allocation EXACTE de
+   la cible et produisent un **match octet pour octet parfait** (les 18
+   octets, vérifié `cmp -l` -- confirmé qu'il ne s'agit PAS d'un artefact
+   de padding/alignement). Ceci prouve que le mécanisme est intégralement
+   compris : la cible a bien `v` en `r0`/`result` en `r1`, un vrai
+   compilateur PEUT produire ces octets -- mais ce chemin passe par une
+   épingle de registre explicite, un idiome qui n'a AUCUN précédent dans
+   tout le dépôt (`grep -rn 'register.*asm("r' src/ include/` : 0 match)
+   et qui est structurellement implausible comme source réelle pour un
+   simple getter/normaliseur trivial de ce type. **Non commité** --
+   remplacer la source réelle par une épingle de registre artificielle
+   irait à l'encontre de la discipline du dépôt (reproduire le VRAI
+   code source, pas forcer les octets par un hack).
+
+**Conclusion pratique** : ce near-miss n'est plus un simple "ça replie
+la copie, cause inconnue" (état des rounds w39/w41/w44) -- c'est
+maintenant : "le compilateur alloue TOUJOURS `r0`->valeur-de-retour /
+`r1`->valeur-de-test dès qu'on force 2 registres séparés via un
+mécanisme visible du RTL (asm barrier), l'inverse exact de ce que la
+cible utilise, et SEULE une épingle de registre explicite (non
+plausible comme vraie source) obtient les 2 registres dans le bon sens
+tout en gardant les 2 valeurs séparées". Aucune piste de reformulation
+C plausible restante identifiée ce round. Laissé en `.byte`
+(`asm/code_08050F4C.s`, inchangé), non commité. Piste pour un futur
+round, non testée : vérifier si la VRAIE fonction appelante passe déjà
+une valeur DIFFÉRENTE dans `r1` au moment de l'appel (auquel cas la
+copie ne serait pas `result=v` mais un vrai 2e paramètre logique,
+invisible depuis ce fragment isolé sans site d'appel symbolique connu)
+-- pas vérifiable sans retrouver un appelant.
+
+### `func_08050F74` (44o) -- MATCHÉ, near-miss r4/r5 + reload `__umodsi3`
+résolu
+
+Signature réelle : `void func_08050F74(void *self, u32 x, u32 y)` --
+clampe `y` (3e argument) modulo 3 (`__umodsi3`, seulement si `y > 2`)
+dans un champ 2 octets à `self+22`, clampe `x` (2e argument) modulo 28
+(seulement si `x > 27`) dans un champ 2 octets à `self+20`, puis remet à
+0 un flag octet à `self+25`. Moduli (3, 28) très évocateurs du domaine
+saison/jour-du-mois de ce jeu (3 saisons, mois de 28 jours) mais rôle de
+la classe non confirmé indépendamment depuis ce seul fragment -- gardé
+en style "offsets bruts" comme les voisins `func_08050F60`/
+`func_08050F70` plutôt que de nommer une classe non établie.
+
+Root-cause du near-miss documenté par w41 (`self`/`x` alloués
+`r5`/`r4`, inversés par rapport à la cible `r4`/`r5` ; le résultat du 2e
+`__umodsi3` était rapatrié dans le registre-maison de `x` avant le
+`strh` final au lieu d'être stocké directement depuis `r0`) :
+**introduire des copies locales séparées `yy`/`xx` des 2 paramètres,
+assignées via une instruction SÉPARÉE (`xx = x;`) plutôt qu'une
+déclaration+initialisation combinée (`u32 xx = x;`), suffit à faire
+allouer `self`->`r4`/`x`->`r5` naturellement, dans le bon ordre, SANS
+aucune épingle de registre.** Contraste net avec `func_08050F4C`
+ci-dessus : ici, la présence d'un VRAI appel externe (`__umodsi3`) entre
+la copie et le test empêche le compilateur de refaire le même fold
+(les registres doivent survivre à travers un `bl`, donc pas de
+coalescing possible) -- exactement le genre de "mur" qui, une fois
+franchi par la bonne structure de source, retombe sur l'allocation
+naturelle plutôt que sur une inversion. Vérifié :
+- harnais rapide : désassemblage identique à la cible à l'octet près,
+  à l'exception des 2 encodages `bl` (offset relatif vers un symbole
+  non résolu dans le harnais isolé -- attendu, résolu correctement une
+  fois lié) ;
+- build complet (`rm -rf build fomt.gba fomt.elf fomt.map && make
+  compare`, avec `build/franglais_stub.bin` factice pour satisfaire le
+  lien comme documenté dans `DECOMP_RULES.md`) : taille `.text` de
+  `build/src/code_08050F74.o` = `0x2c` = 44 octets, adresse
+  `fomt.map` correcte, contenu de `fomt.gba` linké comparé octet pour
+  octet à `baserom.gba` sur les 44 octets de la fonction -- **match
+  parfait** ;
+- `sha1sum -c fomt.sha1` échoue toujours (attendu, ROM non-vanilla
+  depuis `cb06198`, cf. `DECOMP_RULES.md`) -- pas un signal d'échec pour
+  cette vérification.
+
+Découpage : `asm/code_08050F74.s` (ancien blob monolithique de 836
+octets, contenait aussi les 3 fonctions "pression de registres" jamais
+tentées) supprimé, remplacé par `src/code_08050F74.cc` (44 octets
+portés) + `asm/code_08050FA0.s` (792 octets restants : `08050FA0`/
+`080510E8`/`0805116C`, toujours en `.byte`, candidats escalade `fable`
+inchangés). `fomt.lds` mis à jour en conséquence. 1 commit (`func_08050F74`
+seul, port propre).
+
+### Repo state en fin de round
+
+- 1 commit de match (`func_08050F74`).
+- `func_08050F4C` toujours en `.byte`, non commité -- mécanisme
+  entièrement compris et documenté ci-dessus, mais aucune formulation C
+  plausible trouvée ; candidat pour reformulation depuis un futur
+  appelant retrouvé, sinon fermer définitivement cette piste.
+- `git status --short` vide après le commit, `build/`/`fomt.gba`/
+  `fomt.elf`/`fomt.map` nettoyés.
+- `origin` intact (URL de push volontairement cassée), rien poussé,
+  aucune PR créée.
