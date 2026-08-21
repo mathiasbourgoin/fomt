@@ -10180,3 +10180,101 @@ Repo state en fin de round : `git status --short` propre (rien commité,
 aucun fichier `asm/*.s`/`fomt.lds` touché), tous les candidats testés
 dans `/tmp/w75scratch/` (hors dépôt). `origin` intact, rien poussé,
 aucune PR.
+
+## Round w77 (worktree `parallel-77`) -- examen détaillé des 2 gros gaps
+`.L08022C60` (1704o) / `.L080238F4` (1724o) laissés en suspens par w73,
+tous deux dans `asm/code_08022320.s` : **CONFIRMÉS CODE (pas données),
+3 fonctions distinctes par gap, structure jumelle entre les 2 gaps --
+aucun match commité ce round (aucune n'est réellement "simple")**
+
+Mission : caractériser en détail ces 2 gaps jamais examinés (marqués par
+w73 "probablement plusieurs fonctions ou données mal classées, mérite un
+examen dédié"). Désassemblage direct de `baserom.gba` avec
+`arm-none-eabi-objdump -D -b binary -m arm --adjust-vma=0x08000000
+--start-address=... --stop-address=... -Mforce-thumb` (contournant le
+dump `.byte` brut déjà présent dans le `.s`, qui n'est qu'un défaut du
+scanner face à des fonctions non bornées, pas une preuve de nature).
+
+**Verdict : CODE THUMB VALIDE, pas de table de données.** Aucune
+proximité avec une zone de données déjà exclue dans `DECOMP_ARCHIVE.md`
+(seule mention de `0x08022320` dans l'archive concerne des helpers
+`func_08022320`/`func_08022334` sans rapport, pas une zone de données).
+Chaque gap se désassemble proprement en Thumb sans dérive d'alignement,
+avec des motifs `push {..., lr}` / `pop {...}` + `pop {r}` + `bx r`
+canoniques.
+
+### Découpage par frontières push/pop (scan systématique, aucun autre
+`push` trouvé dans les 2 gaps que les 3 listés -- tailles cumulées =
+taille exacte du gap, confirmant l'exhaustivité)
+
+**Gap 1** (`0x08022C60`-`0x08023308`, 1704o), entre `func_08022C18`
+(constructeur `AActorEntityUi`-like connu, pose `vtable_unk_080E6310`)
+et `func_08023308` (déjà connu) :
+- `func_08022C60` (76o, `push {r4,r5,r6,lr}`/`sub sp,#8`) : bascule le
+  vtable de `self+0x14` de `vtable_unk_080E6310` vers
+  `vtable_unk_080E6250` en 2 temps, avec 2 appels intermédiaires
+  (`bl 0x8032170`, `bl 0x809b124`, tous deux asm-only non nommés) puis
+  un branchement conditionnel sur `self+0x10` (`bl 0x80d3914` si non
+  nul) et un autre sur `r6 & 1` (`bl 0x8000608`). Motif "transition de
+  type d'acteur en place" (pas un constructeur classique : aucun appel
+  `__5ActorRC5Actor`).
+- `func_08022CB4` (58o, `push {r4,lr}`/`sub sp,#4`) : écriture d'un
+  bitfield 16 bits sur une locale de pile via idiome
+  read-mask-or-mask-write classique (`ldr r0,[sp,#0]` NON initialisé
+  avant écriture, mais AND avec un masque `0x00000000` en pool qui
+  annule la lecture -- artefact de codegen bitfield déjà documenté dans
+  ce dépôt), puis `bl 0x809b940` (asm-only), puis enchaîne sur les 2
+  fonctions déjà connues juste après le gap : `func_08023378` (calcule
+  un code 0-7 depuis l'état de gestation `IsPregnant__C10BarnAnimal`)
+  et `func_08023308` (dispatch anim). Masques de pool : `0x00000000` /
+  `0x00FFFFFF` (confirmés par lecture directe des octets ROM).
+- `func_08022D00` (1542o, `push {r5,r6,r7}` précédé de
+  `mov r7,r10`/`mov r6,r9`/`mov r5,r8` -- sauvegarde manuelle de
+  r8-r10) : GROSSE fonction, state-machine à nombreuses branches
+  (dizaines de `bl` vers des cibles asm-only non nommées : `0x809b51c`,
+  `0x809b57c`, `0x80d3910`, etc.), plusieurs pools littéraux internes
+  (normal pour une fonction de cette taille, la portée `ldr pc-relatif`
+  Thumb est limitée à ~1Ko -- confirmé PAS une preuve de désalignement,
+  juste des pools intermédiaires légitimes).
+
+**Gap 2** (`0x080238F4`-`0x08023FB0`, 1724o), entre `func_080238A8`
+(constructeur jumeau de `func_08022C18`, pose `vtable_unk_080E6284`,
+même forme exacte) et `func_08023FB0` (déjà connu) : **structure
+IDENTIQUE au gap 1**, tailles très proches mais pas égales :
+- `func_080238F4` (72o) : même motif bascule-vtable que
+  `func_08022C60` (4o de moins).
+- `func_08023948` (58o) : bit-pour-bit la même taille que
+  `func_08022CB4`, même idiome bitfield.
+- `func_08023994` (1562o) : même forme state-machine que
+  `func_08022D00` (20o de plus).
+
+**Interprétation** : les 2 gaps sont le bloc de méthodes "type-switch +
+setter + update" de 2 classes soeurs (probablement 2 sous-types
+`BarnAnimal`, cf. l'appel `IsPregnant__C10BarnAnimal` juste après le
+gap 1), chacune précédée par son constructeur déjà décompilé et suivie
+par ses helpers déjà décompilés -- seul le bloc du MILIEU (ce que le
+scanner voyait comme un gap monolithique) manquait.
+
+**Pourquoi aucun match ce round** : les 2 petites fonctions (58o/72-76o)
+sont les candidats "abordables" identifiés par la mission, mais toutes
+les deux appellent des cibles `bl` ASM-ONLY non nommées
+(`0x8032170`/`0x809b124`/`0x809b940`) dont le rôle réel est inconnu --
+les nommer au hasard risquerait de figer une fausse sémantique (même
+piège déjà documenté round w73 pour `.L08037CDC`). La grosse fonction
+(1542o/1562o) est hors de portée d'un seul round (state-machine dense,
+dizaines de branches, aucune fonction sœur déjà décompilée dans ce
+dépôt pour s'en servir de modèle). Aucune tentative de compilation
+lancée ce round -- caractérisation seule, conforme à la mission
+("si tu bloques, documente ta conclusion").
+
+**Cibles pour un prochain round** : les 2 paires de petites fonctions
+(`func_08022C60`/`func_080238F4` et `func_08022CB4`/`func_08023948`)
+restent les meilleures candidates dans ce gap une fois que
+`0x8032170`/`0x809b124`/`0x809b940` auront été caractérisées ailleurs
+(probablement des helpers `BarnAnimal` d'évolution/croissance, à
+recouper avec `IsPregnant__C10BarnAnimal`/`GetDaysPregnant__C10BarnAnimal`
+déjà nommés dans ce fichier).
+
+Aucun fichier `asm/*.s` modifié ce round (caractérisation pure, pas de
+tentative de portage). `git status --short` propre, `origin` intact,
+rien poussé, aucune PR.
