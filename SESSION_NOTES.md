@@ -11565,3 +11565,132 @@ séparé + b muté" ont été essayées. Aucun fichier `src/`/`asm/`/
 
 Scratch utilisé : `/tmp/w90scratch2/{try.sh,t_*.cc,target_*.bin}` --
 hors dépôt, non committé.
+
+## Round w93 (worktree `w90`, branche `parallel-90`) -- near-miss précis
+sur `func_0805E8F0`, aucun match committé
+
+Mission : porter les 5 callés restants de `franglais_transition_impl_tick`
+dans l'ordre `func_0805E8F0` (signature déjà déclarée) puis
+`func_0805E99C` (compositeur, priorité réelle) puis `func_080507D0`
+(near-miss w92) puis les deux plus gros. Verdict : tout le budget du
+round est passé sur `func_0805E8F0` sans obtenir un match bit-exact --
+un near-miss très serré (34/172 octets identiques en préfixe, mapping
+de registres entièrement résolu) documenté ci-dessous. `func_0805E99C`
+et le reste n'ont pas été retouchés ce round (caractérisation w92
+toujours valable, cf. section précédente).
+
+### `func_0805E8F0` (accesseur `SpriteAnimator`, 101 lignes/172 octets) --
+NEAR-MISS, PAS COMMITÉ
+
+Rôle reconstruit (corrobore et complète l'appelant déjà porté
+`func_0803A840` dans `src/code_0803A804.cc`, qui teste le bit 1 du
+retour) : avance le lecteur d'animation d'un `SpriteAnimator` d'un
+tick. Champs identifiés (offsets relatifs à `SpriteAnimator*`, la
+struct restant `STRUCT_PAD`-opaque dans `include/unknown_types.hh`) :
+- `+0x04` : `AnimFrame *` (pointeur vers un tableau de frames, chaque
+  frame = `{u16 id; u16 duration;}`, 4 octets)
+- `+0x08` : `u16` nombre de frames dans le tableau (lu seulement si le
+  pointeur `+0x04` est non nul, sinon 0)
+- `+0x0C` : `u16` index de frame courant
+- `+0x0E` : `u16`/`i32` minuteur (décompte en 1/256e, cf. le
+  `<<8` sur chaque durée de frame)
+- `+0x10` : `i16` delta (vitesse+sens de lecture, signé)
+- `+0x12` : `u8` flag "reset demandé" (consommé -- remis à 0 -- et
+  traduit en bit 1 du retour)
+
+Retour (`u32` bitmask, comme deviné par l'appelant `func_0803A840`) :
+bit 0 = "un changement de frame a été tenté ce tick" (posé
+inconditionnellement dès qu'on entre dans le bloc d'avance, avant même
+de savoir si l'index bouge), bit 1 = "l'id de la frame a changé" (soit
+via le flag de reset `+0x12`, soit parce que `table[new_index].id !=
+table[old_index].id`), bit 2 = "l'index a bouclé" (dépassement en
+avant ou en arrière selon le signe de delta).
+
+**Mapping de registres complètement résolu** (obtenu après ~10
+itérations sur `/tmp/w90scratch2/try.sh`, harnais identique à w91/w92) :
+`self`=r4, `flags`=r7, `table`=r6, `count`=r5, `saved_id`=sb(r9),
+`wrap_flag` (constante 4 utilisée deux fois dans la boucle,
+DOIT être une variable nommée, pas un littéral répété, sinon elle
+n'obtient pas de registre persistant et le préfixe ne matche même pas)
+=r8, `delta`/`timer` combinés en `ip`/r3. Deux leçons de forme utiles :
+1. Le champ `+0x10` doit être chargé DIRECTEMENT en `i32`
+   (`i32 delta = *(i16 *)(self + 0x10);`), jamais via un `i16`
+   intermédiaire réassigné en `i32` ensuite -- cette dernière forme
+   fait émettre un chargement non-signé (`ldrh`) suivi d'une
+   extension de signe manuelle (`lsls`/`asrs`) au lieu du `ldrsh`
+   direct que fait la cible (confirmé en comparant avec
+   `func_0803A820`, déjà porté dans le même fichier, qui déclare
+   `i16 v = *(i16*)(...)` à usage UNIQUE et obtient bien `ldrsh` --
+   la différence n'est donc pas le type mais le fait que `delta` soit
+   réutilisé dans une expression arithmétique élargie, `i32 step =
+   delta;`, plus loin).
+2. `timer` doit être un unique `i32` réassigné en place
+   (`timer -= abs_delta;`), pas deux variables séparées (`u16
+   raw_timer` puis `i32 timer = raw_timer - step`) -- sinon le
+   compilateur charge la valeur brute dans un registre temporaire
+   distinct du registre final de `timer`, ajoutant un `mov`
+   superflu.
+
+**Le blocage restant, isolé précisément** : la structure de boucle.
+La cible a ce squelette (pas de branchement initial, entrée directe
+en haut de boucle, saut arrière explicite en fin de second bloc) :
+```
+        movs r0, #4
+        mov r8, r0
+.L0805E946:                    @ ENTRÉE DIRECTE, sans saut
+        <bloc A: avance l'index selon le signe de delta>
+.L0805E966:
+        <bloc B: lit duration, accumule dans timer, teste>
+        bgt .L0805E97C          @ sortie si timer > 0
+        b .L0805E946            @ saut arrière EXPLICITE vers bloc A
+.L0805E97A: ...
+```
+alors que TOUTE formulation C testée (`for(;;)`, `while(1)` +
+`break`/`continue`, `do{}while(1)`, `do{}while(cond)` avec condition
+réelle au lieu de `break`, et une version `goto` explicite qui reproduit
+littéralement ce squelette avec labels) produit systématiquement :
+```
+        movs r0, #4
+        mov r8, r0
+        b .L23                  @ saut initial -- bloc B déplacé AVANT bloc A
+.L22 (bloc B physiquement ici, atteint seulement par le saut arrière):
+        <bloc B>
+        bgt <sortie>
+        @ tombe directement dans bloc A juste en dessous (pas de saut)
+.L23:
+        <bloc A>
+        ...
+        b .L22                  @ retour vers bloc B
+```
+c'est-à-dire une rotation de boucle inversée (bloc B avant bloc A,
+saut initial pour sauter B au premier tour, chute libre B→A en
+itérations suivantes) -- l'exact inverse de la cible. Point notable :
+la version `goto` explicite qui tente de forcer physiquement le bloc A
+en premier (littéralement le squelette ci-dessus de la cible, labels
+compris) ne change PAS la rotation -- pire, elle fait perdre le mapping
+de registres déjà acquis (`delta` quitte `ip` pour un registre bas,
+cascade de régressions en amont du corps de boucle). Hypothèse non
+testée : la cible n'utilise peut-être pas une boucle structurée avec
+`break` du tout au niveau du C source d'origine, mais quelque chose
+comme une fonction imbriquée/récursion terminale, OU le bloc A et le
+bloc B doivent être des BLOCS SÉPARÉS avec une variable de contrôle
+partagée différente de celle testée ici (pas eu le temps d'essayer une
+franche 3e forme structurale, ex: extraire le bloc B dans un helper
+`static inline` séparé pour changer la façon dont gcc découpe les
+"basic blocks" au moment de l'expansion de boucle).
+
+Fichier de travail conservé (hors dépôt, pour reprise directe) :
+`/tmp/w90scratch2/t_0805E8F0.cc` -- 34/172 octets identiques en
+préfixe (jusqu'à l'entrée dans la boucle), diverge uniquement à partir
+du premier branchement de la boucle. Aucun fichier `src/`/`asm/`/
+`fomt.lds` touché en dépôt pour cette fonction -- aucun commit ce
+round.
+
+### Compteur inchangé
+
+**8/13** callés-fonctions opaques de `franglais_transition_impl_tick`
+portés (inchangé depuis w92). Restent : `func_0805E8F0` (near-miss
+ci-dessus), `func_0805E99C` (priorité, caractérisé w92, pas retouché),
+`func_080507D0` (near-miss w92, pas retouché), `func_08050868` (323
+lignes), `func_080ADD78` (233 lignes) -- ces deux derniers toujours pas
+caractérisés au-delà de leur taille.
