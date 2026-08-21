@@ -22,6 +22,7 @@ gardée ici.
 | `func_0805E6CC` | `DefinedSprite`, constructeur d'archive | 1 | `648d15f` |
 | `DrawString` (`func_0804E8F0`) | boucle DrawString, police normale | 3, renommé 5 | `ecef66e`, `48ebfa3` + round 5 |
 | `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
+| `DrawGlyphAtRecolor` (`func_0804E5AC`) | blitter par glyphe, variante recoloration | w66 (7e tentative) | (voir `git log`) |
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
 | `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
 | `func_08010158` | destructeur dérivé, classe construite par `func_080D3EF4` (0x554 octets, membre `ScriptEngine` à +8) -- variante SIMPLE (appels directs, pas de dispatch virtuel) de la famille "riche" | 6 | `a85f4b1` |
@@ -121,31 +122,24 @@ même pic de pression de registres.
   la source, pas un artefact. Vérifié bit-exact (harnais rapide 256/256,
   seul le padding final de 2 octets diffère -- zéro-rempli par
   `align_sections.sh` dans le vrai build). Mergé dans `main` (`247e6f3`).
-  **`func_0804E5AC` (variante recoloration) : 4 tentatives, toujours pas
-  matchée, mais progrès net et mesuré à chaque round** -- round 9,
-  généralisation directe échouée (8 octets courts, `dest` swappé en `r9`
-  au lieu de `sl`, mauvaise paire de registres par rapport au corps
-  plain) ; round 10/w22, piste identifiée pas résolue ; round 10/w27,
-  piste `anchor`/`delta` résolue (`anchor` doit être RECALCULÉ dans
-  chaque bloc TL/BL/TR/BR, pas partagé comme `delta` qui lui est un vrai
-  temporaire de portée fonction) mais nouveau résidu de 44 octets trouvé
-  (forme verbeuse `mov r0,sl`+`adds` 3-opérandes non reproduite,
-  s'effondre en 1 instruction compacte) ; round 4/w29, résidu réduit de
-  44 à 24 octets (bloc TL correctement reproduit), cause isolée à une
-  collision de registre entre `anchor` (alloué en `r2`) et le pointeur
-  de fin de boucle `end` (que l'original garde en `r2`, libre) ; round
-  5/w31, résidu réduit à 4 octets, blocage localisé à un seul point
-  (pointeur de fin de boucle du bloc TL en registre haut `ip` au lieu
-  d'un registre bas) ; round 6/w34, **6e échec** -- 2 améliorations
-  mesurées (résidu 24->16->12 octets) mais chaque correction fait
-  RESSURGIR le résidu ailleurs (`dest` réalloué en `r9` au lieu de
-  `sl`), preuve que la pression de registres est pire que prévu, pas
-  juste un idiome manquant. **PAUSE recommandée par round 6 lui-même** :
-  ne pas retenter par itération de forme C -- la seule piste non
-  essayée est une comparaison avec une décompilation Ghidra amont de
-  `StanHash/fomt` pour cette adresse si elle existe. Voir
-  `SESSION_NOTES.md` rounds 9/w22, 10/w27, 4/w29, 5/w31, 6/w34 pour le
-  détail complet de chaque itération.
+  ~~`func_0804E5AC` (variante recoloration)~~ -- **matchée round w66**
+  (7e tentative, apres 6 échecs honnêtes rounds 9/w22, 10/w27, 4/w29,
+  5/w31, 6/w34). La percée finale : `right_tmp`, UNE variable partagée
+  entre le bloc TR (où elle sert d'ANCRE COULEUR de la boucle de
+  recoloration) et le bloc BR (où elle sert d'ACCUMULATEUR D'ADRESSE)
+  -- le jumeau recolor du `right_addr` partagé TR/BR du corps plain,
+  mais avec des RÔLES différents dans chaque bloc, ce qu'aucun des 6
+  rounds n'avait imaginé. Le pseudo fusionné gagne la course
+  d'allocation de `r2` contre le pointeur de fin de boucle TR (priorité
+  globale = floor_log2(refs)*refs/longueur_de_vie, formule vérifiée
+  dans `global.c` de pret/agbcc et par les dumps `-dg`). Autres formes
+  nécessaires : copies `start`/`stop` alimentant src/end du bloc TR ;
+  copies fonction-scope `row_product`/`delta` assignées APRÈS le calcul
+  des bornes TL (leurs assignations SONT le `str [sp,#0x9c]`/`mov
+  sb,r6`) ; `rp = tile_y * width_tiles` (ordre des opérandes du muls,
+  règle 5bis étendue) ; flags calculés en temporaire puis stockés une
+  fois. Voir `SESSION_NOTES.md` round w66 pour la méthode complète
+  (dumps RTL du compilateur + balayages systématiques de variantes).
 - ~~`func_08008980`~~ -- **matchée round w61** (`5a894ec`), bit-exact au
   premier essai malgré la classe "pression de registres" confirmée round
   9/w21 (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur tout le

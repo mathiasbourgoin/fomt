@@ -9643,3 +9643,105 @@ Rebuild : aucun changement appliqué au dépôt (les 2 cibles restent en
 `.byte` brut, non portées) -- pas de `make compare` nécessaire pour ce
 round, `git status --short` confirmé propre avant et après. `origin`
 intact, rien poussé, aucune PR.
+
+## 2026-08-21, worktree `w66`/`parallel-66` -- `func_0804E5AC` (`DrawGlyphAt`
+recolor) round 7 : **MATCHÉE** -- la percée est une variable partagée
+entre blocs avec deux RÔLES différents (`right_tmp` : ancre couleur en
+TR, accumulateur d'adresse en BR)
+
+Contexte : 6 échecs honnêtes documentés (rounds 9/w22, 10/w27, 4/w29,
+5/w31, 6/w34), pause explicitement recommandée par le round 6, seule
+piste jamais tentée : une décompilation Ghidra amont. Mission : angle
+NEUF obligatoire, pas une 7e itération mécanique.
+
+### Piste Ghidra amont (point 4 de la mission) : fermée définitivement
+
+`StanHash/fomt` upstream (GitHub, dernier push 2026-02-08) vérifié via
+`gh api` : AUCUNE référence à `0804E5AC`/`804E5AC`/`DrawGlyph`/`ghidra`
+dans tout le dépôt (code search + arbre `src/` complet -- aucun fichier
+`code_0804E*`). Il n'existe pas de décompilation amont de cette
+fonction. Piste refermée avec certitude, pas par manque d'accès.
+
+### Méthode de ce round (neuve, généralisable)
+
+1. **Reconstruction from scratch en relisant le désassemblage comme un
+   catalogue de variables-copies** (généralisation de la règle 11 du
+   corps plain) plutôt qu'en partant d'un candidat précédent. Premier
+   jet : prologue, `dest`->`sl`, spill de `kind`, frame 0xa0 corrects
+   d'emblée -- les leçons cumulées des 6 rounds tenaient.
+2. **Harnais 1s/itération + balayages SYSTÉMATIQUES scriptés** (16-30
+   variantes par lot, scorées au nombre de lignes de diff normalisé) au
+   lieu d'hypothèses une par une -- ce que le round 6 n'avait jamais
+   fait.
+3. **Dumps RTL du compilateur lui-même** : `agbcp -dl -dg` écrit
+   `gccdump.lreg`/`gccdump.greg` (pseudos, refs, longueurs de vie,
+   ordre trié, assignations). La formule de priorité a été lue dans le
+   `global.c` de `pret/agbcc` (GitHub) :
+   `floor_log2(refs)*refs/live_length`, départage par numéro d'allocno.
+   Ça transforme le "mur d'allocateur" en système d'équations lisible.
+
+### Les formes C qui ont fait tomber la fonction (dans l'ordre des gains)
+
+- **Flags en temporaire-puis-store-unique** (`hr`/`hb`/`rb` puis
+  `has_right = hr;` etc.) -- reproduit le motif movs/cmp/movs/str à un
+  seul `str` par flag.
+- **`row_product`/`delta` = copies fonction-scope de locaux chauds
+  TL** (`rp`/`d`), assignées APRÈS le calcul des bornes de la boucle TL
+  -- leurs assignations SONT `str r3,[sp,#0x9c]` et `mov sb,r6` ; la
+  boucle TL lit les locaux chauds (r3/r6), les blocs suivants lisent
+  les copies (pile/sb). Même idiome "écrit ici, relu ailleurs" que le
+  corps plain.
+- **`rp = tile_y * width_tiles`** -- l'ORDRE DES OPÉRANDES du `muls`
+  (règle 5bis étendue à la multiplication) : `width_tiles` doit être
+  l'opérande déplacé dans le registre de calcul ; c'est ce qui force le
+  produit en scratch r0 + copie vers r3 (le registre mourant de
+  `tile_y`) et aligne `tile_y`/la constante 7 sur r3/r2. Un seul swap
+  d'opérandes = 74 -> 36 lignes de diff.
+- **TR/BR : adresses en réassignations successives d'une même
+  variable** (idiome BR du corps plain), TL/BL en une expression pliée.
+- **TR : copies `start`/`stop` alimentant `src`/`end`** -- les refs
+  supplémentaires du pseudo CSE partagé parquent le pointeur source en
+  r5 au lieu de voler r2.
+- **LA PERCÉE FINALE : `right_tmp`, UNE variable déclarée dans le scope
+  `has_right`, utilisée comme ANCRE COULEUR par la boucle TR puis
+  RÉASSIGNÉE comme ACCUMULATEUR D'ADRESSE par le bloc BR.** Le pseudo
+  fusionné (refs TR + refs BR, fl2 supérieur) gagne la course de
+  priorité pour `r2` qu'aucune variable par-bloc ne pouvait gagner
+  (l'ancre seule : 5 refs/22 insns = 4348 ; perdait contre le pointeur
+  de fin TR à 4706). C'est le jumeau recolor du `right_addr` partagé
+  TR/BR du plain -- mais avec des rôles SÉMANTIQUEMENT DIFFÉRENTS dans
+  chaque bloc, la raison pour laquelle 6 rounds ne l'ont pas imaginé.
+  Diff normalisé : 6 -> 0 lignes d'un coup.
+
+### Vérification (standard officiel `DECOMP_RULES.md`)
+
+- `.text` du `.o` : `0x1f4` == `0x0804E7A0 - 0x0804E5AC` exactement.
+- Rebuild propre complet (`rm -rf build fomt.gba fomt.elf fomt.map`,
+  stub `build/franglais_stub.bin` factice pour le lien) : lien sans
+  erreur, `fomt.map` place `src/code_0804E5AC.o` à `0x0804e5ac`.
+- **Diff OCTET PAR OCTET contre `baserom.gba`** (pas seulement
+  mnémonique) : région `[0x4E5AC, 0x4E7A0)` byte-identique, ET région
+  suivante `[0x4E7A0, 0x4E8F0)` (`func_0804E7A0`/`func_0804E7DC`,
+  déplacées vers `asm/code_0804E7A0.s`) byte-identique aussi -- le
+  split n'a rien décalé. `sha1sum -c fomt.sha1` échoue comme attendu
+  (payload franglais, non-signal documenté).
+- Aucun label `.L0804E5AC` résiduel dans `asm/*.s`.
+
+### Fichiers
+
+- `src/code_0804E5AC.cc` (nouveau) : `DrawGlyphAtRecolor`, alias de
+  compatibilité `func_0804E5AC`, commentaire d'en-tête complet avec les
+  shapes matching-critical.
+- `asm/code_0804E5AC.s` supprimé ; reste du fichier (`func_0804E7A0`,
+  `func_0804E7DC`) -> `asm/code_0804E7A0.s` (règle 14 appliquée au
+  `.align 2,0` de queue).
+- `fomt.lds` : entrée remplacée par les deux nouvelles.
+- `DECOMP_RULES.md` : nouvelle règle 17 (variable partagée entre blocs
+  à rôles différents + technique des dumps `-dl -dg`).
+- `DECOMP_ARCHIVE.md` : entrée "pression de registres" de la cible
+  clôturée, ligne ajoutée à la table des matchs.
+
+### Repo state en fin de round
+
+- 1 commit (voir `git log`), `git status --short` vide après commit.
+- `origin` intact (URL cassée volontairement), rien poussé, pas de PR.
