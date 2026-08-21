@@ -245,7 +245,8 @@ SECTIONS
         asm/code_08050F4C.o(.text);
         src/code_08050F60.o(.text);
         src/code_08050F70.o(.text);
-        asm/code_08050F74.o(.text);
+        src/code_08050F74.o(.text);
+        asm/code_08050FA0.o(.text);
         src/code_080512B8.o(.text);
         src/code_080512C8.o(.text);
         src/code_080512D0.o(.text);
