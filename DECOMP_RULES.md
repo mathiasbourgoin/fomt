@@ -474,6 +474,29 @@ registre scratch libre (`r1`) plutôt que `r0`. Vu 2 fois d'affilée same
 round (`func_08050EE4`, `func_080512D8`) : le fix bitfield seul ne
 suffisait pas tant que la fonction restait typée `void`.
 
+### 17. Variable partagée entre blocs avec des RÔLES différents (extension
+de la règle 11) : une valeur couleur ici, une adresse là
+
+Root-causé round w66 (`func_0804E5AC`, 7e tentative, 6 échecs
+préalables) : quand un near-miss de pur registre résiste à toute
+reformulation LOCALE d'un bloc, vérifier si le registre convoité est
+occupé, dans un AUTRE bloc, par une valeur de nature complètement
+différente -- ici `r2` portait l'ancre couleur de la boucle TR ET
+l'accumulateur d'adresse du bloc BR : c'était UNE SEULE variable C
+(`right_tmp`), réutilisée par la source originale pour deux rôles sans
+rapport. Le pseudo fusionné cumule les références des deux blocs et
+gagne la course de priorité (formule `global.c` d'agbcp :
+`floor_log2(refs)*refs/longueur_de_vie`) qu'aucune variable par-bloc ne
+peut gagner. Signal pratique : deux blocs successifs utilisent le MÊME
+registre pour des valeurs sans lien sémantique, et le candidat n'arrive
+à reproduire l'allocation que d'un bloc à la fois (corriger l'un casse
+l'autre) -- essayer de fusionner les deux valeurs en une seule variable
+déclarée dans le scope englobant. Outil qui a rendu ce diagnostic
+possible : compiler avec `-dl -dg` (dumps RTL local/global d'agbcp,
+`gccdump.lreg`/`gccdump.greg` écrits dans le cwd) pour lire les
+refs/longueurs/assignations RÉELS de chaque pseudo au lieu de les
+deviner -- voir SESSION_NOTES round w66.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
