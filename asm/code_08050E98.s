@@ -43,3 +43,5 @@ func_08050EBC: @ 0x08050EBC
 	pop {r4}
 	pop {r1}
 	bx r1
+
+	.align 2, 0

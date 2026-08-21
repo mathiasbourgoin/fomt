@@ -502,7 +502,7 @@ vtable_unk_080E5E64:
 	.4byte 0
 	.4byte 0
 	.4byte 0x08011FE9 @ no label yet
-	.4byte func_08012114
+	.4byte func_08012028
 
 	.global vtable_unk_080E5E74
 vtable_unk_080E5E74:
@@ -1068,7 +1068,7 @@ vtable_unk_080E6658:
 	.4byte 0x08024C65 @ no label yet
 	.4byte 0x0801FF6D @ no label yet
 	.4byte 0x08025019 @ no label yet
-	.4byte func_08024C88
+	.4byte func_08024B9C
 	.4byte 0x080324B9 @ no label yet
 	.4byte 0x08032B41 @ no label yet
 	.4byte 0x08032075 @ no label yet
