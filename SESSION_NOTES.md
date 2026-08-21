@@ -9851,3 +9851,192 @@ Rebuild propre + relink complet confirmés à chaque commit (`sha1sum -c
 fomt.sha1` échoue comme attendu depuis `cb06198`, pas une régression).
 `git status --short` propre après les 4 commits, `origin` intact, rien
 poussé, aucune PR.
+
+## Round w75 (worktree `w75`) -- application de la règle 17 (`agbcp -dl -dg`)
+aux 2 near-miss `func_08075334` (w57/w63) et `.L08037250` (w72) : progrès
+mesurable sur la 1re, toujours pas matchée ; rien de neuf sur la 2e,
+RIEN COMMITÉ (aucune des deux n'est bit-exacte)
+
+Mission : appliquer la méthode de diagnostic découverte round w66/règle 17
+(`agbcp -dl -dg` produit `gccdump.lreg`/`gccdump.greg` dans le cwd, qui
+exposent refs/live_length/priorité RÉELS de chaque pseudo-registre au lieu
+de deviner) aux 2 cibles bloquées les plus caractérisées du dépôt.
+
+### Cible 1 -- `func_08075334` (`asm/code_08070A08.s:9622-9779`, 284o),
+5e tentative -- résidu réduit de 26 à 68 octets bit-exacts, casse encore
+sur un choix de slot de pile, PAS commité
+
+Repartant du near-miss w63 (26 premiers octets du CORPS bit-exacts, taille
+`.text` fausse de 16 octets). Deux corrections trouvées ce round, la
+2e directement guidée par les dumps `-dl`/`-dg` :
+
+1. **`QueueItem` ne doit PAS être `PACKED`** -- w63/w72 avaient supposé
+   qu'un struct local nécessitait `PACKED` pour matcher les largeurs
+   d'accès (vrai pour `.L08037250`, FAUX ici) : `QueueItem
+   {u16 f0,pad; u32 f4,f8,fc;}` est déjà naturellement aligné (aucun
+   padding implicite), donc pas besoin de `PACKED`. Avec `PACKED`,
+   agbcp compile `*dst = *src` (l'assignation struct de l'item) en un
+   VRAI appel `bl memcpy` (taille alignement=1 déclenche la version
+   générique) au lieu du motif `ldmia/stmia` inliné à 4 registres que
+   montre la cible. Sans `PACKED` : `ldmia r1!,{r2,r3,r4}; stmia
+   r0!,{r2,r3,r4}; ldr r1,[r1]; str r1,[r0]` reproduit EXACTEMENT les 3
+   sites de copie de la cible (item->write simple, copie de croissance,
+   copie de l'item après croissance). Nouvelle règle générale probable
+   pour `DECOMP_RULES.md` : `PACKED` ne doit être appliqué QUE si le
+   struct a un vrai trou d'alignement à combler -- sinon il bascule
+   agbcp sur la version `memcpy` générique au lieu de l'inlining normal.
+2. **Ordre de calcul `q` (self+0x594) AVANT `item_ptr` (adresse locale),
+   pas l'inverse** -- w57/w63 déclaraient `item_ptr` avant `q` (ordre
+   "naturel" du rôle : on construit d'abord l'item local, puis on va
+   chercher la queue). La cible fait l'inverse : `adds r5,r0,r1` (calcul
+   de `q`) PUIS `mov sb,sp` (cache de `&item`). Corriger cet ordre de
+   déclaration (`Queue *q = ...; QueueItem *item_ptr = &item;`) a fait
+   basculer `q` de `r6` vers **`r5` -- exactement le registre cible**,
+   ce qui était le blocage n°1 documenté par w63 comme "jamais résolu
+   par aucune permutation testée". Généralisation probable : quand DEUX
+   valeurs adjacentes sont candidates au même rôle callee-saved, agbcp
+   semble privilégier la MOINS récemment déclarée pour le registre le
+   plus "bas" du pool disponible -- à vérifier sur d'autres cas.
+
+Avec ces deux corrections + les 3 acquis de w63 (inversion if/else,
+idiome `fallback`/`amount_ptr` pour le ternaire d'adresses, boucle morte
+avec lecture `write` avant `base`), harnais rapide : **68 premiers octets
+du corps bit-exacts** (`cmp -l` contre les octets extraits de
+`baserom.gba` à `0x08075334`, longueur 284), soit plus du double du
+near-miss w63 (26o). Taille `.text` mesurée `0x118`/280 octets contre
+`0x11c`/284 attendus (**écart réduit à 4 octets/2 instructions**, contre
+16 octets pour w63) -- signe qu'il ne reste plus qu'UNE seule
+divergence structurelle, pas plusieurs cumulées.
+
+**Nouveau blocage isolé via les dumps (règle 17 appliquée avec succès
+pour LOCALISER, pas encore pour RÉSOUDRE)** : la divergence restante est
+un swap complet des SLOTS DE PILE entre `append_count` (la constante 1
+utilisée par l'idiome de secours du ternaire) et `old_count` (le nombre
+d'items existants avant croissance). `gccdump.lreg` du candidat identifie
+précisément :
+```
+(insn 118 ... (set (reg:SI 60) (const_int 1)) ...
+    (expr_list:REG_EQUIV (mem/f:SI (plus:SI (reg:SI 7 r7) (const_int 16)) 38) ...))
+;; pseudo 60 = append_count, équivalent mémoire r7+16
+
+(insn 128 ... (set (reg:SI 58) (ashiftrt:SI (reg:SI 56) (const_int 4))) ...)
+(insn 130 ... (set (mem/f:SI (plus:SI (reg:SI 7 r7) (const_int 20)) 38) (reg:SI 58)) ...)
+;; pseudo 58 = old_count, stocké à r7+20
+```
+soit **`append_count` -> offset 16, `old_count` -> offset 20** dans le
+candidat -- alors que le désassemblage cible fait l'inverse
+(`append_count`/growth -> offset 20, `old_count` -> offset 16, confirmé
+par extraction+désassemblage direct des octets de `baserom.gba`, pas une
+supposition). Trois hypothèses testées pour expliquer/inverser ce swap,
+**toutes réfutées empiriquement** (harnais rapide, aucun effet sur les
+offsets observés) :
+- Permuter l'ORDRE DE DÉCLARATION C de `append_count`/`old_count` (avant
+  vs après le calcul de `old_write`/`old_base`) : aucun effet, mêmes
+  offsets 16/20 dans les deux sens.
+- Déclarer `old_count` comme variable vide (non initialisée) AVANT
+  `append_count`, puis l'assigner après coup (dissocier le point de
+  DÉCLARATION du point d'ASSIGNATION) : aucun effet.
+- Inverser la polarité du test (`if (old_count>=1) ... else ...` au lieu
+  de `if (!(old_count>=1))`) sur le choix du pointeur de secours : aucun
+  effet sur les offsets ni sur l'encodage de la comparaison (`cmp r?,#1;
+  bcs` cible vs `cmp r?,#0;bne` candidat -- résidu déjà noté par w63,
+  toujours pas résolu, semble être une canonisation systématique
+  d'agbcp indépendante de la formulation C testée).
+**Conclusion round** : l'attribution du slot de pile (quel offset reçoit
+quelle variable parmi 2 locales adressées après un même point de
+référence commun `item`/`q`) ne dépend PAS de l'ordre textuel de
+déclaration, d'assignation, ni de la polarité du test qui les relie --
+elle dépend d'un facteur non encore isolé (peut-être lié au nombre TOTAL
+de locales adressées ailleurs dans la fonction, ou à un pass d'allocation
+de frame antérieur à la génération RTL que les dumps `-dl`/`-dg` ne
+couvrent pas directement puisqu'ils documentent l'allocation de
+REGISTRES, pas l'allocation de SLOTS DE PILE). Piste non épuisée pour un
+futur round : dumper avec un flag GCC additionnel ciblant le pass
+d'allocation de frame (`-dr`? à vérifier dans `tools/agbcc/` si le
+source est un jour rapatrié dans un worktree), ou tester des variantes
+avec un NOMBRE différent de locales adressées ailleurs dans la fonction
+pour voir si ça fait bouger l'affectation des offsets 16/20.
+Non commité (candidat toujours pas bit-exact au-delà de l'octet 68).
+Testé uniquement dans `/tmp/w75scratch/` (hors dépôt).
+
+### Cible 2 -- `.L08037250` (`asm/code_08036DC4.s`, 28o, entre
+`func_08037244`/`func_0803726C`), 2e tentative dédiée -- confirmation
+supplémentaire du modèle, toujours pas de 2e registre de base, PAS commité
+
+Repartant du near-miss w72 (struct `PACKED Loc4{u16 a,b,c,d;}` +
+barrière -> taille/strh/ordre corrects mais UN SEUL registre de base
+réutilisé pour les 4 champs, alors que la cible en utilise DEUX : `r3`
+pour les offsets 2/4/6, `r2` pour l'offset 0 seul -- confirmé par
+extraction+désassemblage direct des octets de `baserom.gba` à
+`0x08037250`, longueur 28).
+
+**Piste testée cette fois : deux locales SÉPARÉES au lieu d'un seul
+struct à 4 champs**, comme suggéré par w72. Résultat : **la piste "deux
+variables locales top-level distinctes" est ÉCARTÉE** -- toute
+combinaison testée (`u16 a` + `struct{u16 b,c,d;}` séparés, avec ou sans
+`PACKED` sur le second, quel que soit l'ordre de déclaration/assignation)
+fait que le second local (peu importe lequel) récupère un slot de pile
+ARRONDI À 4 OCTETS (padding), donnant une taille de trame totale de 12
+octets au lieu des 8 exacts de la cible -- **chaque local top-level
+semble toujours arrondi à un multiple de 4 octets dans son propre slot,
+indépendamment de `PACKED`** (qui ne contrôle que le padding INTERNE d'un
+struct, pas l'arrondi de son slot de pile global). Nouvelle règle
+probable pour `DECOMP_RULES.md` : pour obtenir une trame de pile SANS
+aucun octet de padding entre deux locales adjacentes, elles doivent être
+des CHAMPS d'un seul et même objet adressable (pas deux locales
+top-level séparées, même packées individuellement).
+
+**Piste struct imbriqué (`struct Loc4{u16 a; struct PACKED{u16 b,c,d;}
+grp;}`)** : reproduit la taille exacte (8o), les 4 `strh` aux bons
+offsets (0/2/4/6), les 2 relectures de mots finales -- **mais un seul
+registre de base** (`r1`), comme le struct plat testé par w72. Deux
+variantes pour forcer un second registre, toutes deux ÉCARTÉES :
+- Référencer `&loc.grp` en plus de `&loc` dans la barrière
+  `asm volatile` SANS variable pointeur intermédiaire : agbcp reconnaît
+  la même base par CSE et n'ajoute qu'un calcul mort (`mov r2,sp; adds
+  r1,#2`, jamais utilisé pour une vraie écriture) -- **4 octets de PLUS**
+  que la cible, toujours un seul registre pour le travail réel.
+- Passer par un pointeur explicite `Sub3 *grp_ptr = &loc.grp;` puis
+  écrire `grp_ptr->b = 0;` etc. : déclenche exactement le piège déjà
+  documenté par w72 -- les écritures deviennent des `strb` (store byte)
+  au lieu de `strh`, parce qu'écrire à travers un pointeur générique vers
+  un struct `PACKED` perd l'information de largeur naturelle des champs
+  que la compilation directe (`loc.grp.b = 0`) conserve. Écarté
+  immédiatement (mauvaise largeur d'accès, pas seulement mauvais
+  registre).
+**Conclusion round** : le modèle structurel (2 locales avec une adjacence
+mémoire exacte) est correct pour la TAILLE et les ACCÈS, mais la cause du
+second registre de base reste non identifiée -- ni la séparation
+top-level (bloquée par l'arrondi à 4 octets), ni le nesting avec référence
+supplémentaire (bloqué par CSE ou par la dégradation en `strb`) ne la
+reproduisent. Piste non tentée : un vrai DEUXIÈME OBJET adressable
+distinct mais placé par un mécanisme qui évite l'arrondi à 4 octets --
+peut-être un tableau `u16 buf[4]` unique avec DEUX pointeurs typés
+différemment dessus (`u16*` vs un struct 3-champs) calculés à des
+moments différents du programme plutôt que par une seconde variable
+déclarée. Non exploré faute de temps ce round.
+Non commité (candidat structurellement correct mais 1 seul registre de
+base au lieu de 2). Testé uniquement dans `/tmp/w75scratch/` (hors
+dépôt).
+
+### Bilan méthode règle 17 (`-dl`/`-dg`) sur ce round
+
+Utilisée avec succès pour LOCALISER précisément la cause du résidu de
+`func_08075334` (identification certaine des pseudo-registres 60/58 et
+de leurs slots mémoire réels via les annotations `REG_EQUIV`, au lieu de
+déduire uniquement du désassemblage final) -- mais PAS suffisante pour
+la RÉSOUDRE cette fois : les dumps `-dl`/`-dg` documentent l'allocation
+de REGISTRES (pass RTL local/global), pas l'allocation des SLOTS DE PILE
+eux-mêmes, qui semble décidée par un pass antérieur non visible dans ces
+deux dumps. Pour la cible 2, la méthode n'a pas été le facteur limitant
+(le blocage est un choix qualitatif -- combien de registres de base
+distincts agbcp choisit d'allouer pour des locales adjacentes -- pas un
+ordre de priorité lisible dans un dump de registres candidats, puisque
+dans les deux variantes testées agbcp n'a JAMAIS mis en concurrence deux
+pseudo-registres pour ce rôle : soit CSE les fusionne avant même
+l'allocation, soit un seul est proposé).
+
+Repo state en fin de round : `git status --short` propre (rien commité,
+aucun fichier `asm/*.s`/`fomt.lds` touché), tous les candidats testés
+dans `/tmp/w75scratch/` (hors dépôt). `origin` intact, rien poussé,
+aucune PR.
