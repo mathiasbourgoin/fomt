@@ -12756,3 +12756,191 @@ priorité :
 Scratch utilisé : `/tmp/w90s7/{try.sh,tryfull.sh,p1..p4.cc,full.cc,
 target_func.bin}` + `/tmp/agbcc_src` (clone amont agbcc, lecture
 seule, hors dépôt) -- hors dépôt, non committé.
+
+## Round w99 (worktree `w90`, branche `parallel-90`) -- raw.b : le vrai
+coupable identifié (fold FRONT-END sur constantes littérales), toujours
+pas de forme byte-exacte
+
+Mission : (1) tester l'hypothèse w98 §4.1/§4.2 (`raw` et `coeffs` sont
+UNE SEULE variable adressée dès le départ, pas une copie `raw` ->
+`coeffs`) ; (2) si ça ne suffit pas, redériver depuis le désassemblage
+si `raw.b` sert vraiment à quelque chose plutôt que d'être mort.
+Verdict : hypothèse (1) INFIRMÉE proprement. Mais l'exploration a
+déplacé le diagnostic d'un cran : la cause du repliement n'est PAS le
+pass "combine" du RTL (comme le suggérait w98 §2/§4) mais le repliement
+algébrique de FRONT-END (arbre, avant expansion RTL) de l'identité
+`(X & C1 | Y) & C2 | Z -> Y | Z` (valide dès que `C1 & C2 == 0`,
+QUELLE QUE SOIT la valeur de X -- vérifié : c'est une identité
+mathématique toujours vraie, pas une exploitation d'UB sur lecture non
+initialisée). Ce repliement ne se déclenche QUE quand les deux masques
+sont des constantes entières visibles comme telles par le front-end.
+Le rendre invisible (masques lus depuis une variable non constante,
+même locale) fait ressortir EXACTEMENT la forme cible (une seule
+lecture, AND, OR, AND, OR, un seul store) -- mais au prix de charges
+mémoire supplémentaires qui ne collent pas au byte. Toujours 10/13,
+280/310 sur `func_0805E99C`, aucun match forcé (règle respectée).
+
+### 0. Protocole
+
+Nouveau scratch `/tmp/w90s8` (les précédents sont perdus au reboot).
+`try.sh` reconstruit : pipeline réel du Makefile retrouvé via
+`make -n -B build/src/code_0805EC24.o` (le point qui manquait aux
+rounds précédents pour un harness autonome bien fidèle) --
+`arm-none-eabi-cpp -I tools/agbcc/include -I tools/libagbc++
+-I tools/libsix/include -iquote . -iquote include -Wno-trigraphs
+-fno-exceptions FICHIER.cc | tools/agbcc/bin/agbcp -quiet
+-fno-exceptions -fno-rtti -fvtable-thunks -g -mthumb-interwork
+-Wimplicit -Wparentheses -O2 -fhex-asm -o FICHIER.s` (host `cpp` échoue
+sur `stddef.h`/`nullptr` -- il faut `arm-none-eabi-cpp`, pas le `cpp`
+système). t18 (candidat canonique w97 §3) recompilé tel quel comme
+référence : reproduit bien le repliement propre déjà rapporté en w98
+(`ldrh;ldrh;lsl;orr;str`, aucun résidu) -- base de départ confirmée
+avant toute variante.
+
+### 1. Hypothèse "raw et coeffs sont UNE SEULE variable" (t19) --
+INFIRMÉE
+
+Fusion directe : suppression de `raw`, écriture direct dans
+`coeffs.p.a`/`coeffs.p.b` (adressée dès le départ puisque `coeffs.arr`
+est passée par adresse à `func_0805EC24`), plus de copie
+`coeffs = raw`. Résultat : le site `raw.b` replie EXACTEMENT PAREIL
+(`ldrh;ldrh;lsl;orr;str`, aucun résidu) -- juste une instruction de
+copie en moins ailleurs (la copie `coeffs = raw` disparaît, gain de 4
+instructions, mais AUCUN effet sur le site qui nous intéresse). La
+fusion de variable ne change RIEN au comportement du repliement -- le
+modèle "deux variables copiées" n'était pas la cause.
+
+### 2. Piste volatile (t20/t21) : isole la variable qui compte
+(nombre de lectures), pas encore la bonne forme
+
+- **t21** (`raw` volatile, écriture en UNE SEULE expression composée) :
+  replie quand même -- le fold algébrique agit avant même que la
+  sémantique volatile n'ait sa chance, l'expression entière étant
+  repliée au niveau de l'arbre.
+- **t20** (`raw` volatile, DEUX affectations séparées
+  `raw.p.b = (raw.p.b & C1) | lo;` puis `raw.p.b = (raw.p.b & C2) |
+  (hi<<16);`) : ENFIN un résidu -- mais un ALLER-RETOUR MÉMOIRE COMPLET
+  à CHAQUE étape (`ldr;and;orr;str` puis un second `ldr;and;orr;str`)
+  au lieu de l'unique lecture + unique store de la cible. La sémantique
+  volatile force un store/reload à chaque affectation -- trop de
+  memory traffic, ne colle pas.
+- **t22** (mêmes deux affectations séparées mais SANS volatile) :
+  replie exactement comme t18/t21 -- scinder en deux instructions ne
+  suffit PAS à bloquer le fold quand `raw` n'est pas volatile ; combine
+  (ou plutôt fold() en amont, cf. §4) voit à travers la frontière
+  d'instructions.
+- **t23** (accumulateur scalaire local `u32 t = raw.p.b; t = ...; t =
+  ...; raw.p.b = t;`, le style "bits d'abord" déjà utilisé ailleurs
+  dans t18 pour les blocs d'assemblage w0/w1) : replie quand même, ET
+  la lecture initiale `t = raw.p.b` disparaît complètement (le
+  compilateur traite la "valeur" de `raw.p.b` non écrite dans cette
+  itération comme sans importance -- cohérent avec `raw` non
+  addressé).
+- **t24** (accès à `raw.p.b` via un POINTEUR explicite `CoeffPair
+  *rawp = &raw.p;` -- rend `raw` TREE_ADDRESSABLE) : replie ENCORE
+  pareil. Ceci exclut définitivement la piste "adressabilité
+  précoce empêche le fold" suggérée par w98 §4.2 -- même en forçant
+  l'adresse à être prise, le fold algébrique frontal s'applique
+  toujours quand les masques restent des littéraux.
+
+### 3. LA VRAIE CAUSE : fold front-end sur littéraux entiers
+prouvés complémentaires (t25/t26/t27)
+
+Test décisif : remplacer les DEUX masques littéraux `0xFFFF0000` /
+`0x0000FFFF` par des valeurs dont le compilateur ne peut PAS prouver,
+au moment du repliement d'arbre, qu'elles sont des constantes entières
+connues.
+
+- **t25** (`extern "C" u32 g_maskHi, g_maskLo;` -- globales opaques,
+  jamais définies dans l'unité) : le résidu apparaît, avec la forme
+  QUALITATIVE exacte de la cible -- `ldr &g_maskHi; ldr g_maskHi;
+  ldr [sp,#8] (self-read); and; ldrh lo; orr; ldr &g_maskLo; ldr
+  g_maskLo; and; ldrh hi; lsl; orr; str [sp,#8]`. Un seul self-read,
+  un seul store final -- exactement la structure cible. MAIS chaque
+  masque coûte DEUX instructions (charge d'adresse + charge de valeur)
+  au lieu d'une, ce qui ne colle pas au byte (la cible charge chaque
+  masque en UNE instruction depuis son pool littéral).
+- **t26** (mêmes masques mais `static const u32` au lieu de `extern`) :
+  repliement COMPLET revient immédiatement -- `static const` reste une
+  expression-constante pour le front-end (comme un `#define`), donc
+  fold() la voit et refait le repliement. Confirme que c'est bien la
+  visibilité "constante entière connue au niveau arbre" qui déclenche
+  le fold, pas une propriété RTL de bas niveau (registre vs mémoire,
+  adressable vs non, contexte de boucle/pression -- tout ça déjà
+  écarté en w97/w98 et de nouveau ici en §2).
+- **t27** (masques dans un tableau LOCAL non constant
+  `u32 masks[2]; masks[0]=0xFFFF0000; masks[1]=0x0000FFFF;` déclaré
+  avant la boucle) : donne la forme la PLUS PROCHE obtenue à ce jour --
+  `ldr r1,[sp,#8] (self-read) ; ldr r0,[sp,#0x28] (masks[0], UNE seule
+  instruction) ; and ; ldrh lo ; orr ; ldr r0,[sp,#0x2c] (masks[1],
+  UNE seule instruction) ; and ; ldrh hi ; lsl ; orr ; str [sp,#8]` --
+  compte d'instructions et forme structurelle IDENTIQUES à la cible.
+  Seule divergence restante : les masques viennent d'un slot de PILE
+  (donc 8 octets de cadre en plus + 2 stores d'initialisation en
+  préambule de boucle) au lieu du pool littéral en mémoire programme de
+  la cible (`ldr rX, .Lconstante` sans coût de cadre).
+
+### 4. Diagnostic final de ce round
+
+Le repliement `(X & C1 | Y) & C2 | Z -> Y | Z` (C1 & C2 == 0) est une
+simplification de FRONT-END (arbre, probablement `fold()` dans
+fold-const.c / c-typeck du compilateur C++ agbcp, PAS le pass `combine`
+du RTL comme le supposait w98 §2/§4) -- elle se déclenche dès que les
+deux masques sont des CONSTANTES ENTIÈRES visibles comme telles au
+niveau de l'arbre (littéral direct, `static const`, expression
+constante), et UNIQUEMENT dans ce cas. Elle est indépendante de :
+mémoire vs registre (`raw` pseudo ou spillé, w97), adressabilité
+(TREE_ADDRESSABLE, testé de force en t24), fusion de variable (`raw`
+séparé ou fusionné avec `coeffs`, §1), volatilité de la variable CIBLE
+elle-même (t20/t21 -- volatile sur `raw` ne bloque PAS le fold tant que
+les masques restent littéraux), et contexte (boucle triviale vs
+fonction complète, w98 §3). Le SEUL levier qui bloque le fold est de
+rendre les MASQUES eux-mêmes non-constants pour le front-end -- mais
+tout moyen trouvé pour ça (extern, tableau local) ajoute un coût
+mémoire (charge d'adresse, ou slot de pile) que la cible n'a pas : la
+cible charge chaque masque en UNE instruction depuis un pool littéral
+généré à l'expansion RTL, sans jamais que le front-end n'ait vu ces
+valeurs comme repliables.
+
+Ceci suggère que le code source réel exprime les masques d'une façon
+qui reste un littéral entier ordinaire au niveau assembleur final
+(donc chargé du pool comme d'habitude) mais qui échappe au fold()
+front-end -- par exemple parce que les DEUX écritures ne se trouvent
+PAS dans la même expression/portée d'analyse locale que fold() examine
+d'un coup (ex. séparées par un appel de fonction réel qui casse
+l'unité d'analyse -- mais le désassemblage cible ne montre aucun `bl`
+entre les deux, réverifié §1 de w98), ou parce que la modélisation
+"deux masques complémentaires sur un seul mot" est simplement FAUSSE
+et qu'il faut chercher une forme structurellement différente qui ne
+produit JAMAIS une paire de masques strictement complémentaires au
+niveau de l'arbre (ex. bitfields déclarés dans l'ORDRE INVERSE, ou
+champs de largeurs différentes de 16/16, dont la cible masque ensuite
+en deux passes qui se recombinent différemment). Non testé ce round,
+faute de temps : lire directement `fold-const.c`/`c-typeck.c` d'agbcc
+(le clone amont `/tmp/agbcc_src` du round w98 doit toujours être
+disponible ou re-clonable) pour identifier PRÉCISÉMENT quelle fonction
+fait ce repliement et sous quelle condition exacte (peut-être une
+condition plus fine que "C1 & C2 == 0" qu'on pourrait déjouer sans
+passer par une variable mémoire).
+
+### 5. Ce qui reste (3/13, inchangé)
+
+- `func_0805E99C` : 280/310, keystone `raw.b` toujours non percée après
+  3 rounds dédiés (w97, w98, w99). Diagnostic affiné : c'est un fold
+  FRONT-END sur littéraux complémentaires, pas un problème
+  mémoire/registre/adressabilité (tout ça épuisé). Prochaine étape
+  recommandée, par ordre de priorité : (1) lire `fold-const.c` d'agbcc
+  pour la condition exacte du repliement et chercher une forme de
+  masques qui y échappe SANS passer par une variable mémoire (pas de
+  coût de cadre) ; (2) explorer des largeurs de bitfield non 16/16
+  (ex. si `raw.b` n'est pas vraiment un split 16/16 mais quelque chose
+  d'asymétrique que notre modèle actuel masque incorrectement comme
+  symétrique) ; (3) à défaut, un match FORCÉ en dur (mémoire volatile
+  ou tableau local) resterait à ~2 instructions/8 octets du but --
+  cadre à 0x34 au lieu de 0x2c -- donc PAS acceptable comme match final
+  (la règle "jamais commiter un near-miss" s'applique), mais utilisable
+  comme filet de sécurité si un round futur bute complètement.
+- `func_0805E8F0`, `func_08050868`, `func_080ADD78` : inchangés.
+
+Scratch utilisé : `/tmp/w90s8/{try.sh,t18..t27.cc,*.s}` -- hors dépôt,
+non committé.
