@@ -9566,3 +9566,109 @@ lien complet avec `franglais_stub.bin` factice confirmés à chaque étape,
 `sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`). `git status
 --short` propre après les 2 commits, `origin` intact, rien poussé,
 aucune PR.
+
+## Round w73 (worktree `parallel-73`) -- suite du sweep w70, 10 fonctions matchées, 1 near-miss à 6 octets, plusieurs cibles caractérisées
+
+Re-scan complet avec `scan_hidden_code_blobs_v2.py` (déjà corrigé
+round w70) : 68 gaps -> **58 gaps** au début de ce round (les 18
+fonctions matchées w70 avaient déjà réduit le compte), **54 gaps**
+après ce round (4 gaps de plus consommés, plusieurs gaps contenaient
+2 à 8 fonctions chacun).
+
+**10 fonctions matchées ce round, 4 commits, toutes vérifiées bit-exact**
+(harnais rapide + comparaison octet-à-octet isolée `.o`/`baserom.gba`
++ `make compare` relink complet) :
+
+- `func_08009790` (`asm/code_08008DE8.s`, devenu `asm/code_080097A4.s`
+  après split) : sibling de `func_0800977C` (déjà connu) mais appelle
+  `CpuFastSet` DIRECTEMENT au lieu de passer par le wrapper validant
+  `func_08008E64` -- copie `0x100` mots (1024 octets, exactement la
+  taille de l'OAM GBA) de `self+4` vers l'OAM réelle (`0x07000000`).
+  Aucun appelant `bl` connu.
+- `func_08009878`/`func_08009898` (2 fonctions dans un gap de 52o) :
+  `func_08009878` reprend le même idiome flush-OAM puis appelle
+  `func_08009834` (encore asm-only) ; `func_08009898` est un simple
+  séquenceur à 2 appels (`func_080097A4` puis `func_08009834`).
+- 8 fonctions accesseurs à `func_080D0C68` (gap de 108o dans
+  `asm/code_080CAD10.s`) : struct brute de 4 octets `{f0,f1,f2,f3}`
+  utilisée comme 2 paires u16 little-endian `(f0,f1)`/`(f2,f3)` --
+  setter/getter/copie/comparaison. **Ce gap est dans le même fichier
+  que l'arbre `Unpack` déjà exclu (`DECOMP_ARCHIVE.md`,
+  ~0x080D102C-0x080D1600) mais N'EN FAIT PAS PARTIE** : fonctions
+  feuilles ordinaires, `r0`-`r3` toujours rechargés, aucune violation
+  d'ABI partagée entre `bl`. Vérifié par lecture complète du
+  désassemblage avant de porter (pas juste la proximité d'adresse).
+- 5 fonctions wrapper à `func_0801DD3C` (gap de 60o dans
+  `asm/code_08012028.s`) : répétition exacte de l'idiome de
+  `func_0801DD30` (déjà connu, juste avant) -- déréférencer `self+4`
+  et transmettre le pointeur à une cible différente à chaque fois
+  (`func_080A6234`/`6278`/`62BC`/`607C`/`6024`).
+
+**Near-miss caractérisé, non résolu -- `func_08050C70`** (gap de 80o
+dans `asm/code_0804E9C8.s`, entre `func_08050C64` et `func_08050CC0`) :
+reproduit le motif "Location locale" déjà documenté (`func_08011ED8`,
+round 9) -- `u8 buf[8]; u8 extra;` locaux, `extra=0;` puis
+`memset(buf, 0, &extra - buf)` (taille calculée par soustraction de
+pointeurs entre 2 variables locales DISTINCTES, pas `sizeof` --
+confirmé nécessaire pour empêcher agbcp de plier la taille en
+immédiat : testé avec un seul tableau `buf[9]` unique, ça foldait en
+`movs r2,#8` alors que la cible calcule via `add`/`subs`), puis
+`buf[2]=1; buf[3]=21; buf[7]=1;` puis copie struct-à-struct
+`*(Loc2*)self = local;` (déclenchant bien le `ldmia`/`stmia` bloc
+2 mots, confirmé avec `Loc2{u8 b[8];}` -- accès en champs nommés
+`u32 a,b` NE déclenche PAS le même codegen, à éviter). Taille obtenue :
+**56 octets sur 62 attendus** (`.text` 0x38 vs gap réel 0x3E) -- écart
+de 6 octets EXACTEMENT localisé aux 3 écritures de champ : la cible
+fait `mov r0,sp; adds r0,#N; strb rX,[r0,#0]` (2 instructions, adresse
+recalculée à chaque champ) alors que TOUTE formulation testée
+(indexation `buf[N]`, arithmétique pointeur `*(buf+N)`, champs nommés
+dans un struct) fait plier agbcp en un seul `strb rX,[r0,#N]` à
+offset immédiat. Tenté sans succès : indexation directe, pointeur
+explicite, champs nommés struct. Root cause non trouvée -- piste non
+essayée : peut-être une fonction `helper` séparée appelée 3 fois avec
+l'offset en paramètre (empêchant tout folding d'offset immédiat côté
+appelant), ou un cast via union pour forcer un type non-tableau.
+Reste une bonne cible pour un prochain round (le reste de la fonction
+est déjà résolu à 100%, seul cet idiome de 3 écritures résiste).
+
+**Cibles caractérisées mais pas attaquées ce round** :
+
+- `asm/code_08037A04.s` `.L08037CDC` (20o, entre `func_08037CC4` --
+  un vrai constructeur `AEntity` posant `vtable_unk_080E7444` à
+  `self+0x14` -- et `func_08037CF0`) : fonction FEUILLE (pas de
+  `push`/`bl`), prend `r0`=dst, `r1`=pointeur vers un objet avec 2
+  champs `s16` à +0xA/+0xE (`ldrsh`), écrit 4 `s16` dans `dst` :
+  `dst[0]=champA; dst[1]=champE+1; dst[2]=champA; dst[3]=champE+1`
+  (rectangle dégénéré "1 tuile", motif façade/collision classique
+  Harvest Moon). Aucun appelant `bl` -- très probablement appelée par
+  dispatch virtuel via `vtable_unk_080E7444` (orpheline en `bl` mais
+  pas en usage réel). Pas attaquée : aucune classe `Location` encore
+  décompilée dans ce dépôt (`include/*.hh` ne contient aucun
+  `class Location`), donc les offsets +0xA/+0xE et le layout exact du
+  destinataire restent des suppositions -- porter maintenant risquerait
+  de figer un mauvais nom/layout. Attendre qu'une classe apparentée
+  soit décompilée ailleurs, ou attaquer directement si un futur round
+  veut assumer le risque (le code lui-même est trivial, feuille, sans
+  ambiguïté de FORME -- seule la SÉMANTIQUE des offsets est incertaine).
+- 4 gaps de taille moyenne/grande non examinés en détail faute de
+  budget, candidats prioritaires pour un prochain round : `.L08069EB4`
+  (96o, `asm/code_08069E98.s`), `.L0804EB64` (288o,
+  `asm/code_0804E9C8.s`), `.L0801D9BC` (392o, `asm/code_08012028.s`),
+  et 2 gaps nettement plus gros `.L08022C60` (1704o) / `.L080238F4`
+  (1724o) dans `asm/code_08022320.s` -- taille suggérant plusieurs
+  fonctions ou une table de données mal classée `.byte` plutôt qu'une
+  simple fonction cachée isolée, mérite un examen dédié avant de
+  s'engager (pas la même classe que les petits gaps "sibling wrapper"
+  traités ce round).
+- `asm/code_08036DC4.s` `.L08036E00`, `asm/code_080756D0.s`
+  `.L08075E00`, `asm/code_0809C32C.s` `.L0809C4EC`,
+  `asm/code_080A3774.s` `.L080AAF9C` : toujours les 4 cibles
+  caractérisées par w70, non reprises ce round (déjà documentées en
+  détail ci-dessus dans le round w70).
+- `func_08008D10` : near-miss w70 (littéral 5 via pool+double-shift),
+  non repris -- aucune idée réellement neuve trouvée ce round.
+
+Rebuild propre + relink complet confirmés à chaque commit (`sha1sum -c
+fomt.sha1` échoue comme attendu depuis `cb06198`, pas une régression).
+`git status --short` propre après les 4 commits, `origin` intact, rien
+poussé, aucune PR.
