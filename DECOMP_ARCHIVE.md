@@ -609,6 +609,24 @@ jamais utilisée dans ce dépôt).
   cible est maintenant un candidat solide (near-miss resserré à un pur
   problème de register allocation, pas de structure), contrairement à
   avant round w69 où la structure elle-même divergeait totalement.
+  **Round w74 (`gccdump.lreg`/`gccdump.greg`, `-dl -dg`) : mécanisme
+  EXACT root-causé, toujours PAS résolu.** Thumb `ORRS` est 2-opérandes
+  stricte (`Rd = Rd | Rm`, `Rd` doit être un des 2 registres source) ;
+  le pseudo `mask` (paramètre, transféré `r1`) a une priorité minuscule
+  (`refs=2, live_length=11` -> `~0.18`) car son `live_length` RTL couvre
+  tout le calcul de pointeur qui précède son unique usage, alors que le
+  pseudo "champ bas extrait" a `refs=6, live_length=7` -> `~1.71` et gagne
+  la course, gardant SON registre (`r2`) comme destination in-place du
+  `ior` (`orrs r2,r1`) au lieu du registre de `mask` (`orrs r1,r0` voulu).
+  Levier tenté (raccourcir `live_length(mask)` via une copie explicite
+  `u32 m = mask;` juste avant usage, esprit règle 11) : **contre-productif**
+  -- `agbcp` coalesce la copie (aucun nouveau pseudo créé) ET change toute
+  la pression de registres de la fonction, perdant même le `push {r4,lr}`
+  de référence. Aucun autre levier trouvé pour repriorer un pseudo qui
+  est un PARAMÈTRE de fonction (vivant dès l'entrée par construction ABI,
+  contrairement au cas w66/`func_0804E5AC` où les 2 rôles en conflit
+  étaient deux locaux internes). Voir `SESSION_NOTES.md` round w74 pour
+  le détail complet (dumps, 4 variantes testées).
 - Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
   (**1084 octets** à l'origine, entre `func_08050EBC` et `func_08051320`) --
   découvert round w39 (**angle mort du scanner automatique**,
@@ -717,6 +735,22 @@ jamais utilisée dans ce dépôt).
     formulations testées sans fermer l'écart -- voir `SESSION_NOTES.md`
     round w72. Bon candidat pour une escalade `fable` future (stratégie
     DECOMP_RULES.md), commun aux deux fonctions de cette classe.
+    **Round w74 (`gccdump.lreg`/`gccdump.greg`, `-dl -dg`) : diagnostic
+    confirmé, toujours PAS résolu.** Le pseudo qui porte le résultat
+    booléen final (`negs`/`orrs`/`lsrs #0x1f`) a `refs=4, live_length=4`
+    -> priorité `2` ; le pseudo qui porte la constante `1` a `refs=2,
+    live_length=4` -> priorité `0.5` ; le premier est alloué en premier et
+    hérite `r0` de la chaîne `negs`/`orrs`, le second se rabat sur `r1`.
+    3 reformulations testées pour renverser cet ordre (`set^1` au lieu de
+    `!set`, `one^set` avec constante nommée, constante forcée en SImode) :
+    **RTL et octets strictement identiques dans les 3 cas** -- `agbcp`
+    canonicalise le XOR/la négation booléenne AVANT la passe qui calcule
+    refs/live_length, donc l'ordre syntaxique des opérandes en C n'a
+    aucune prise sur le résultat ici (contrairement à `func_08050EBC` où
+    le levier existe en théorie mais est absorbé différemment). Voir
+    `SESSION_NOTES.md` round w74. Conclusion resserrée : ce near-miss
+    précis nécessite très probablement un levier hors-C (idée structurelle
+    `fable`), pas une nouvelle formulation C.
   - `asm/code_080A3774.s` `.L080AAF9C` (44o+) -- appelle
     `func_0803A8A4`, déjà signalé "pression de registres" plus haut.
   Egalement : `func_08008D10` (`asm/code_08008D10.s`) porté comme

@@ -9851,3 +9851,143 @@ Rebuild propre + relink complet confirmés à chaque commit (`sha1sum -c
 fomt.sha1` échoue comme attendu depuis `cb06198`, pas une régression).
 `git status --short` propre après les 4 commits, `origin` intact, rien
 poussé, aucune PR.
+
+## Round w74 (worktree `parallel-74`) -- application méthode `-dl -dg`
+(règle 17) aux 2 near-miss "allocation de registre pure" les mieux
+caractérisés (`func_08050EBC`/`func_08050E98`, `func_0809C4EC`) : **1
+mécanisme root-causé avec certitude, 0 match, aucun commit de code**
+
+Mission : appliquer la méthode de diagnostic `agbcp -dl -dg`
+(`gccdump.lreg`/`gccdump.greg`) qui a débloqué `func_0804E5AC` round w66
+aux 2 near-miss les plus resserrés du dépôt (respectivement 10/19 et
+15/17 instructions déjà identiques). **Aucun des deux n'a été débloqué**
+-- mais dans les deux cas le dump a permis de comprendre EXACTEMENT
+pourquoi, avec un niveau de certitude qu'aucun round précédent (w39/w41/
+w49/w69/w72, tous par simple lecture du désassemblage cible) n'avait
+atteint. Détail utile pour évaluer les limites réelles de la règle 17,
+pas seulement ses succès.
+
+### `func_0809C4EC` (`IsFlagClear`) : le dump confirme que le near-miss
+n'est PAS accessible par reformulation C, la faute revient à un
+canonicalisation FAITE AVANT l'allocation de registres
+
+Formulation de référence (round w72, 15/17 instructions identiques) :
+`u32 mask=0; if(index<=13) mask=1u<<(index&0x1F); u32 word=*(u32*)self;
+bool set=!!(word&mask); return !set;` -- recompilée à l'identique
+(confirmé bit pour bit). Dump `gccdump.greg` (`Pass 1 registres`,
+tri par priorité) : le pseudo qui porte le résultat booléen final
+(`negs`/`orrs`/`lsrs #0x1f`, appelé ici pseudo 38) a `refs=4,
+live_length=4` -> priorité `floor_log2(4)*4/4 = 2` ; le pseudo qui porte
+la constante littérale `1` (pseudo 33, mode QI) a `refs=2, live_length=4`
+-> priorité `floor_log2(2)*2/4 = 0.5`. Le pseudo 38 est alloué EN
+PREMIER (priorité plus haute) et prend le registre `r0` déjà "hérité"
+de la chaîne `negs`/`orrs` (source du `lsrs`, mort au même point --
+réutilisation naturelle, pas de coût de copie) ; le pseudo 33, alloué
+ensuite, se rabat sur `r1` (premier registre encore libre). La cible
+veut l'inverse : constante `1` -> `r0`, booléen -> `r2`.
+
+**3 reformulations testées pour essayer de renverser cette priorité**
+(toutes recompilées, `-dl -dg` vérifié à chaque fois) :
+- `return set ^ 1;` (au lieu de `return !set;`) -- RTL et octets
+  **strictement identiques** au premier essai.
+- `u32 one = 1; return one ^ set;` (matérialise la constante dans une
+  variable nommée, déclarée juste avant le `return`, dans l'espoir de
+  changer son ordre de création de pseudo) -- **identique aussi**.
+- `u32 result = 1 ^ (u32)set; return (bool)result;` (force la constante
+  en mode SImode plutôt que QImode, pour égaliser sa classe avec le
+  pseudo 38) -- **identique aussi**.
+
+**Diagnostic tiré du dump, pas d'une supposition** : `agbcp` canonicalise
+un XOR commutatif (et le replie avec la conversion booléenne `!`/`!!`)
+**avant** la passe qui assigne les numéros de pseudo-registre locaux --
+peu importe l'ordre syntaxique des opérandes dans le `.cc`, le RTL
+généré (donc les refs/live_length/priorités calculés ensuite) est
+STRICTEMENT identique pour les 3 formulations testées. Ce n'est pas
+(contrairement au cas `func_08050EBC` ci-dessous) un problème de
+priorité qu'une reformulation plausible peut renverser : le point de
+levier (le refs/live_length du pseudo 33) n'est PAS exposé au niveau
+source pour ce genre d'expression -- toute tentative de le changer est
+absorbée par la canonicalisation en amont. **Conclusion pour la règle
+17** : le dump `-dl -dg` reste un outil de DIAGNOSTIC fiable (il dit
+EXACTEMENT quel pseudo gagne et pourquoi, en une compilation, sans
+deviner), mais il ne garantit pas qu'un levier de reformulation C
+existe -- ici, il n'y en a pas trouvé, ce qui resserre encore la
+conclusion round w72 ("bon candidat pour escalade `fable`") en
+"quasi certainement nécessite un levier hors-C (agent `fable` pour une
+idée de structure totalement différente, ou accepter le near-miss
+comme définitivement fermé pour du C plausible)".
+
+### `func_08050EBC` (setter bitfield, `self+0x550`) : mécanisme EXACT
+du near-miss root-causé -- contrainte 2-opérandes de Thumb `ORRS` +
+priorité d'allocation, mais aucun levier trouvé pour la renverser
+
+Formulation de référence (round w69, meilleure variante avec
+`push {r4,lr}`) : `Pack *pack = (Pack*)(*(u8**)self + 0x550);
+mask |= pack->low; pack->low = mask;` avec
+`struct PACKED Pack { u8 low:6; u8 high:2; };`. Recompilée : confirme
+`push {r4,lr}` présent, mais `orrs r2, r1` là où la cible fait
+`orrs r1, r0` (rôles r0/r2 inversés sur TOUTE la suite de la fonction --
+un swap global, pas un défaut ponctuel).
+
+**Mécanisme exact lu dans `gccdump.lreg`/`gccdump.greg`** : Thumb `ORRS`
+est une instruction 2-opérandes stricte (`Rd = Rd | Rm`, `Rd` DOIT être
+l'un des deux registres source). Le RTL de l'expression
+`mask | pack->low` est `(set reg30 (ior reg23 reg30))` où `reg23` =
+paramètre `mask` (transféré depuis `r1` à l'entrée) et `reg30` = la
+chaîne d'extraction du champ bas (`lsls`/`lsrs`, refs=6, live_length=7,
+priorité `2*6/7≈1.71`). `reg23` (le paramètre `mask`) a une priorité
+minuscule (`refs=2, live_length=11` -> `1*2/11≈0.18`) car son
+`live_length` RTL couvre TOUT le calcul de pointeur (`ldr`+`movs`+
+`lsls`+`adds`) entre son chargement à l'entrée et son unique usage --
+même si `mask` n'est pas touché pendant ce calcul, il compte comme
+"vivant" pendant toute cette fenêtre. `reg30`, alloué en premier
+(priorité 10x supérieure), garde donc SON PROPRE registre (`r2`) comme
+destination in-place du `ior`, ce qui donne `orrs r2, r1` -- et non
+l'inverse voulu.
+
+**Levier tenté, conforme à la règle 17 (agir sur `live_length` plutôt
+que deviner une syntaxe)** : réduire le `live_length` RTL du pseudo
+`mask` en introduisant une copie explicite juste avant usage
+(`u32 m = mask; m |= pack->low; m &= 0x3F; pack->low = m;`), dans
+l'esprit de la règle 11 (variable-copie explicite qui force un nouveau
+pseudo à durée de vie courte). **Résultat contre-productif** : `agbcp`
+a purement et simplement éliminé la copie (`m` coalescé avec `mask`,
+aucun nouveau pseudo créé), ET a par ailleurs complètement changé
+l'allocation de pression de registres de la fonction entière -- retour
+à un schéma sans `push {r4,lr}` (octet brut réutilisé dans `r3` au lieu
+de `r4`), une régression par rapport à la variante de référence, pas un
+progrès. Aucune autre formulation testée n'a réussi à raccourcir
+`live_length(mask)` sans que le compilateur ne coalesce la copie.
+
+**Conclusion pour la règle 17** : contrairement à `func_0804E5AC` (round
+w66) où le dump a permis de PRÉDIRE et appliquer un fix qui a fait
+tomber la fonction, ici le dump a permis de comprendre EXACTEMENT le
+mécanisme (contrainte d'encodage 2-opérandes + formule de priorité) --
+mais le levier théoriquement identifié (raccourcir `live_length(mask)`)
+s'est avéré non actionnable en C plausible dans ce cas précis : `mask`
+est un paramètre de fonction, vivant dès la toute première instruction
+par construction ABI, et toute tentative de raccourcir artificiellement
+sa fenêtre de vie via une copie est absorbée par le compilateur avant
+que l'allocateur de registres ne la voie. Généralise potentiellement à
+toute future cible où le pseudo "à repriorer" est un PARAMÈTRE de
+fonction (par opposition au cas w66 où les deux rôles en conflit
+étaient tous deux des locaux internes à la fonction, sans contrainte
+ABI figeant leur point de naissance) -- signal pratique à ajouter à la
+règle 17 : le dump prédit fiablement le VAINQUEUR de la course de
+priorité, mais renverser ce vainqueur suppose de pouvoir bouger le
+`live_length`/`refs` du PERDANT sans que le compilateur ne l'annule --
+plus difficile, voire structurellement impossible, quand le perdant est
+un paramètre.
+
+### État du dépôt en fin de round
+
+Aucun fichier du dépôt modifié (les 2 cibles restent en `.byte`/asm brut
+non porté) -- seul ce fichier `SESSION_NOTES.md` change. Toutes les
+compilations d'expérimentation ont eu lieu hors du dépôt (`/tmp/w74_scratch`),
+aucun `make compare`/rebuild nécessaire. `git status --short` propre
+avant et après (hors ce commit de documentation). `origin` intact
+(URL cassée volontairement), rien poussé, aucune PR. Ces 2 fonctions
+restent de bons candidats pour une escalade `fable` future (stratégie
+`DECOMP_RULES.md`) -- le budget "reformulation C" semble maintenant
+épuisé pour les deux, avec un diagnostic de blocage précis et vérifié
+plutôt qu'une simple accumulation d'essais.

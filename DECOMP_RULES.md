@@ -497,6 +497,24 @@ possible : compiler avec `-dl -dg` (dumps RTL local/global d'agbcp,
 refs/longueurs/assignations RÉELS de chaque pseudo au lieu de les
 deviner -- voir SESSION_NOTES round w66.
 
+**Limite documentée round w74** : le dump prédit fiablement QUI gagne la
+course de priorité (`floor_log2(refs)*refs/longueur_de_vie`), mais ne
+garantit pas qu'un levier de reformulation C permette de RENVERSER ce
+résultat. Deux causes d'échec rencontrées sur 2 cibles distinctes
+(`func_08050EBC`, `func_0809C4EC`) : (1) le pseudo perdant est un
+PARAMÈTRE de fonction, vivant dès l'entrée par construction ABI --
+tenter de raccourcir sa `longueur_de_vie` via une copie explicite
+(règle 11) peut être coalescé par le compilateur, qui l'annule purement
+et simplement ; (2) `agbcp` canonicalise certaines expressions
+commutatives (XOR, négation booléenne `!`/`!!`) AVANT la passe qui
+calcule refs/longueur_de_vie -- l'ordre syntaxique des opérandes en C
+n'a alors aucune prise sur le résultat, quelle que soit la formulation
+testée. Signal pratique : si le dump identifie clairement le pseudo
+perdant mais que celui-ci est un paramètre ou le résultat d'un opérateur
+commutatif déjà simplifié, considérer directement l'escalade `fable`
+plutôt que de multiplier les reformulations C -- voir SESSION_NOTES
+round w74 pour le détail des 2 cas et les leviers testés sans succès.
+
 ## Classes de difficulté à connaître AVANT de choisir une cible
 
 Deux classes ont un historique de récidive documenté en détail dans
