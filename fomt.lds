@@ -223,6 +223,7 @@ SECTIONS
         src/code_0803A804.o(.text);
 
         asm/code_0803A8A4.o(.text);
+        src/code_0803BF14.o(.text);
         src/code_0803BF78.o(.text);
         asm/code_0803BFC8.o(.text);
         src/script_engine.o(.text);
