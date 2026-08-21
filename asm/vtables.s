@@ -230,7 +230,7 @@ vtable_unk_080E5BF8:
 	.4byte 0
 	.4byte 0
 	.4byte 0x08010159 @ no label yet
-	.4byte func_08010138
+	.4byte func_0801004C
 
 	.global vtable_unk_080E5C08
 vtable_unk_080E5C08:

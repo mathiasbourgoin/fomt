@@ -9418,3 +9418,49 @@ compare`), `sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`), diff
 borné byte-à-byte confirmé sur toute la zone reconstituée. `git status
 --short` propre en fin de round, `origin` intact, rien poussé, aucune
 PR.
+
+## Round w71 -- correctif du bug de transcription réel de `asm/vtables.s` (slot `vtable_unk_080E5BF8+0xC`)
+
+**Contexte** : la campagne de symbolisation de `vtables.s` cette nuit
+(rounds w50/w51/w52) a introduit une **vraie erreur de transcription
+manuelle** sur un slot, découverte ce matin par une longue enquête
+dynamique (mGBA) sur un bug de `SoftReset` observé sur la ROM
+`--source-port` du dépôt patch, juste après confirmation du nom du
+chien à l'écran de création de personnage.
+
+**Diagnostic complet (mené par un agent sur `harvest-moon-franglais`,
+documenté dans `docs/FOMT_PATCH_PIPELINE_POC.md` "suite 7")** : `SceneMain`
+(`func_0800082C`) lit sa "scène suivante" via un appel virtuel sur
+`vtable_unk_080E5BF8+0xC`. Ce slot pointait vers `func_08010138` (un
+accesseur trivial à 6 instructions qui retourne sa valeur en `r0` au
+lieu de l'écrire via le pointeur de sortie caché que `SceneMain`
+attend) au lieu du vrai `func_0801004C` (un vrai lanceur de scène qui
+écrit correctement via ce pointeur). Les deux fonctions sont voisines
+en adresse (236 octets d'écart) -- confusion de transcription humaine
+classique lors du round w50, pas une erreur de méthode.
+
+Conséquence : le slot de sortie reste nul, `SceneMain` interprète ça
+comme "pas de scène suivante", détruit la scène courante (dont le
+destructeur remet `gUnk_0300040C` à zéro, confirmé dynamiquement),
+retourne à `AgbMain` qui démonte tout et appelle `exit()` -> `SoftReset`.
+Rien à voir avec les 4 hooks trampolines franglais (tous innocentés ou
+non-testables par ailleurs), ni avec le contenu des chaînes traduites.
+
+**Correctif** : `asm/vtables.s`, slot `vtable_unk_080E5BF8+0xC`,
+`.4byte func_08010138` -> `.4byte func_0801004C`.
+
+**Vérification** :
+- Rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map &&
+  make`), lien réussi sans erreur.
+- Diff byte à byte des 4 octets du slot corrigé (`fomt.gba` vs
+  `baserom.gba` à `0x080E5C04`) : identiques (`4d000108` des deux
+  côtés) -- confirmation directe que le slot est maintenant bit-exact
+  avec le vanilla.
+- `arm-none-eabi-nm fomt.elf` confirme `func_0801004C` lié à
+  `0x0801004C`, adresse cohérente.
+- `sha1sum -c fomt.sha1` échoue comme attendu (ROM intentionnellement
+  non-vanilla depuis `cb06198`), non représentatif.
+
+État du worktree en fin de round : 1 fichier modifié (`asm/vtables.s`),
+`git status --short` propre après commit, `build/`/`fomt.gba`/
+`fomt.elf`/`fomt.map` nettoyés, `origin` intact, rien poussé, aucune PR.
