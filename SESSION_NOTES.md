@@ -8878,3 +8878,77 @@ ELLE-MÊME (pas une struct locale séparée comme testé ici, cf. piste 2)
 en C, techniquement difficile à exprimer proprement en C portable). À
 tenter avec un budget dédié avant d'abandonner définitivement cette
 classe.
+
+## Round w65 (worktree `parallel-65`) -- match `func_0803BF14`, nouveau blob
+caché trouvé par scan v2
+
+**Découverte** : `scan_hidden_code_blobs_v2.py` (aucune restriction de
+taille) signale 3 blocs `.byte` plausibles/non-plausibles au total dans
+tout le dépôt à ce jour. Deux sont des dead-ends déjà connus
+(`.L0809E1B4`/`asm/code_actor_0809BFE8.s`, `.L08008960`/`asm/hardware.s`,
+ce dernier jugé "not plausible" par le scanner et jamais mentionné
+ailleurs -- pas creusé ce round, signal faible). Le troisième,
+**`.L0803BF14` dans `asm/code_0803A8A4.s` (100 octets, jugé "PLAUSIBLE
+CODE")**, n'apparaissait dans AUCUN des deux fichiers de suivi
+(`grep -rn "0803BF14"` négatif avant ce round) -- cible neuve, jamais
+caractérisée.
+
+Ce blob occupe exactement l'espace entre la fin de `func_0803BF08`
+(dernière fonction `asm` du fichier) et le début de `func_0803BF78`
+(première entrée `fomt.lds` du fichier déjà porté, `src/code_0803BF78.o`)
+-- covered par aucun découpage antérieur : `0x0803BF14 + 0x64 (100o) =
+0x0803BF78` pile. Le fichier avait donc été scindé un jour sans que ce
+segment intermédiaire ne soit désassemblé, laissé en `.byte` brut.
+Aucun appelant symbolique trouvé (`grep -rn "0803BF14" asm/*.s`
+négatif), cohérent avec le reste des fonctions de ce fichier (dispatch
+via vtable non symbolisée).
+
+**Désassemblage** : constructeur, même forme que `func_08050EE4`/
+`func_080512D8` (round w49, cf. `DECOMP_RULES.md` règle #16/16bis) :
+2 champs pointeur mis à zéro, 1 pointeur de vtable (`vtable_unk_080E7758`,
+déjà déclaré globalement dans `asm/vtables.s`), 3 champs scalaires
+depuis les registres `r1`/`r2`/`r3`, PUIS un champ scalaire depuis le
+1er argument-pile (`self+0x18`), PUIS un mot de bitfields packés
+(largeurs 5/10/4, offset `self+0x1c`) depuis les 3 arguments-pile
+suivants -- masques de clear construits par négation runtime
+(`movs #N; negs`) pile le codegen bitfield-struct déjà documenté.
+Épilogue `pop {r1}; bx r1` (pas `r0`) confirmant `return self;` (r0
+occupé par la valeur de retour vivante).
+
+**Signature retenue** :
+`func_0803BF14(void *self, u32 a1, u32 a2, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7)`
+-- 8 arguments (self + 3 registre + 4 pile), cf. `push {r4,r5,r6,r7,lr}`
++ 4 `ldr [sp,#20..32]`.
+
+**Near-miss d'ordre résolu** (1 seule variante nécessaire) : le premier
+essai (ordre C = affectation du champ-pile `self->unk_18` en tout
+premier, avant les zérotages/vtable/champs-registre) produisait le bon
+contenu mais un ORDRE différent -- les 4 loads d'arguments-pile
+regroupés en tête, PUIS le store de `self->unk_18` (`ldr;ldr;ldr;ldr;
+str` au lieu de `ldr;str;ldr;ldr;ldr` dans la cible). Résolu en plaçant
+l'affectation de `self->unk_18` APRÈS les zérotages/vtable/champs-
+registre mais AVANT les bitfields (groupée avec les 3 loads d'arguments-
+pile suivants) -- reproduit exactement `ldr r4,[sp,#20]; str r4,[r0,#24];
+ldr r6,[sp,#24]; ldr r5,[sp,#28]; ldr r7,[sp,#32]`. Signal généralisable
+pour de futurs near-miss "ordre des loads d'arguments-pile" : le
+premier argument-pile utilisé isolément (pas suivi immédiatement d'autres
+usages d'arguments-pile) se charge+stocke seul ; un groupe d'arguments-
+pile utilisés consécutivement dans le C se charge en bloc avant le
+premier usage du groupe.
+
+**Vérification** : harnais rapide (compilateur+assembleur sans lien)
+byte-exact dès la 2e variante ; taille `.text` de `build/src/code_0803BF14.o`
+= `0x64` (100 octets, exact) ; `rm -rf build fomt.gba fomt.elf fomt.map &&
+make compare` (échec `sha1sum` attendu, ROM intentionnellement non-vanilla
+depuis `cb06198`) ; diff `objdump` borné `--start-address=0x0803BF14
+--stop-address=0x0803BF78` sur `fomt.elf` linké vs `baserom.gba`
+(`--adjust-vma=0x08000000`) -- IDENTIQUE, opcode par opcode ; recoupé par
+un diff des octets bruts (`objdump -s`/`od -An -tx1`) -- IDENTIQUE.
+
+Commit propre : `asm/code_0803A8A4.s` (suppression du blob `.byte`),
+`fomt.lds` (nouvelle entrée `src/code_0803BF14.o`), `src/code_0803BF14.cc`
+(nouveau). `origin` intact, rien poussé, aucune PR.
+
+Reste ouvert dans ce fichier : `func_0803BDFC` (pression de registres,
+callee opaque de `func_0803BF78`) et `func_08083A7C` -- pas retentés ce
+round.

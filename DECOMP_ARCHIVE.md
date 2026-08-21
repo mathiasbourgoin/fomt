@@ -57,6 +57,7 @@ gardée ici.
 | `func_08050DF0` (`TransitionCtlQuery`) | handle -> discriminant à +8, retourne 0 si ==6 sinon champ à +0x158 | w38 | `5570e1e` |
 | `func_08050E50`, `func_08050E5C`, `func_08050E74`, `func_08050E80`, `func_08050E8C` | thunks de forwarding handle (déréférence puis tail-call vers un callé opaque), voisins directs de `TransitionCtlQuery` | w39 | `dfd228e` |
 | `func_08008980` | constructeur de placement de l'objet racine (0x6c octets, 6 sous-objets), callee bloquant de `func_08004C68` -- 1re vraie tentative "pression de registres" de cette famille, matché bit-exact au premier essai | w61 | `5a894ec` |
+| `func_0803BF14` | constructeur sœur de `func_08050EE4`/`func_080512D8` (bitfield struct widths 5/10/4 à self+0x1c, `return self`) -- ex-`.byte` bruts (100 octets) trouvés par `scan_hidden_code_blobs_v2.py`, occupait exactement l'écart non désassemblé entre `func_0803BF08` et `func_0803BF78` (déjà porté) dans `asm/code_0803A8A4.s` | w65 | (voir `git log`) |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
