@@ -61,6 +61,12 @@ gardée ici.
 | `func_0803BF14` | constructeur sœur de `func_08050EE4`/`func_080512D8` (bitfield struct widths 5/10/4 à self+0x1c, `return self`) -- ex-`.byte` bruts (100 octets) trouvés par `scan_hidden_code_blobs_v2.py`, occupait exactement l'écart non désassemblé entre `func_0803BF08` et `func_0803BF78` (déjà porté) dans `asm/code_0803A8A4.s` | w65 | (voir `git log`) |
 | `func_08008928`, `func_08008930`, `func_08008938` | 3 accesseurs `*(self+0)+OFFSET` (0x24/0x34/0x8c), ex-`.byte` bruts (24 octets) entre `func_08008920` et `func_08008940` dans `asm/hardware.s` -- duplicatas byte-pour-byte des 3 fonctions nommées juste avant, MANQUÉS par `scan_hidden_code_blobs_v2.py` (bug de parsing trouvé ce round, voir `SESSION_NOTES.md` w68) | w68 | (voir `git log`) |
 | `func_08008960`, `func_0800896C` | duplicata byte-pour-byte de `func_08008940` (accesseur +0x494) et de `func_0800894C` (wrapper -> `func_08008AE0` à +0x490) -- ex-`.byte` bruts (32 octets) entre `func_0800894C` et `func_08008980` (déjà porté), flaggés "not plausible" par `scan_hidden_code_blobs_v2.py` dès w65 mais jamais creusés jusqu'ici | w68 | (voir `git log`) |
+| `func_080094E0`, `func_080094F8`, `func_08009508` | 3 wrappers `i16` (nonzero-test/passthrough/setter) autour du champ `self+0xc`, `func_08009508` absorbe l'ex-orpheline `func_08009514` | w76 | (voir `git log`) |
+| `func_08069EB4`, `func_08069ED4`, `func_08069EF4` | wrappers nonzero-to-bool vers `Barn::CountSheeps`/`CountCows`/`Coop::CountChickens` via un objet englobant non décompilé (`Farm` inline à +0x14) | w76 | (voir `git log`) |
+| `func_0801FD48`/`func_0801FD50`/`func_0801FD58` + duplicata `func_080ADB84`/`func_080ADB8C`/`func_080ADB94` | 2x3 accesseurs bruts `self+4` (i16 +0xE, i16 +0xA, u32 +0), doublon exact confirmé à 2 adresses ROM distinctes | w76 | (voir `git log`) |
+| `func_08075E00` | 2 appels conditionnels au wrapper DMA `func_08008E64` (prototype 3-arg récupéré), champ `self+0x1C` réutilisé comme test ET argument | w76 | (voir `git log`) |
+| `func_08036E00` | doublon exact du motif "entity factory" `func_08035B38` (règle 13) -- w70 l'avait sur-estimé "constructeur complexe" par ressemblance de voisinage | w76 | (voir `git log`) |
+| `func_080AAF9C`, `func_080AAFB8` | 2 helpers légers, w70 les avait classés "pression de registres" par ressemblance de voisinage -- ni l'un ni l'autre ne touche r8/sb/sl/ip | w76 | (voir `git log`) |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
@@ -157,11 +163,33 @@ même pic de pression de registres.
   d'appel directe avec les constructeurs sœurs `func_080D79CC`/
   `func_080D7AD4`, qui stampent la même paire de vtables pour un tout
   autre objet englobant). Voir `src/code_08008980.cc` pour le détail.
-- `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
-  FSM de démarrage documentée dans `docs/ENGINE.md` côté dépôt patch.
-  Dimensionnée round 6 : 0x6F4 octets (~800 lignes de `.s`), prologue
-  `push {r4,r5,r6,r7,lr}; mov r7,sl; mov r6,sb` -- signature identique à
-  `DrawGlyphAt`/`func_0805E790`. **Pas tentée, pas de budget dédié.**
+- `franglais_boot_fsm_run` (`func_08093364`, `asm/code_08093220.s:152` --
+  **corrigé round w79** : l'ancienne référence `asm/code_0805E760.s`
+  était fausse, ce fichier ne contient pas cette adresse) -- FSM de
+  démarrage documentée dans `docs/ENGINE.md` côté dépôt patch. Taille
+  réelle mesurée round w79 (borne de fin confirmée contre
+  `func_08093AC8`) : **0x764 octets** (1892o), pas `0x6F4` (1780o) comme
+  noté round 6 -- ~795 lignes de `.s`, prologue `push {r4,r5,r6,r7,lr};
+  mov r7,sl; mov r6,sb; mov r5,r8` -- signature identique à
+  `DrawGlyphAt`/`func_0805E790`. **Exploration dédiée round w79
+  (worktree w79) : pas de tentative de match (mission = jauger la
+  difficulté, pas produire un match) -- rapport complet dans
+  `SESSION_NOTES.md` round w79.** Chiffres clés : 88 `bl` au total, 46
+  callés distincts dont seulement 4 déjà connus/portés dans ce dépôt
+  (42 opaques), 13 globales opaques distinctes, DEUX tables de saut
+  imbriquées (9+9 cas) sur la même variable d'état -- cumule la classe
+  "pression de registres" ET la classe "FSM dense à table de saut"
+  (cf. `.L0801D9BC` round w76). Particularité méthodologique notée :
+  vu le volume, aucun sous-ensemble de cette fonction ne peut être
+  vérifié isolément via le harnais rapide -- l'allocation de registres
+  (`r7`/`sb`/`sl`) dépend du graphe de vie sur les 88 appels complets,
+  donc il faut essentiellement toute la fonction (tous les 42 callés
+  typés) avant d'obtenir un premier signal utile. Estimation round w79
+  pour un match complet : **15-25 rounds/agents dédiés** (10-15 pour
+  l'inventaire des 42 callés opaques, 5-10 pour la FSM elle-même une
+  fois les callés connus). Plus grosse cible jamais cataloguée dans ce
+  dépôt en volume x callés opaques combinés. **Toujours pas de budget
+  dédié alloué au-delà de cette exploration.**
 
 À l'inverse, la classe "boucle simple, peu de valeurs vivantes, délègue
 le gros du travail à un appel `bl` opaque" (les 2 boucles `DrawString`)

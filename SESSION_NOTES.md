@@ -10344,3 +10344,489 @@ déjà nommés dans ce fichier).
 Aucun fichier `asm/*.s` modifié ce round (caractérisation pure, pas de
 tentative de portage). `git status --short` propre, `origin` intact,
 rien poussé, aucune PR.
+
+## Round w76 (worktree `w76`) -- suite du sweep w70/w73, 8 gaps consommés,
+15 fonctions matchées, tous premier essai en harnais, gap count 54 -> 46
+
+Re-scan complet avec `scan_hidden_code_blobs_v2.py` : 54 gaps au début de
+ce round. Priorité donnée aux PETITS gaps (mission explicite), en
+excluant les cibles déjà exclues/bloquées (`func_08050C70`,
+`.L08037CDC`, `func_0809C4EC`, `func_08050EBC`/`08050E98`,
+`.L08037250`, `func_08075334`) et une cible "pression de registres"
+avérée (`.L0804EB64`, r8/r9/sl utilisés dans le CORPS, pas juste
+prologue/épilogue -- vérifié puis explicitement laissée de côté sans
+tentative, conforme à la règle DECOMP_RULES.md sur cette classe).
+
+**8 gaps matchés, 15 fonctions, 7 commits, tous vérifiés bit-exact**
+(harnais rapide + `make compare` relink complet + diff octet-à-octet
+isolé contre `baserom.gba`) :
+
+- **`func_080094E0`/`func_080094F8`/`func_08009508`** (52o,
+  `asm/code_08008DE8.s`, entre `func_080094B8` et l'orpheline
+  `func_08009514`) : 3 wrappers autour du champ `self+0xc` (déjà connu
+  `func_080094A4`/`func_080093A0`, accesseur/mutateur `i16` "son").
+  Détail notable : le 3e wrapper n'a PAS son propre épilogue -- son
+  adresse de retour de `bl` tombe directement sur ce qui portait le
+  label orphelin `func_08009514` (aucun appelant `bl` connu nulle part),
+  qui a donc été entièrement absorbé dans le corps de la fonction portée
+  et son label supprimé.
+- **`func_08069EB4`/`func_08069ED4`/`func_08069EF4`** (96o,
+  `asm/code_08069E98.s`, candidat caractérisé mais jamais attaqué depuis
+  w73) : 3 wrappers "nonzero-to-bool" (idiome `negs`/`orrs`/`lsrs #31`)
+  autour de `Barn::CountSheeps`/`Barn::CountCows`/`Coop::CountChickens`
+  déjà portés. Le pointeur `self+0x120` déréférencé n'est PAS un
+  `Farm*` direct : les offsets utilisés (Barn +0x5F0, Coop +0x410) sont
+  chacun exactement +0x14 par rapport aux offsets réels `Farm::coop`/
+  `Farm::barn` (`include/farm.hh`) -- pointe donc vers un objet
+  englobant encore non décompilé avec `Farm` inline à +0x14. Modélisé en
+  arithmétique de pointeur brute plutôt que d'inventer cette classe.
+- **`func_0801FD48`/`func_0801FD50`/`func_0801FD58`** ET leur duplicata
+  EXACT **`func_080ADB84`/`func_080ADB8C`/`func_080ADB94`** (24o chacun,
+  `asm/code_0801DE3C.s` et `asm/code_080A3774.s` respectivement) : même
+  trio d'accesseurs bruts (`i16` à +0xE, `i16` à +0xA, `u32` à +0 du
+  pointeur `self+4`), octets rigoureusement identiques aux deux
+  emplacements, mêmes callees voisins (`func_080A5A9C`/`func_080A59BC`)
+  -- confirmé comme un vrai doublon de table d'accesseurs dans la ROM,
+  pas un artefact de scan/merge (cf. piège documenté dans
+  DECOMP_RULES.md pour les doublons post-merge, vérifié non-applicable
+  ici : aucune trace de fusion récente sur ces deux fichiers). Les
+  offsets `+0xA`/`+0xE` correspondent au même objet "Location-like"
+  encore bloqué sur `.L08037CDC` (classe `Location` absente) -- gardé en
+  arithmétique brute pour ne pas préempter ce choix de nom/layout.
+- **`func_08075E00`** (36o, `asm/code_080756D0.s`, candidat caractérisé
+  mais jamais attaqué depuis w70) : 2 appels conditionnels au wrapper
+  DMA déjà connu `func_08008E64` (asm-only ; prototype à 3 arguments
+  `(void*, void*, u32)` récupéré directement depuis son corps compilé,
+  cohérent avec le style `CpuFastSet` de `func_08009790`). Le champ
+  `self+0x1C` sert À LA FOIS de test de nullité ET de 2e argument
+  littéral du 2e appel -- reproduit avec un seul local pour éviter un
+  rechargement `ldr` superflu chez agbcp.
+- **`func_08036E00`** (44o, `asm/code_08036DC4.s`, candidat "complexité
+  de constructeur" caractérisé mais jamais attaqué depuis w70) :
+  s'avère un DOUBLON exact du motif "entity factory" déjà connu
+  (`func_08035B38`/`src/code_08035B38.cc`, règle 13 DECOMP_RULES.md) --
+  même taille d'allocation (0x8c), même kind/subkind (4, 27), mêmes
+  littéraux (1, 0, 0, `false`). L'estimation w70 "gros effort, layout de
+  classe à comprendre" était basée sur la ressemblance de surface avec
+  les VRAIS constructeurs placement-new du même fichier, pas sur le
+  contenu réel de ce gap précis -- signal utile : ne pas se fier à la
+  ressemblance de voisinage seule pour prioriser/dé-prioriser un gap.
+- **`func_080AAF9C`/`func_080AAFB8`** (44o, `asm/code_080A3774.s`,
+  candidat "pression de registres" caractérisé w70 par ressemblance de
+  surface avec la fonction précédente -- qui, elle, utilise vraiment
+  r8/sb) : aucune des deux fonctions de ce gap ne touche r8/sb/sl/ip.
+  `func_080AAF9C` reforward vers `func_08008E64` (même wrapper DMA que
+  ci-dessus), gaté sur pointeur non-nul + discriminant `self+0`==2.
+  `func_080AAFB8` relit un index à `self+4`, l'envoie à `GetMapData`
+  (déjà nommée mais toujours asm-only), puis lit un octet à +0x24 de la
+  ligne retournée.
+
+**Cible examinée et explicitement écartée** (pas juste ignorée sans
+regarder) : `.L0804EB64` (288o, `asm/code_0804E9C8.s`) désassemblée en
+entier -- utilise `r8`/`r9`/`sl` dans le CORPS (pas seulement prologue/
+épilogue, ex. `mov r8,r1` puis relecture bien après), signal d'alerte
+explicite de DECOMP_RULES.md pour la classe "pression de registres" --
+laissée de côté sans tentative, conforme à la consigne "pas de budget
+dédié sans idée neuve".
+
+**Cible examinée et jugée hors scope pour ce round** : `.L0801D9BC`
+(392o, `asm/code_08012028.s`, entre `func_0801D9A8`/`func_0801DB44`) --
+désassemblage révèle une vraie table de saut (littéraux `.4byte`
+d'adresses internes au même fichier, ~40 entrées) au milieu du bloc :
+un unique gros `switch` compilé, pas une famille de petites fonctions
+sœurs comme les autres gaps de ce round. Nécessite un effort dédié de
+compréhension du contrôle de flux complet, pas tenté faute de budget --
+bon candidat pour un futur round avec budget dédié. Les 2 gaps
+nettement plus gros `.L08022C60`/`.L080238F4` (1704o/1724o,
+`asm/code_08022320.s`) n'ont pas été examinés du tout ce round (même
+classe de taille suggérant plusieurs fonctions ou une vraie grosse
+fonction à switch, mérite un examen dédié avant de s'engager).
+
+**Compte de gaps** : 54 -> 46 après ce round (8 consommés, 46 restants
+incluant tous les near-miss/cibles bloquées déjà documentées + les 3
+grosses cibles ci-dessus non examinées/écartées ce round).
+
+Méthode de vérification appliquée à chaque match, sans exception :
+harnais rapide (compilation+assemblage sans lien, diff de désassemblage
+contre les octets originaux) PUIS découpage du fichier `asm/*.s`
+monolithique (méthode standard DECOMP_RULES.md, en gérant les cas de
+double-découpage sur un fichier déjà scindé un round précédent) PUIS
+`rm -rf build fomt.gba fomt.elf fomt.map && make compare` (rebuild
+propre + relink complet, `sha1sum -c fomt.sha1` échoue comme attendu
+depuis `cb06198`, non-signal documenté) PUIS diff octet-à-octet direct
+`baserom.gba`/`fomt.gba` sur la région exacte affectée (fonctions
+portées + voisinage immédiat non touché, pour détecter tout décalage
+résiduel). `git status --short` propre après chacun des 7 commits.
+`origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
+## Round w78 (worktree `parallel-78`) -- attaque des 3 gaps moyens
+laissés en suspens par w73 : 1 match, 1 near-miss serré caractérisé,
+1 cible complexe cartographiée mais non attaquée faute de budget
+
+Mission : `.L08069EB4` (96o), `.L0804EB64` (288o), `.L0801D9BC` (392o),
+dans cet ordre. `grep -rl -- ".LADRESSE" asm/*.s` vérifié pour les 3
+avant tout travail (piège du doublon silencieux) -- chacun n'apparaît
+que dans son propre fichier `asm/*.s`, pas de doublon.
+
+### `.L08069EB4` (96o) -- MATCH, commité
+
+3 copies du même idiome "wrapper" déjà connu (famille `func_0801DD3C`,
+round w73) : déréférencer un pointeur à `self+0x120` pour atteindre un
+conteneur externe non modélisé, décaler le résultat vers un sous-objet
+`Barn`/`Coop` embarqué, appeler une de ses méthodes `Count*` déjà
+décompilées (`Barn::CountSheeps`, `Barn::CountCows`, `Coop::CountChickens`
+-- résolues via les symboles mangled `C4Barn`/`C4Coop` de `fomt.map`) et
+booléaniser le résultat `u32` (idiome `negs`/`orrs`/`lsrs #31` standard).
+Aucun appelant `bl` connu. Layout du conteneur externe à `+0x120` non
+modélisé (classe inconnue) -- seule l'arithmétique de pointeur brute
+nécessaire pour atteindre les sous-objets `Barn`/`Coop` est assertée,
+cohérent avec la famille `func_0801DD3C` déjà acceptée dans ce dépôt.
+
+Découpage de fichier : `asm/code_08069E98.s` tronqué juste après
+`func_08069E98`, reste déplacé vers `asm/code_08069F14.s` (nouveau,
+convention de nommage respectée), gap remplacé par
+`src/code_08069EB4.cc`. `fomt.lds` mis à jour pour préserver l'ordre de
+lien. Bit-exact : taille `.text` isolée 0x60 == taille du gap, diff
+octet à octet direct de `fomt.gba` contre `baserom.gba` à
+`0x08069EB4..+0x60` identique après `make compare` (relink complet, le
+check `sha1sum` global échoue comme attendu depuis `cb06198`).
+
+### `.L0804EB64` (288o) -- near-miss serré, root-causé en grande partie,
+PAS commité (fermé proprement, working tree nettoyé)
+
+Fonction unique (pas un groupe de wrappers, contrairement à l'hypothèse
+initiale de taille) : formate un entier signé en glyphes 2 octets
+(système de police à chasse variable de ce jeu, cf. `DrawGlyphAt` dans
+`src/code_0804E4AC.cc`) -- soit en forme "largeur de champ" (justifié à
+droite, espaces de remplissage, signe `-` optionnel) si `width != 0`,
+soit en forme brute signe-puis-chiffres via l'helper itoa non signé déjà
+connu `func_080E0EFC` (`asm/code_linkonce.s`) sinon. Le résultat ASCII
+est ensuite traduit caractère par caractère en codes-glyphe 2 octets via
+3 petites régions de correspondance situées dans l'énorme blob rodata
+encore non découpé `asm/data/data_080F9EB8.o` (0x40D08 octets !) --
+table indexée par `ascii*3` pour les chiffres (vérifié octet à octet :
+`base+0x90` = `82 4F 00` pour `'0'`, stride 0x100 par chiffre jusqu'à
+`base+0xAB` pour `'9'`), entrée fixe à `base+0xB0` pour l'espace,
+`base+0xB4` pour `'-'`, avec `base = 0x080F9E78`. Adressées ici comme
+littéraux hex bruts (aucun symbole existant sans découper ce blob, très
+hors scope pour ce gap -- cohérent avec la règle 10).
+
+Algorithme entièrement reconstruit et vérifié section par section :
+- Conversion en chiffres décimaux via `__modsi3`/`__divsi3` (division
+  SIGNÉE, cohérent avec une valeur déjà rendue positive), buffer
+  temporaire à `sp+12` (16o), buffer de sortie final à `sp+0` (12o) --
+  layout de frame `sub sp,#28` exactement expliqué par deux tableaux
+  locaux `char out_buf[12]; char digit_buf[16];` déclarés dans cet
+  ordre.
+- Idiome de garde redondante confirmé (règle 2) : `if (i < width)`
+  entoure toute la boucle de conversion alors que `i=0` et `width!=0`
+  sont déjà garantis à ce point -- la source originale semble partager
+  ce squelette avec un autre appelant où ce n'est pas garanti.
+- `out_buf[10] = width;` dans la branche `width==0` (offset FIXE 10, pas
+  une adresse calculée `out_buf[width]` comme dans l'autre branche) --
+  reproduit littéralement (le paramètre `width`, encore à 0 dans cette
+  branche, est réutilisé tel quel plutôt qu'un littéral `0` frais).
+- Table des 3 régions de glyphe : DOIT être déclarée comme 3 pointeurs
+  locaux nommés chargés UNE SEULE FOIS avant la boucle
+  (`u8 const *digit_table = ...; space_entry; minus_entry;`), pas
+  inline dans chaque branche -- sinon agbcp recharge chaque littéral à
+  CHAQUE itération au lieu de les hoister (agbcp ne fait pas de LICM,
+  donc le hoisting doit être fait à la main dans le C source). Confirmé
+  en isolant ce changement seul (taille passe de 0x110 à 0x120 = taille
+  cible exacte, avant tout autre fix).
+- `int v = value;` **copie explicite** nécessaire dans la branche
+  `width==0` avant la négation (`if (v<0) {...v=-v;}`) : l'original ne
+  mute PAS le paramètre `value` lui-même dans cette branche (il reste
+  vivant, intact, dans son registre d'origine) -- confirmé par le
+  désassemblage cible qui fait `adds r2,r6,#0` (copie) AVANT `mov r1,sp`,
+  puis `negs r2,r2` (mutation de la COPIE), jamais de `negs r6,r6`.
+  Écrire `v` dans le MÊME ORDRE que le désassemblage (`int v=value;`
+  avant `char *p=out_buf;`, pas après) était nécessaire pour que
+  l'ordre des 2 premières instructions du bloc corresponde (règle 5).
+
+**Résidu non résolu (2 classes distinctes, ~4-8 octets sur 288, budget
+insuffisant pour pousser plus loin)** :
+1. **Swap de registre `value`/`i`** : la cible alloue `value` dans `r6`
+   et l'index de boucle `i` dans `r5` ; toute formulation testée (ordre
+   de déclaration, réordonnancement des affectations, type `bool` vs
+   `u32` pour le drapeau de signe) donne l'inverse (`value`→r5, `i`→r6).
+   Cascade ensuite sur TOUS les registres du bloc glyphe en aval (`r2`
+   attendu vs `r3` obtenu pour le pointeur de scan, etc. -- décalage
+   constant d'un registre). Signature typique de la classe "course de
+   priorité" (règle 17, `floor_log2(refs)*refs/longueur_de_vie`) déjà
+   documentée comme non renversable par reformulation C dans 2 cas sur 2
+   testés au round w74 (`func_08050EBC`, `func_0809C4EC`) -- dump
+   `-dl -dg` confirmé disponible et exploité (`gccdump.greg` montre bien
+   ~21 pseudos réels à allouer avec refs/longueurs de vie variés) mais
+   sans mapping pseudo→registre final explicite dans le dump pour
+   trancher laquelle des 2 variables gagne sans deviner davantage.
+2. **Copie fantôme `adds r2,r1,#0`** juste après le chargement du
+   caractère courant dans la boucle glyphe, absente de la cible : liée à
+   la présence d'un 3e test explicite (`c=='-'`) après le test digit et
+   le test espace dans une chaîne `if/else if/else if/else`. Un
+   if-imbriqué équivalent (`if (c!=' ') { if(c!='-') break; ... } else
+   {...}`) supprime la copie ET tombe pile sur la bonne TAILLE (0x120)
+   mais restructure la forme du bloc final (les 2 tests espace/moins
+   compilent avec `beq` vers des blocs séparés au lieu du `bne`+chute
+   directe de la cible) -- donc toujours pas byte-exact, juste une
+   coïncidence de taille. Correspond assez bien à la classe "pression de
+   registres" déjà documentée dans `DECOMP_ARCHIVE.md` (`DrawGlyphAt`,
+   fermée après 4 tentatives avec un écart irréductible de 2 octets) --
+   **ne pas se réengager sans budget dédié et une idée réellement
+   neuve** (le dump `-dl -dg` n'a pas trouvé de levier cette fois, voir
+   limite documentée round w74).
+
+Toute tentative annulée proprement (`git status --short` propre avant
+et après, aucun fichier créé/modifié laissé dans le dépôt -- le brouillon
+`src/code_0804EB64.cc` a été supprimé après le dernier test).
+
+### `.L0801D9BC` (392o) -- cartographiée en détail, PAS attaquée
+(budget de round épuisé après les 2 cibles précédentes)
+
+Fonction bien plus grosse et complexe que les 2 précédentes : un
+dispatcheur d'état avec table de saut (`switch` à 44 cas, `mov pc, r0`
+après indexation `table[idx*4]`), pas un groupe de petites fonctions
+accolées. Reconstruction complète de la logique de routage (sans porter
+le C) :
+
+```
+handle = *(self + 0x1038);              // ldr via pool littéral =0x1038
+sub = handle + 8;                        // r6, réutilisé dans les cas
+status = *(handle + 8);
+if (status == 1) return 10;
+if ((u32)(status - 3) <= 1) return 11;   // status == 3 ou 4
+record_player = FarmHouse::GetRecordPlayer(handle + 0x1F4);  // 0xfa*2
+vtbl_fn = (*(self))->slot[0x14];         // via _call_via_r1 (0x080D3910)
+kind = vtbl_fn(self);                    // appel virtuel, offset +0x14
+idx = kind;
+if ((u32)(kind - 0x34) <= 0x1FF)
+    idx = 2;                             // large plage de kinds -> case générique 2
+if (idx > 43) goto default_case;         // sinon -> case 14 (voir table)
+switch (idx) { /* 44 cas, table décodée ci-dessous */ }
+```
+
+Table de saut décodée intégralement (44 entrées `.4byte`, base
+`0x0801DA1C`, `idx*4`) via extraction Python directe des octets bruts
+(objdump désassemble le bloc `.byte` de façon linéaire et interprète à
+tort la table comme du code -- ne JAMAIS lire la table depuis la sortie
+`objdump -D` sans réajuster, seulement depuis les octets bruts) : la
+plupart des entrées retombent sur seulement 3 blocs de cas
+(`0x0801DAD0`, `0x0801DB22`, `0x0801DB26`), chacun un petit calcul
+utilisant `RecordPlayer::HasAlbum`/`RecordPlayer::GetUnknown`
+(`func_0800BB74`/`func_0800BB7C` dans `fomt.map`) et `func_0800E324`
+pour retourner une des constantes 1-14 (probablement un enum "état de
+dialogue radio" pour un NPC/objet interactif dans la maison de ferme).
+Callés identifiés via `fomt.map` : `GetRecordPlayer__9FarmHouse`
+(`0x0800C07C`), `HasAlbum__C12RecordPlayer` (`0x0800BB74`),
+`GetUnknown__C12RecordPlayer` (`0x0800BB7C`), `func_0800E324`,
+`func_08012B24` (utilisé par le voisin déjà porté `func_0801D9A8`, pas
+directement par cette cible), `_call_via_r1` (`0x080D3910`, trampoline
+d'appel virtuel standard CFront, pas une vraie cible `bl` nommée).
+
+Pas attaqué en C++ : le volume (392o, table de saut byte-exacte à
+reproduire via un vrai `switch` C, 3+ appels externes non triviaux dont
+1 virtuel) dépasse largement le budget restant de ce round après les 2
+cibles précédentes. Bonne cible dédiée pour un round futur avec budget
+complet -- tout le travail de reverse (layout, table, callés) documenté
+ci-dessus pour éviter de le refaire.
+
+`git status --short` propre en fin de round (seul le commit du match
+`.L08069EB4` reste, rien d'autre modifié/laissé). `origin` intact, rien
+poussé, aucune PR.
+
+**Note post-merge** : le match de `.L08069EB4` a été trouvé indépendamment
+en double par le round w76 (`func_08069EB4`/`08069ED4`/`08069EF4`, déjà
+mergé) -- ce round l'a redécouvert de son côté avant que w76 ne soit
+visible. Version w76 conservée au merge (`git checkout --ours`), version
+w78 écartée (contenu identique de toute façon). Les 2 near-miss
+caractérisés (`.L0804EB64`, `.L0801D9BC`) restent valables et ouverts.
+
+## Round w79 (worktree `w79`, branche `parallel-79`) -- exploration dédiée
+`func_08093364`/`franglais_boot_fsm_run` : RAPPORT DE DIFFICULTÉ (pas de
+tentative de match forcée, mission = jauger la difficulté réelle)
+
+**Contexte de la mission** : Mathias voulait savoir concrètement à quel
+point une VRAIE grosse fonction moteur (jamais tentée jusqu'ici, aucun
+budget dédié alloué) est difficile à décompiler. Consigne explicite :
+ne pas forcer, produire un rapport honnête même sans match complet.
+
+### Localisation et correction d'une erreur de l'archive
+
+`DECOMP_ARCHIVE.md` (ligne 166) référence `asm/code_0805E760.s` pour
+cette fonction -- **erreur** : ce fichier ne contient que des fonctions
+`func_0805E76*`-`func_0805FBB8`, rien à `0x08093364`. La vraie
+localisation est `asm/code_08093220.s:152` (`grep -rln
+"func_08093364" asm/*.s` -> `code_08093220.s` ET `code_08093AC8.s` pour
+le seul appelant connu, ligne 19). À corriger dans `DECOMP_ARCHIVE.md`
+si cette cible est reprise plus tard.
+
+**Taille réelle mesurée** : `0x08093AC8 - 0x08093364 = 0x764` = **1892
+octets**, pas `0x6F4` (1780o) comme noté round 6 dans l'archive -- écart
+de 112 octets, probablement une mesure approximative faite à l'époque
+sans borne de fin confirmée (la fonction suivante `func_08093AC8` n'a
+été identifiée avec certitude que cette session). La fonction occupe
+l'intégralité de `asm/code_08093220.s` de la ligne 152 à 947 (~795
+lignes de `.s`, cohérent avec l'estimation "~800 lignes").
+
+### Structure : vraie FSM à deux niveaux, pas juste une longue chaîne d'`if`
+
+Désassemblage complet lu et découpé mentalement en blocs :
+
+1. **Prologue** (`push {r4-r7,lr}; mov r7,sl; mov r6,sb; mov r5,r8; push
+   {r5,r6,r7}; sub sp,#0x5c`) -- confirme la signature "pression de
+   registres" déjà notée dans l'archive, identique à `DrawGlyphAt`.
+   `r7` = `self` (tenu en vie sur les ~795 lignes complètes, jusqu'à
+   l'épilogue).
+2. **Bloc d'initialisation one-shot** (lignes 154-297) : gardé par un
+   flag `[sp+0x50]` remis à 0 en toute fin de bloc -- config palette/BG
+   (3x `func_08008918`+`strh` avec des constantes qui montent par pas de
+   `0x101` : `0x1D40`, `0x1E41`, `0x1F42`), 3 DMA-like via
+   `func_08008EB8`/`func_08008E64` (zones VRAM `0x0600F000`,
+   `0x0600F800`, `0x06007FE0` -- tuiles/palette), une allocation
+   (`__builtin_new(0x10)`) d'un objet avec `vtable_unk_080E5B80`,
+   enregistrement d'un handler via `func_080D100C` (callback pointer
+   `func_080D0704`), puis un appel virtuel (`_call_via_r2`, slot +0x10).
+3. **Table de saut #1** (`.L08093598`, 9 entrées, base indexée sur un
+   byte-flag ET l'état courant) : 8 cas sur 9 retombent sur le même
+   défaut, SEUL le cas 6 fait quelque chose (dispatch sur le retour d'un
+   appel virtuel `[vtbl+0x18]`, lui-même un `switch` à 4 cas
+   1/2/3/default) -- un idiome "action en attente exécutée une seule
+   fois au retour de l'état 6", pas un vrai état parmi les 9.
+4. **Table de saut #2** (`.L08093648`, 9 entrées, MÊME variable d'état) :
+   le vrai corps de la FSM, un `switch` classique sur `self+0x3E8`
+   (état, `int`) avec un flag byte compagnon à `self+0x3EC`. Les 9 cas
+   couvrent : lancement d'écrans de config (`func_08050D8C` appelé 8 FOIS
+   avec 8 tables de données globales DIFFÉRENTES en argument -- clairement
+   un "charge cet écran de dialogue/menu"), un appel virtuel de
+   confirmation (`[vtbl+0x18]`/`[vtbl+0x14]`), et un bloc de fin
+   remarquable (case 4, lignes 640-796) qui construit 3 CHAÎNES (via
+   `strlen`+`memcpy` bornés à 0xe caractères + terminateur nul, 3 fois de
+   suite à des offsets `+0x21CC/+0x21E0/+0x21F0` d'un objet -- très
+   probablement les 3 noms d'un nouveau départ de partie : fermier/ferme/
+   date, cohérent avec la note mémoire "accès à la date de jeu" de la
+   session précédente) et un `memmove` de compaction avant insertion.
+
+Cette dernière observation situe fortement cette fonction dans le
+"Pillar Language/Modern" du roadmap FoMT : c'est très probablement l'écran
+de confirmation "nouvelle partie" (saisie des noms), pas un simple menu
+titre. Nom `franglais_boot_fsm_run` cohérent avec ça, mais gardé neutre
+(`func_08093364`) dans ce dépôt par discipline "point de vue vanilla".
+
+### Inventaire chiffré de la difficulté (mesuré, pas estimé à l'oeil)
+
+```
+grep -oP '(?<=bl )\S+' <corps de la fonction> | sort -u | wc -l   -> 46 callés distincts
+grep -c '^\tbl '                                                   -> 88 appels bl au total
+```
+
+Sur les 46 callés distincts, **seuls 4 sont déjà portés/documentés**
+dans ce dépôt (`func_08008E64`, `func_08050E50`, `func_080D100C`,
+`func_08050DF0`/`TransitionCtlQuery`) -- **42 restent strictement
+opaques**, jamais inspectés. 13 globales opaques distinctes en plus
+(`gUnk_080F9F70/74/78`, `gUnk_08100610/638/678/6C4/73C/58C/590/758/790`,
+`vtable_unk_080E5B80`). Aucun de ces callés n'a de signature confirmée
+par corps compilé (règle #3 de `DECOMP_RULES.md` : deviner un prototype
+depuis un usage Ghidra/ASM seul est la cause n°1 de near-miss d'1
+registre) -- chacun nécessiterait sa propre mini-investigation avant
+même d'écrire une ligne de C pour cette fonction, sous peine de
+reproduire l'erreur documentée round 4.
+
+### Expérience harnais (calibrage, pas une tentative de la vraie cible)
+
+Pour valider que le pipeline de vérification rapide fonctionne encore
+dans ce worktree fraîchement créé, un micro-fragment isolé (2 premiers
+`bl` + 1 store, PAS le vrai `func_08093364`) a été compilé via le
+harnais standard (`/tmp/w79_boot_fsm_scratch/`, chemin unique à la
+session comme prévu par le piège documenté) :
+
+```cc
+EC void func_08093364(void *self)
+{
+    func_08008724(self);
+    void *p = func_08008918(self);
+    u16 tmp = 0xea << 5;
+    *(u16 *)((char *)p + 8) = tmp;
+}
+```
+
+Résultat : `self` alloué en `r4` (callee-saved), pas `r7` -- attendu,
+`agbcp` ne choisit un registre haut (`r7`/`sb`/`sl`) que si la durée de
+vie observée sur TOUTE la fonction le justifie (formule
+`floor_log2(refs)*refs/longueur_de_vie` documentée règle #17). **Constat
+méthodologique important pour cette cible précise** : contrairement à
+des fonctions plus courtes où un fragment peut être testé isolément
+avant d'assembler le reste, **`func_08093364` ne peut PAS être vérifiée
+par petits bouts** -- l'allocateur de registres décide de `r7`/`sb`/`sl`
+sur la base du graphe de vie GLOBAL des ~88 appels ; écrire seulement le
+prologue + 20% du corps donnerait une allocation de registres
+totalement différente de la vraie fonction (probablement PAS `r7` pour
+`self` sur un fragment court), rendant tout diff prématuré non
+informatif. **Il faut la fonction ENTIÈRE, avec les 42 callés typés
+correctement, avant d'obtenir le premier signal utile du harnais.**
+C'est une différence qualitative avec les cibles "pression de
+registres" déjà rencontrées (`DrawGlyphAt` ~100 lignes/1 callé opaque
+principal) où un near-miss pouvait être isolé à un seul bloc.
+
+### Décision : pas de tentative de C++ sur la vraie cible ce round
+
+Écrire un corps C++ pour `func_08093364` sans les 42 signatures réelles
+serait de la pure spéculation (violation directe de la règle #3, la
+règle la plus insistée du fichier de discipline) -- et vu le constat
+ci-dessus, aucun sous-ensemble ne peut être vérifié isolément de toute
+façon. Continuer aurait signifié soit halluciner des prototypes (contre
+la discipline du dépôt), soit lancer un chantier de 42 mini-
+investigations non budgété par la mission ("pas urgent, comprendre
+plutôt que matcher"). `git status --short` confirmé propre en fin de
+round -- seul `/tmp/w79_boot_fsm_scratch/` (hors dépôt) contient le
+fragment de calibrage, rien commité, rien laissé dans le worktree.
+
+### Estimation honnête pour terminer cette cible
+
+Comparaison avec la cible "pression de registres" déjà refermée avec
+succès la plus proche en volume connue (`DrawGlyphAt`/`func_0804E4AC`,
+~100 lignes, 1 callé opaque dominant, fermée après 4 rounds `sonnet` +
+1 round `fable`) : `func_08093364` a environ **8x le volume de code**,
+**~10x le nombre de callés opaques** (42 contre 1), et cumule DEUX
+classes de difficulté déjà identifiées séparément dans
+`DECOMP_RULES.md` (pression de registres ET FSM à table de saut dense,
+cf. la cible `.L0801D9BC` round w76, 44 cas, jamais attaquée non plus
+faute de budget). Estimation réaliste, en aucun cas une garantie :
+
+- **~10-15 rounds dédiés** rien que pour inventorier/porter (ou au
+  minimum établir un prototype vérifié par corps compilé) les 42 callés
+  opaques -- beaucoup sont probablement de petits accesseurs (le cluster
+  `func_08094844`..`func_0809496C`, 9 callés consécutifs en adresse,
+  presque certainement des getters d'un même objet "date/fermier" appelés
+  en séquence pour préparer un appel virtuel unique -- ce cluster à lui
+  seul pourrait tomber en 1-2 rounds une fois attaqué comme famille,
+  comme la famille des ~37 destructeurs riches l'a été).
+- **~5-10 rounds supplémentaires** pour la FSM elle-même une fois les
+  callés connus, étant donné la structure à deux tables de saut
+  imbriquées et le risque concret de near-miss "registre partagé entre
+  rôles différents" (règle #17) sur `r8`/`sb`/`sl`, réutilisés pour des
+  valeurs sans rapport apparent selon les cas du `switch` (`sb` porte
+  tour à tour un pointeur retourné par `func_080088DC`, une valeur
+  littérale `0`, et le registre `r0` du callback -- signal d'alerte
+  explicite de la règle #17 déjà repéré à l'oeil sur ce seul
+  désassemblage).
+- **Total réaliste : 15-25 rounds/agents dédiés** pour un match complet,
+  en supposant qu'aucun sous-callé ne tombe dans la classe "ABI partagée
+  entre `bl`" (structurellement infaisable, cf. `Unpack`) -- ce qui ne
+  peut être exclu avant d'avoir inspecté au moins les callés les plus
+  profonds (`func_08050D3C`/`func_08050D5C`/`func_08050E30`/
+  `func_08050E68`, cluster voisin de fonctions déjà partiellement
+  connues comme wrappers, donc probablement pas dans cette classe -- mais
+  non vérifié).
+
+**Verdict de la mission (jauger la difficulté)** : cette cible est,
+concrètement, dans la catégorie la plus dure jamais cataloguée dans ce
+dépôt -- pas par un seul obstacle exotique, mais par l'ACCUMULATION :
+volume x8 par rapport au pire cas déjà fermé, 42 callés jamais vus, et
+une FSM dense qui empêche toute vérification incrémentale (il faut
+essentiellement TOUT écrire avant d'avoir un premier signal du
+harnais). Recommandation pratique : si cette cible est reprise, découper
+le travail en deux mandats séparés et séquentiels (1: inventaire des 42
+callés en petits groupes, avec commits de ports individuels au fil de
+l'eau comme pour la famille des destructeurs riches ; 2: seulement
+ensuite, une attaque dédiée de la FSM elle-même) plutôt qu'un seul round
+qui tenterait les deux de front.
