@@ -2,308 +2,542 @@
 
 	.global vtable_unk_080E59EC
 vtable_unk_080E59EC:
-	.incbin "baserom.gba", 0xE59EC, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D3C61 @ no label yet
+	.4byte 0x080D3C25 @ no label yet
 
 	.global vtable_unk_080E59FC
 vtable_unk_080E59FC:
-	.incbin "baserom.gba", 0xE59FC, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D3C6D @ no label yet
+	.4byte 0x080D3BE9 @ no label yet
 
 	.global vtable_unk_080E5A0C
 vtable_unk_080E5A0C:
-	.incbin "baserom.gba", 0xE5A0C, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D3C79 @ no label yet
 
 	.global vtable_unk_080E5A18
 vtable_unk_080E5A18:
-	.incbin "baserom.gba", 0xE5A18, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_0800371C
+	.4byte func_0800374C
 
 	@ ASprite
 	.global vtable_unk_080E5A28
 vtable_unk_080E5A28:
-	.incbin "baserom.gba", 0xE5A28, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D3ED5 @ no label yet
+	.4byte __pure_virtual
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E5A3C
 vtable_unk_080E5A3C:
-	.incbin "baserom.gba", 0xE5A3C, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D4041 @ no label yet
+	.4byte 0x080D4005 @ no label yet
 
 	.global vtable_unk_080E5A4C
 vtable_unk_080E5A4C:
-	.incbin "baserom.gba", 0xE5A4C, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D404D @ no label yet
+	.4byte 0x080D3EF5 @ no label yet
 
 	.global vtable_unk_080E5A5C
 vtable_unk_080E5A5C:
-	.incbin "baserom.gba", 0xE5A5C, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D406D @ no label yet
 
 	.global vtable_unk_080E5A68
 vtable_unk_080E5A68:
-	.incbin "baserom.gba", 0xE5A68, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_08004BDC
+	.4byte func_08004C0C
 
 	.global vtable_unk_080E5A78
 vtable_unk_080E5A78:
-	.incbin "baserom.gba", 0xE5A78, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D6D8D @ no label yet
+	.4byte 0x080D6C59 @ no label yet
 
 	.global vtable_unk_080E5A88
 vtable_unk_080E5A88:
-	.incbin "baserom.gba", 0xE5A88, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_08004C54
+	.4byte func_08004C68
 
 	.global vtable_unk_080E5A98
 vtable_unk_080E5A98:
-	.incbin "baserom.gba", 0xE5A98, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte func_080050C8
 
 	.global vtable_unk_080E5AA4
 vtable_unk_080E5AA4:
-	.incbin "baserom.gba", 0xE5AA4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_080059D0
+	.4byte func_08005A00
 
 	.global vtable_unk_080E5AB4
 vtable_unk_080E5AB4:
-	.incbin "baserom.gba", 0xE5AB4, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte func_08005B38
 
 	.global vtable_unk_080E5AC0
 vtable_unk_080E5AC0:
-	.incbin "baserom.gba", 0xE5AC0, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_080070A4
+	.4byte func_080070D4
 
 	.global vtable_unk_080E5AD0
 vtable_unk_080E5AD0:
-	.incbin "baserom.gba", 0xE5AD0, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D782D @ no label yet
+	.4byte 0x080D7869 @ no label yet
 
 	.global vtable_unk_080E5AE0
 vtable_unk_080E5AE0:
-	.incbin "baserom.gba", 0xE5AE0, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D781D @ no label yet
+	.4byte 0x080D7875 @ no label yet
 
 	.global vtable_unk_080E5AF0
 vtable_unk_080E5AF0:
-	.incbin "baserom.gba", 0xE5AF0, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D780D @ no label yet
+	.4byte 0x080D7881 @ no label yet
 
 	.global vtable_unk_080E5B00
 vtable_unk_080E5B00:
-	.incbin "baserom.gba", 0xE5B00, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte func_080086BC
 
 	.global vtable_unk_080E5B0C
 vtable_unk_080E5B0C:
-	.incbin "baserom.gba", 0xE5B0C, 0xC
+	.4byte 0xFFFFFFE4 @ no label yet
+	.4byte 0
+	.4byte 0x080D79CD @ no label yet
 
 	.global vtable_unk_080E5B18
 vtable_unk_080E5B18:
-	.incbin "baserom.gba", 0xE5B18, 0x24
+	.4byte 0
+	.4byte 0
+	.4byte func_08009908
+	.4byte 0x080D7AD5 @ no label yet
+	.4byte func_080095C0
+	.4byte func_080095FC
+	.4byte func_0800956C
+	.4byte func_08009638
+	.4byte func_08009674
 
 	.global vtable_unk_080E5B3C
 vtable_unk_080E5B3C:
-	.incbin "baserom.gba", 0xE5B3C, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D7945 @ no label yet
 
 	.global vtable_unk_080E5B48
 vtable_unk_080E5B48:
-	.incbin "baserom.gba", 0xE5B48, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D7B05 @ no label yet
 
 	.global vtable_unk_080E5B54
 vtable_unk_080E5B54:
-	.incbin "baserom.gba", 0xE5B54, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080D7AAD @ no label yet
 
 	.global vtable_unk_080E5B60
 vtable_unk_080E5B60:
-	.incbin "baserom.gba", 0xE5B60, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_08008B18
+	.4byte 0x080D7B2D @ no label yet
 
 	.global vtable_unk_080E5B70
 vtable_unk_080E5B70:
-	.incbin "baserom.gba", 0xE5B70, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_08008B0C
+	.4byte 0x080D7B39 @ no label yet
 
 	.global vtable_unk_080E5B80
 vtable_unk_080E5B80:
-	.incbin "baserom.gba", 0xE5B80, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte func_080094AC
+	.4byte func_080094B8
 
 	.global vtable_unk_080E5B90
 vtable_unk_080E5B90:
-	.incbin "baserom.gba", 0xE5B90, 0x24
+	.4byte 0
+	.4byte 0
+	.4byte func_08009908
+	.4byte func_0800959C
+	.4byte func_080095C0
+	.4byte func_080095FC
+	.4byte func_0800956C
+	.4byte func_08009638
+	.4byte func_08009674
 
 	.global vtable_unk_080E5BB4
 vtable_unk_080E5BB4:
-	.incbin "baserom.gba", 0xE5BB4, 0x24
+	.4byte 0
+	.4byte 0
+	.4byte func_08009908
+	.4byte func_080098DC
+	.4byte func_08009940
+	.4byte func_08009968
+	.4byte func_08009984
+	.4byte func_080099B0
+	.4byte func_080099D4
 
 	.global vtable_unk_080E5BD8
 vtable_unk_080E5BD8:
-	.incbin "baserom.gba", 0xE5BD8, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080098D9 @ no label yet
+	.4byte 0x080D7B45 @ no label yet
 
 	.global vtable_unk_080E5BE8
 vtable_unk_080E5BE8:
-	.incbin "baserom.gba", 0xE5BE8, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte __pure_virtual
+	.4byte func_080098AC
 
 	.global vtable_unk_080E5BF8
 vtable_unk_080E5BF8:
-	.incbin "baserom.gba", 0xE5BF8, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x08010159 @ no label yet
+	.4byte func_08010138
 
 	.global vtable_unk_080E5C08
 vtable_unk_080E5C08:
-	.incbin "baserom.gba", 0xE5C08, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB0ED @ no label yet
 
 	.global vtable_unk_080E5C14
 vtable_unk_080E5C14:
-	.incbin "baserom.gba", 0xE5C14, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB2ED @ no label yet
+	.4byte 0x080DB1E5 @ no label yet
 
 	.global vtable_unk_080E5C24
 vtable_unk_080E5C24:
-	.incbin "baserom.gba", 0xE5C24, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB315 @ no label yet
+	.4byte 0x080DB239 @ no label yet
 
 	.global vtable_unk_080E5C34
 vtable_unk_080E5C34:
-	.incbin "baserom.gba", 0xE5C34, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB36D @ no label yet
+	.4byte 0x080DB321 @ no label yet
 
 	.global vtable_unk_080E5C44
 vtable_unk_080E5C44:
-	.incbin "baserom.gba", 0xE5C44, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB3DD @ no label yet
+	.4byte 0x080DB395 @ no label yet
 
 	.global vtable_unk_080E5C54
 vtable_unk_080E5C54:
-	.incbin "baserom.gba", 0xE5C54, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB44D @ no label yet
+	.4byte 0x080DB405 @ no label yet
 
 	.global vtable_unk_080E5C64
 vtable_unk_080E5C64:
-	.incbin "baserom.gba", 0xE5C64, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB4C9 @ no label yet
+	.4byte 0x080DB475 @ no label yet
 
 	.global vtable_unk_080E5C74
 vtable_unk_080E5C74:
-	.incbin "baserom.gba", 0xE5C74, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB541 @ no label yet
+	.4byte 0x080DB4F1 @ no label yet
 
 	.global vtable_unk_080E5C84
 vtable_unk_080E5C84:
-	.incbin "baserom.gba", 0xE5C84, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB5B9 @ no label yet
+	.4byte 0x080DB569 @ no label yet
 
 	.global vtable_unk_080E5C94
 vtable_unk_080E5C94:
-	.incbin "baserom.gba", 0xE5C94, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB631 @ no label yet
+	.4byte 0x080DB5E1 @ no label yet
 
 	.global vtable_unk_080E5CA4
 vtable_unk_080E5CA4:
-	.incbin "baserom.gba", 0xE5CA4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB6A5 @ no label yet
+	.4byte 0x080DB659 @ no label yet
 
 	.global vtable_unk_080E5CB4
 vtable_unk_080E5CB4:
-	.incbin "baserom.gba", 0xE5CB4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB715 @ no label yet
+	.4byte 0x080DB6CD @ no label yet
 
 	.global vtable_unk_080E5CC4
 vtable_unk_080E5CC4:
-	.incbin "baserom.gba", 0xE5CC4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB785 @ no label yet
+	.4byte 0x080DB73D @ no label yet
 
 	.global vtable_unk_080E5CD4
 vtable_unk_080E5CD4:
-	.incbin "baserom.gba", 0xE5CD4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB7F5 @ no label yet
+	.4byte 0x080DB7AD @ no label yet
 
 	.global vtable_unk_080E5CE4
 vtable_unk_080E5CE4:
-	.incbin "baserom.gba", 0xE5CE4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB865 @ no label yet
+	.4byte 0x080DB81D @ no label yet
 
 	.global vtable_unk_080E5CF4
 vtable_unk_080E5CF4:
-	.incbin "baserom.gba", 0xE5CF4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB8D5 @ no label yet
+	.4byte 0x080DB88D @ no label yet
 
 	.global vtable_unk_080E5D04
 vtable_unk_080E5D04:
-	.incbin "baserom.gba", 0xE5D04, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB945 @ no label yet
+	.4byte 0x080DB8FD @ no label yet
 
 	.global vtable_unk_080E5D14
 vtable_unk_080E5D14:
-	.incbin "baserom.gba", 0xE5D14, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DB9B5 @ no label yet
+	.4byte 0x080DB96D @ no label yet
 
 	.global vtable_unk_080E5D24
 vtable_unk_080E5D24:
-	.incbin "baserom.gba", 0xE5D24, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBA25 @ no label yet
+	.4byte 0x080DB9DD @ no label yet
 
 	.global vtable_unk_080E5D34
 vtable_unk_080E5D34:
-	.incbin "baserom.gba", 0xE5D34, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBA95 @ no label yet
+	.4byte 0x080DBA4D @ no label yet
 
 	.global vtable_unk_080E5D44
 vtable_unk_080E5D44:
-	.incbin "baserom.gba", 0xE5D44, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBB05 @ no label yet
+	.4byte 0x080DBABD @ no label yet
 
 	.global vtable_unk_080E5D54
 vtable_unk_080E5D54:
-	.incbin "baserom.gba", 0xE5D54, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBB75 @ no label yet
+	.4byte 0x080DBB2D @ no label yet
 
 	.global vtable_unk_080E5D64
 vtable_unk_080E5D64:
-	.incbin "baserom.gba", 0xE5D64, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBBE5 @ no label yet
+	.4byte 0x080DBB9D @ no label yet
 
 	.global vtable_unk_080E5D74
 vtable_unk_080E5D74:
-	.incbin "baserom.gba", 0xE5D74, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBC51 @ no label yet
+	.4byte 0x080DBC0D @ no label yet
 
 	.global vtable_unk_080E5D84
 vtable_unk_080E5D84:
-	.incbin "baserom.gba", 0xE5D84, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBCC1 @ no label yet
+	.4byte 0x080DBC79 @ no label yet
 
 	.global vtable_unk_080E5D94
 vtable_unk_080E5D94:
-	.incbin "baserom.gba", 0xE5D94, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBD31 @ no label yet
+	.4byte 0x080DBCE9 @ no label yet
 
 	.global vtable_unk_080E5DA4
 vtable_unk_080E5DA4:
-	.incbin "baserom.gba", 0xE5DA4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBDA1 @ no label yet
+	.4byte 0x080DBD59 @ no label yet
 
 	.global vtable_unk_080E5DB4
 vtable_unk_080E5DB4:
-	.incbin "baserom.gba", 0xE5DB4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBE11 @ no label yet
+	.4byte 0x080DBDC9 @ no label yet
 
 	.global vtable_unk_080E5DC4
 vtable_unk_080E5DC4:
-	.incbin "baserom.gba", 0xE5DC4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBE81 @ no label yet
+	.4byte 0x080DBE39 @ no label yet
 
 	.global vtable_unk_080E5DD4
 vtable_unk_080E5DD4:
-	.incbin "baserom.gba", 0xE5DD4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBEF1 @ no label yet
+	.4byte 0x080DBEA9 @ no label yet
 
 	.global vtable_unk_080E5DE4
 vtable_unk_080E5DE4:
-	.incbin "baserom.gba", 0xE5DE4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBF61 @ no label yet
+	.4byte 0x080DBF19 @ no label yet
 
 	.global vtable_unk_080E5DF4
 vtable_unk_080E5DF4:
-	.incbin "baserom.gba", 0xE5DF4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DBFD1 @ no label yet
+	.4byte 0x080DBF89 @ no label yet
 
 	.global vtable_unk_080E5E04
 vtable_unk_080E5E04:
-	.incbin "baserom.gba", 0xE5E04, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC041 @ no label yet
+	.4byte 0x080DBFF9 @ no label yet
 
 	.global vtable_unk_080E5E14
 vtable_unk_080E5E14:
-	.incbin "baserom.gba", 0xE5E14, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC0C1 @ no label yet
+	.4byte 0x080DC069 @ no label yet
 
 	.global vtable_unk_080E5E24
 vtable_unk_080E5E24:
-	.incbin "baserom.gba", 0xE5E24, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC131 @ no label yet
+	.4byte 0x080DC0E9 @ no label yet
 
 	.global vtable_unk_080E5E34
 vtable_unk_080E5E34:
-	.incbin "baserom.gba", 0xE5E34, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC1A1 @ no label yet
+	.4byte 0x080DC159 @ no label yet
 
 	.global vtable_unk_080E5E44
 vtable_unk_080E5E44:
-	.incbin "baserom.gba", 0xE5E44, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC1C9 @ no label yet
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E5E54
 vtable_unk_080E5E54:
-	.incbin "baserom.gba", 0xE5E54, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC21D @ no label yet
+	.4byte 0x080DC1D5 @ no label yet
 
 	.global vtable_unk_080E5E64
 vtable_unk_080E5E64:
-	.incbin "baserom.gba", 0xE5E64, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x08011FE9 @ no label yet
+	.4byte func_08012114
 
 	.global vtable_unk_080E5E74
 vtable_unk_080E5E74:
-	.incbin "baserom.gba", 0xE5E74, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC289 @ no label yet
+	.4byte 0x080DC245 @ no label yet
 
 	.global vtable_unk_080E5E84
 vtable_unk_080E5E84:
-	.incbin "baserom.gba", 0xE5E84, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC405 @ no label yet
+	.4byte 0x080DC3A1 @ no label yet
 
 	.global vtable_unk_080E5E94
 vtable_unk_080E5E94:
-	.incbin "baserom.gba", 0xE5E94, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC475 @ no label yet
+	.4byte 0x080DC42D @ no label yet
 
 	.global vtable_unk_080E5EA4
 vtable_unk_080E5EA4:
-	.incbin "baserom.gba", 0xE5EA4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC4E5 @ no label yet
+	.4byte 0x080DC49D @ no label yet
 
 	.global vtable_unk_080E5EB4
 vtable_unk_080E5EB4:
-	.incbin "baserom.gba", 0xE5EB4, 0x10
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC555 @ no label yet
+	.4byte 0x080DC50D @ no label yet
 
 	.global vtable_unk_080E5EC4
 vtable_unk_080E5EC4: @ game object
@@ -399,129 +633,768 @@ vtable_unk_080E5EC4: @ game object
 
 	.global vtable_unk_080E602C
 vtable_unk_080E602C:
-	.incbin "baserom.gba", 0xE602C, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC5A9 @ no label yet
 
 	.global vtable_unk_080E6038
 vtable_unk_080E6038:
-	.incbin "baserom.gba", 0xE6038, 0x168
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC5B5 @ no label yet
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E61A0
 vtable_unk_080E61A0:
-	.incbin "baserom.gba", 0xE61A0, 0xB0
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC5D5 @ no label yet
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
 
 	.section .rodata.080E6284
 
 	.global vtable_unk_080E6284
 vtable_unk_080E6284:
-	.incbin "baserom.gba", 0xE6284, 0x8C
+	.4byte 0
+	.4byte 0
+	.4byte 0x080238F5 @ no label yet
+	.4byte 0x080202A1 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x0802398D @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x080244ED @ no label yet
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x080240D1 @ no label yet
+	.4byte 0x080241AD @ no label yet
+	.4byte 0x080241F9 @ no label yet
+	.4byte 0x080202D1 @ no label yet
+	.4byte 0x080241FD @ no label yet
+	.4byte 0x08024225 @ no label yet
+	.4byte 0x080202DD @ no label yet
+	.4byte 0x08024235 @ no label yet
+	.4byte 0x08024241 @ no label yet
+	.4byte 0x0802424D @ no label yet
+	.4byte 0x0802427D @ no label yet
+	.4byte 0x080202F1 @ no label yet
+	.4byte 0x0802430D @ no label yet
+	.4byte 0x08024319 @ no label yet
+	.4byte 0x080202FD @ no label yet
+	.4byte 0x08024379 @ no label yet
+	.4byte 0x080243B9 @ no label yet
+	.4byte 0x080243DD @ no label yet
+	.4byte 0x08024469 @ no label yet
+	.4byte 0x08023949 @ no label yet
 
 	.global vtable_unk_080E6310
 vtable_unk_080E6310:
-	.incbin "baserom.gba", 0xE6310, 0x8C
+	.4byte 0
+	.4byte 0
+	.4byte 0x08022C61 @ no label yet
+	.4byte 0x080202A1 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08022CF9 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08023821 @ no label yet
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x08023415 @ no label yet
+	.4byte 0x080234F9 @ no label yet
+	.4byte 0x08023545 @ no label yet
+	.4byte 0x08023549 @ no label yet
+	.4byte 0x080202D5 @ no label yet
+	.4byte 0x08023571 @ no label yet
+	.4byte 0x08023581 @ no label yet
+	.4byte 0x080202E1 @ no label yet
+	.4byte 0x0802358D @ no label yet
+	.4byte 0x08023599 @ no label yet
+	.4byte 0x080235C9 @ no label yet
+	.4byte 0x08023659 @ no label yet
+	.4byte 0x080202F5 @ no label yet
+	.4byte 0x08023665 @ no label yet
+	.4byte 0x080236C5 @ no label yet
+	.4byte 0x08020301 @ no label yet
+	.4byte 0x080236E5 @ no label yet
+	.4byte 0x08023709 @ no label yet
+	.4byte 0x08023795 @ no label yet
+	.4byte 0x08022CB5 @ no label yet
 
 	.global vtable_unk_080E639C
 vtable_unk_080E639C:
-	.incbin "baserom.gba", 0xE639C, 0x8C
+	.4byte 0
+	.4byte 0
+	.4byte 0x080223F1 @ no label yet
+	.4byte 0x08022B39 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08022489 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x080224BD @ no label yet
+	.4byte 0x08022B71 @ no label yet
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x080202C5 @ no label yet
+	.4byte 0x080202C9 @ no label yet
+	.4byte 0x080229B9 @ no label yet
+	.4byte 0x080202D1 @ no label yet
+	.4byte 0x080202D5 @ no label yet
+	.4byte 0x080202D9 @ no label yet
+	.4byte 0x080202DD @ no label yet
+	.4byte 0x080202E1 @ no label yet
+	.4byte 0x080229BD @ no label yet
+	.4byte 0x080229C9 @ no label yet
+	.4byte 0x080229F9 @ no label yet
+	.4byte 0x080202F1 @ no label yet
+	.4byte 0x080202F5 @ no label yet
+	.4byte 0x080202F9 @ no label yet
+	.4byte 0x080202FD @ no label yet
+	.4byte 0x08020301 @ no label yet
+	.4byte 0x08022A89 @ no label yet
+	.4byte 0x08022AAD @ no label yet
+	.4byte 0x0802030D @ no label yet
+	.4byte 0x08022445 @ no label yet
 
 	.global vtable_unk_080E6428
 vtable_unk_080E6428:
-	.incbin "baserom.gba", 0xE6428, 0x8C
+	.4byte 0
+	.4byte 0
+	.4byte 0x0802173D @ no label yet
+	.4byte 0x080202A1 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x080217ED @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x08021EA9 @ no label yet
+	.4byte 0x08022349 @ no label yet
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x080202C5 @ no label yet
+	.4byte 0x08022101 @ no label yet
+	.4byte 0x080202CD @ no label yet
+	.4byte 0x080202D1 @ no label yet
+	.4byte 0x080202D5 @ no label yet
+	.4byte 0x08022155 @ no label yet
+	.4byte 0x080202DD @ no label yet
+	.4byte 0x080202E1 @ no label yet
+	.4byte 0x080202E5 @ no label yet
+	.4byte 0x080202E9 @ no label yet
+	.4byte 0x080202ED @ no label yet
+	.4byte 0x080202F1 @ no label yet
+	.4byte 0x080202F5 @ no label yet
+	.4byte 0x08022165 @ no label yet
+	.4byte 0x080202FD @ no label yet
+	.4byte 0x08020301 @ no label yet
+	.4byte 0x08020305 @ no label yet
+	.4byte 0x08020309 @ no label yet
+	.4byte 0x0802219D @ no label yet
+	.4byte 0x080217A9 @ no label yet
 
 	.global vtable_unk_080E64B4
 vtable_unk_080E64B4:
-	.incbin "baserom.gba", 0xE64B4, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC5F5 @ no label yet
+	.4byte 0x0803260D @ no label yet
+	.4byte 0x080222F5 @ no label yet
 
 	.global vtable_unk_080E64C8
 vtable_unk_080E64C8:
-	.incbin "baserom.gba", 0xE64C8, 0x8C
+	.4byte 0
+	.4byte 0
+	.4byte 0x080203A5 @ no label yet
+	.4byte 0x080215FD @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08020475 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x080204A9 @ no label yet
+	.4byte 0x08021635 @ no label yet
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x080202C5 @ no label yet
+	.4byte 0x080202C9 @ no label yet
+	.4byte 0x080213A5 @ no label yet
+	.4byte 0x080202D1 @ no label yet
+	.4byte 0x080202D5 @ no label yet
+	.4byte 0x080202D9 @ no label yet
+	.4byte 0x080202DD @ no label yet
+	.4byte 0x080202E1 @ no label yet
+	.4byte 0x080202E5 @ no label yet
+	.4byte 0x080202E9 @ no label yet
+	.4byte 0x080213B1 @ no label yet
+	.4byte 0x080202F1 @ no label yet
+	.4byte 0x080202F5 @ no label yet
+	.4byte 0x080202F9 @ no label yet
+	.4byte 0x080202FD @ no label yet
+	.4byte 0x08020301 @ no label yet
+	.4byte 0x08020305 @ no label yet
+	.4byte 0x08020309 @ no label yet
+	.4byte 0x0802030D @ no label yet
+	.4byte 0x08020411 @ no label yet
 
 	.global __vt_15Entity_080E6554
 __vt_15Entity_080E6554:
-	.incbin "baserom.gba", 0xE6554, 0x8C
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC629 @ no label yet
+	.4byte 0x080202A1 @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x0802459D @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte __pure_virtual
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x080202C5 @ no label yet
+	.4byte 0x080202C9 @ no label yet
+	.4byte 0x080202CD @ no label yet
+	.4byte 0x080202D1 @ no label yet
+	.4byte 0x080202D5 @ no label yet
+	.4byte 0x080202D9 @ no label yet
+	.4byte 0x080202DD @ no label yet
+	.4byte 0x080202E1 @ no label yet
+	.4byte 0x080202E5 @ no label yet
+	.4byte 0x080202E9 @ no label yet
+	.4byte 0x080202ED @ no label yet
+	.4byte 0x080202F1 @ no label yet
+	.4byte 0x080202F5 @ no label yet
+	.4byte 0x080202F9 @ no label yet
+	.4byte 0x080202FD @ no label yet
+	.4byte 0x08020301 @ no label yet
+	.4byte 0x08020305 @ no label yet
+	.4byte 0x08020309 @ no label yet
+	.4byte 0x0802030D @ no label yet
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E65E0
 vtable_unk_080E65E0:
-	.incbin "baserom.gba", 0xE65E0, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC65D @ no label yet
+	.4byte __pure_virtual
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E65F4
 vtable_unk_080E65F4:
-	.incbin "baserom.gba", 0xE65F4, 0x50
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC6F1 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08032A31 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0802BA29 @ no label yet
+	.4byte 0x0802BA11 @ no label yet
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x0802C2D5 @ no label yet
+	.4byte 0x0802BCA5 @ no label yet
+	.4byte 0x0802BD51 @ no label yet
+	.4byte 0x0802BE69 @ no label yet
+	.4byte 0x0802BEFD @ no label yet
 
 	.global vtable_unk_080E6644
 vtable_unk_080E6644:
-	.incbin "baserom.gba", 0xE6644, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC725 @ no label yet
+	.4byte 0x0802BFA1 @ no label yet
+	.4byte 0x0802BFE5 @ no label yet
 
 	.global vtable_unk_080E6658
 vtable_unk_080E6658:
-	.incbin "baserom.gba", 0xE6658, 0xB0
+	.4byte 0
+	.4byte 0
+	.4byte 0x08024A81 @ no label yet
+	.4byte 0x08024BFD @ no label yet
+	.4byte 0x08024BE9 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08024CD1 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x08024C55 @ no label yet
+	.4byte 0x08024C65 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x08025019 @ no label yet
+	.4byte func_08024C88
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte 0x08032075 @ no label yet
+	.4byte 0x0803205D @ no label yet
+	.4byte 0x08032055 @ no label yet
+	.4byte 0x08027BFD @ no label yet
+	.4byte 0x08028645 @ no label yet
+	.4byte 0x08028B51 @ no label yet
+	.4byte 0x0802907D @ no label yet
+	.4byte 0x0802A401 @ no label yet
+	.4byte 0x080290D5 @ no label yet
+	.4byte 0x08029559 @ no label yet
+	.4byte 0x08025069 @ no label yet
+	.4byte 0x08026D15 @ no label yet
+	.4byte 0x080299D1 @ no label yet
+	.4byte 0x080299ED @ no label yet
+	.4byte 0x08029F31 @ no label yet
+	.4byte 0x0803204D @ no label yet
+	.4byte 0x0802634D @ no label yet
+	.4byte 0x08026831 @ no label yet
+	.4byte 0x08032045 @ no label yet
+	.4byte 0x0803203D @ no label yet
+	.4byte 0x08032035 @ no label yet
+	.4byte 0x08032029 @ no label yet
+	.4byte 0x0803202D @ no label yet
+	.4byte 0x08024CA1 @ no label yet
+	.4byte 0x08032021 @ no label yet
+	.4byte 0x08032019 @ no label yet
+	.4byte 0x08024C75 @ no label yet
+	.4byte 0x08024C89 @ no label yet
+	.4byte 0x08024C99 @ no label yet
 
 	.global vtable_unk_080E6708
 vtable_unk_080E6708:
-	.incbin "baserom.gba", 0xE6708, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC765 @ no label yet
+	.4byte 0x0802B3B5 @ no label yet
+	.4byte 0x0802B51D @ no label yet
 
 	.global vtable_unk_080E671C
 vtable_unk_080E671C:
-	.incbin "baserom.gba", 0xE671C, 0x50
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC7CD @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08032A31 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte __pure_virtual
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E676C
 vtable_unk_080E676C:
-	.incbin "baserom.gba", 0xE676C, 0xB0
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC801 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08032A31 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte __pure_virtual
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
+	.4byte __pure_virtual
 
 	.global vtable_unk_080E681C
 vtable_unk_080E681C:
-	.incbin "baserom.gba", 0xE681C, 0xC
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC835 @ no label yet
 
 	.global vtable_unk_080E6828
 vtable_unk_080E6828:
-	.incbin "baserom.gba", 0xE6828, 0x3C
+	.4byte 0
+	.4byte 0
+	.4byte 0x0803295D @ no label yet
+	.4byte 0x080329DD @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08032A31 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x080329B5 @ no label yet
+	.4byte 0x080329CD @ no label yet
+	.4byte 0x080329D5 @ no label yet
 
 	.global vtable_unk_080E6864
 vtable_unk_080E6864:
-	.incbin "baserom.gba", 0xE6864, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC891 @ no label yet
+	.4byte 0x0803260D @ no label yet
+	.4byte 0x08032691 @ no label yet
 
 	.global __vt_12AActorEntity
 __vt_12AActorEntity:
-	.incbin "baserom.gba", 0xE6878, 0x3C
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC8C5 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x0801FE21 @ no label yet
+	.4byte 0x08032A31 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x0801FF71 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte __pure_virtual
+	.4byte 0x080324B9 @ no label yet
+	.4byte 0x08032B41 @ no label yet
 
 	.global vtable_unk_080E68B4
 vtable_unk_080E68B4:
-	.incbin "baserom.gba", 0xE68B4, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC8F9 @ no label yet
+	.4byte 0x0803260D @ no label yet
+	.4byte 0x08032691 @ no label yet
 
 	.global vtable_unk_080E68C8
 vtable_unk_080E68C8:
-	.incbin "baserom.gba", 0xE68C8, 0x3C
+	.4byte 0
+	.4byte 0
+	.4byte 0x08033A2D @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08033B11 @ no label yet
+	.4byte 0x08033B95 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08033AE5 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08033A81 @ no label yet
+	.4byte 0x08033AFD @ no label yet
+	.4byte 0x08032B41 @ no label yet
 
 	.global vtable_unk_080E6904
 vtable_unk_080E6904:
-	.incbin "baserom.gba", 0xE6904, 0x14
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC92D @ no label yet
+	.4byte 0x08034AA1 @ no label yet
+	.4byte 0x08034AE9 @ no label yet
 
 	.global vtable_unk_080E6918
 vtable_unk_080E6918:
-	.incbin "baserom.gba", 0xE6918, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9A9 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08036F69 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036F0D @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08036EF1 @ no label yet
 
 	.global vtable_unk_080E6958
 vtable_unk_080E6958:
-	.incbin "baserom.gba", 0xE6958, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9B5 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08034EB5 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036E01 @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08034F01 @ no label yet
 
 	.global vtable_unk_080E6998
 vtable_unk_080E6998:
-	.incbin "baserom.gba", 0xE6998, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9C1 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08034EB5 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036D99 @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08034F01 @ no label yet
 
 	.global vtable_unk_080E69D8
 vtable_unk_080E69D8:
-	.incbin "baserom.gba", 0xE69D8, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9CD @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08034EB5 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036D3D @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08034F01 @ no label yet
 
 	.global vtable_unk_080E6A18
 vtable_unk_080E6A18:
-	.incbin "baserom.gba", 0xE6A18, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9D9 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08034EB5 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036CDD @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08034F01 @ no label yet
 
 	.global vtable_unk_080E6A58
 vtable_unk_080E6A58:
-	.incbin "baserom.gba", 0xE6A58, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9E5 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08034EB5 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036C81 @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08034F01 @ no label yet
 
 	.global vtable_unk_080E6A98
 vtable_unk_080E6A98:
-	.incbin "baserom.gba", 0xE6A98, 0x40
+	.4byte 0
+	.4byte 0
+	.4byte 0x080DC9F1 @ no label yet
+	.4byte 0x0803240D @ no label yet
+	.4byte 0x0801FDC1 @ no label yet
+	.4byte 0x08034E8D @ no label yet
+	.4byte 0x08036BB1 @ no label yet
+	.4byte 0x0801FE49 @ no label yet
+	.4byte 0x0801FF79 @ no label yet
+	.4byte 0x08034EA1 @ no label yet
+	.4byte 0x0801FF6D @ no label yet
+	.4byte 0x0803242D @ no label yet
+	.4byte 0x08036B81 @ no label yet
+	.4byte 0x08034EE1 @ no label yet
+	.4byte 0x08034EF9 @ no label yet
+	.4byte 0x08036BF9 @ no label yet
 
 	.global vtable_unk_080E6AD8
 vtable_unk_080E6AD8:
