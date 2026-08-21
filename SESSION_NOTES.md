@@ -11339,3 +11339,101 @@ Scratch utilisé : `/tmp/w90scratch/{t1,t2,t3}.cc`, `try{,2,3}.sh`
 (harnais de diff automatisé octet-à-octet réutilisable),
 `target_{080074C0,08007D4C,08008F0C}.bin` (extraits `baserom.gba`) --
 tout hors dépôt, non committé.
+
+## Round w91 (worktree `w90`, branche `parallel-90`) -- les 3 near-miss de
+w90 TOUS matés bit-exact et committés (3/13 callés opaques portés)
+
+Mission : escalade bornée sur les 3 blocages précis documentés par w90
+(`func_080074C0`, `func_08007D4C`, `func_08008F0C`), dans cet ordre.
+Résultat : **3/3 matchés octet-à-octet, committés séparément**
+(`6b60f2e`, `6af2126`, `26d2f03`). Compteur : **3/13 callés-fonctions
+opaques de `franglais_transition_impl_tick` portés.**
+
+Standard de vérification appliqué (le sha1 ROM entière ne passe plus,
+cf. règle "Discipline") : build de référence de HEAD avec
+`franglais_stub.bin` factice, puis rebuild propre avec les changements
+-- **0 octet de diff sur les 8 392 704 de la ROM** à chaque étape, plus
+diff direct de chaque plage cible de `fomt.gba` contre `baserom.gba`
+(padding final inclus pour 08F0C).
+
+### 1. `func_080074C0` -- la "course d'allocation" était en fait une
+2e variable C réelle, pas un caprice d'allocateur
+
+La copie `adds r5, r2, #0` que w90 n'arrivait pas à faire émettre
+existe dans la cible parce que la source originale tient VRAIMENT le
+nibble dans deux variables aux portées chevauchantes. Combo gagnant
+(cf. commentaire de tête de `src/code_080074C0.cc`) :
+- `ent = h->GetEntry(nibble)` (référence) prise AVANT `match = 0` --
+  la dernière utilisation de `nibble` précède la naissance de `match`,
+  qui hérite de r2 sans "vol" ;
+- comparaison écrite valeur-extraite-d'abord
+  (`((val<<12)>>16) == ent.params.unk_02`) ;
+- **le vrai déclencheur** : variable de retour unique `int ret` de
+  portée fonction (`ret = result; if (match) return ret;` côté succès,
+  `ret = -1; return ret;` en queue) -- produit la queue cible
+  `adds r0,r5 / cmp / bne` par coalescence de `ret` avec r0, les
+  guard-clauses sautant DANS le `ret = -1`. Ni le ternaire ni
+  `if (match) return result;` seuls ne donnent cette forme (b.n
+  superflu ou -1 spéculé en premier).
+Struct partagée déplacée verbatim dans `include/hardware.hh`
+(hardware.cc + code_080074C0.cc, zéro duplication).
+
+### 2. `func_08007D4C` -- le `+4` séparé vient d'une sous-struct réelle
+à +0x20, pas d'une "adresse prise"
+
+La piste "variable dont l'adresse est prise" suggérée par w90 n'a même
+pas été nécessaire : le bloc à +0x20 est une VRAIE sous-struct
+(`u32 unk_00` + `entries[0x100]` de 8 octets à +0x24), et il faut
+passer par un pointeur intermédiaire explicite
+(`Unk_hardware_sub_03000408 * s = &h->sub; ent = s->entries[idx];`)
+pour que agbcp calcule base(+0x20) puis (idx*8 + 4) avec le `adds #4`
+littéral -- un accès direct `h->sub.entries[idx]` fusionne 0x24 en une
+seule constante (get_inner_reference cumule les offsets constants) et
+replie le +4 dans les ldrh. Le reste (aller-retour pile pour l'index
+byte, prédicat 256 slots, squelette match) est le frère direct de (1)
+-- match au PREMIER essai une fois la sous-struct posée.
+
+### 3. `func_08008F0C` -- l'`adds r1` parasite était une course de
+priorité à un cheveu (8/32 vs 8/34), gagnée en déplaçant UNE déclaration
+
+Diagnostic aux dumps `-dl -dg` (méthode règle 17) : la copie de `src`
+(nécessaire pour le store final) et `dest` avaient les mêmes refs (4)
+et des longueurs de vie 32 vs 34 -- la copie gagnait la course d'un
+cheveu, prenait r2, éjectait `dest` vers r5/r6, et `combined` devait
+alors recopier son init. Levier gagnant : `u32 combined = (u32)src;`
+en PREMIÈRE instruction (bloc 0) -- cse relie l'init au registre dur
+r1 (arrivée de `src`), l'allocateur honore la préférence, et le move
+d'init meurt en no-op (r1 contient encore `src`) : `orrs r1, r2`
+directement sur le registre d'argument périmé, plus AUCUNE copie de
+`s` nécessaire (le store lit le paramètre, relogé r5 naturellement).
+Piège annexe root-causé : `!(x & 1)` inline se fait réécrire par
+fold-const en `((x^1)&1) != 0` (eors parasite) -- passer par une
+variable de drapeau nommée (`low`), variante de la règle 12.
+NOTE : la suggestion w90/mission "écrire un tmp redondant pour
+reproduire la copie" était la mauvaise direction -- la CIBLE n'a pas
+de copie ; c'étaient nos versions qui en avaient une de trop.
+
+### Leçons généralisables (candidates DECOMP_RULES)
+
+1. **Queue de retour partagée `adds r0,rX / cmp / bne` (sans b.n)** :
+   variable de retour unique de portée fonction, affectée sur le chemin
+   succès AVANT le test final, avec l'affectation d'échec en
+   fallthrough -- les guard-clauses convergent dessus. (Généralise la
+   règle 5ter.)
+2. **`+K` séparé dans un calcul d'adresse indexé** : chercher une
+   sous-struct réelle + pointeur intermédiaire explicite, PAS un cast
+   pointeur brut -- l'accès membre direct cumule les constantes.
+3. **Copie de paramètre "en trop" dans nos builds (pas dans la cible)**
+   sur une expression multi-opérandes : vérifier aux dumps si l'init de
+   l'accumulateur peut être reliée au registre dur d'arrivée du
+   paramètre en remontant sa déclaration+init dans le bloc 0 -- le move
+   d'init devient no-op et disparaît. (Complète la limite 1 de la règle
+   17bis : un paramètre vivant dès l'entrée n'est pas toujours une
+   impasse, si l'on peut faire mourir la copie plutôt que la déplacer.)
+4. `!(x & 1)` inline → eors parasite via fold-const ; drapeau nommé.
+
+Scratch : `/tmp/w91/` (`try.sh` harnais diff octet-à-octet, `t*.cc`,
+`d1.cc`, `f*.cc`, dumps `-dl -dg`) -- hors dépôt. Prochaine cible
+suggérée : `func_0805E99C` (compositeur 2 sprites, jamais attaqué),
+puis les 3 accesseurs restants de la famille hardware
+(`func_08008B6C`/`func_08008B88`/`func_08008CD0`).
