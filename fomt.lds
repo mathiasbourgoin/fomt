@@ -134,6 +134,8 @@ SECTIONS
         src/entity.o(.text);
         src/code_entity_08020018.o(.text);
         asm/code_entities.o(.text);
+        src/code_080222A8.o(.text);
+        asm/code_08022320.o(.text);
         src/entity_actor.o(.text);
         asm/code_entities_080320DC.o(.text);
         src/code_08032A00.o(.text);
