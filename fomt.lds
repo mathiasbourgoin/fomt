@@ -404,6 +404,8 @@ asm/code_0801DD78.o(.text);
         asm/code_809E804.o(.text);
         src/code_080A3744.o(.text);
         asm/code_080A3774.o(.text);
+        src/code_080AAF9C.o(.text);
+        asm/code_080AAFC8.o(.text);
         src/code_080ADB84.o(.text);
         asm/code_080ADB9C.o(.text);
         src/code_080B3BE4.o(.text);
