@@ -11694,3 +11694,209 @@ ci-dessus), `func_0805E99C` (priorité, caractérisé w92, pas retouché),
 `func_080507D0` (near-miss w92, pas retouché), `func_08050868` (323
 lignes), `func_080ADD78` (233 lignes) -- ces deux derniers toujours pas
 caractérisés au-delà de leur taille.
+
+## Round w94 (worktree `w90`, branche `parallel-90`) -- résolution du
+near-miss `func_080507D0` (9/13), caractérisation approfondie de
+`func_0805E99C`/`func_0805EC24`, pas de match sur le compositeur
+
+Mission : prioriser `func_0805E99C` (compositeur 2 sprites, cible
+réelle) en portant d'abord son helper imbriqué non listé
+`func_0805EC24`, sinon les autres callés restants. Verdict : le
+near-miss de w92 sur `func_080507D0` a été résolu et committé en
+premier (rapide, cf. §1) ; le reste du budget a servi à lire
+intégralement `func_0805E99C` (324 lignes) et `func_0805EC24` (161
+lignes, 296 octets, jusqu'ici jamais désassemblé en détail) au niveau
+des sites d'appel réels dans `asm/code_0804E9C8.s` (les deux appels
+`bl func_0805E99C` aux lignes ~2602 et ~2756) pour extraire la
+sémantique précise des arguments -- aucune tentative de compilation sur
+ces deux fonctions ce round, la caractérisation seule a consommé le
+temps restant (cf. §2, la fonction s'est révélée être un calcul
+matriciel affine style BIOS `ObjAffineSet`, catégorie de difficulté
+nettement au-dessus des accesseurs matés jusqu'ici).
+
+### 0. Protocole (identique aux rounds précédents)
+
+Scratch recréé dans `/tmp/w90scratch3` (le `/tmp/w90scratch2` des
+rounds précédents avait disparu entre les sessions -- normal, hors
+dépôt). `try.sh` reconstruit à l'identique depuis la copie collée dans
+`SESSION_NOTES.md` du round w92. Piège rencontré une fois : `git
+stash` ne stash PAS les fichiers non trackés (`asm/code_080507F8.s`,
+`src/code_080507D0.cc` nouvellement créés) -- le premier essai de build
+de référence de HEAD a donc gardé ces fichiers sur le disque, causant
+des `multiple definition` au link (le nouveau `code_080507F8.s`
+contient aussi les fonctions restées dans `code_0804E9C8.s` non encore
+scindé côté HEAD). Corrigé en déplaçant les fichiers non trackés vers
+`/tmp` avant le stash plutôt qu'en comptant sur `git stash` pour les
+mettre de côté. Un stub `build/franglais_stub.bin` de 4096 octets à
+zéro doit être recréé à chaque `rm -rf build` (pas tracké par git).
+
+### 1. `func_080507D0` : near-miss w92 résolu (9/13)
+
+Rappel du near-miss w92 : la cible garde `b` dans r1 (registre
+d'argument d'origine) jusqu'à la fin, utilise r0 comme accumulateur
+pour `idx0*6`, alors que toute formulation `gUnk_080F9F3C[idx0*6+b]` (ou
+l'ordre inverse) testée en w92 recopiait systématiquement `b` dans un
+registre frais (r3) et utilisait r1 comme accumulateur.
+
+Solution : remplacer l'indexation de tableau par une addition de
+pointeur explicite :
+
+```c
+u32 idx0 = a;
+if (idx0 > 7)
+    idx0 = 0;
+
+if ((b - 1) > 5)
+    b = 1;
+
+return *(gUnk_080F9F3C + idx0 * 6 + b);
+```
+
+`*(table + expr)` (au lieu de `table[expr]`) change juste assez l'ordre
+d'évaluation d'agbcc pour qu'il charge l'adresse de base dans un
+registre libéré EN DERNIER (après avoir accumulé `idx0*6+b` dans r0) au
+lieu de la charger en premier -- ce qui laisse `b` intact dans r1
+pendant tout le calcul. Match byte-exact au premier essai avec cette
+forme (`/tmp/w90scratch3/t4.cc`, 40/40 octets identiques, les 4 derniers
+octets -- adresse du symbole `gUnk_080F9F3C` -- non résolus en
+isolation comme attendu, résolus ensuite au rebuild complet). Aucun
+changement de type de clamp requis par rapport à ce que w92 avait déjà
+déduit (idx0 = variable séparée, b = paramètre muté directement) --
+seule la forme de l'expression de lecture finale comptait.
+
+Découpage identique aux rounds précédents : `asm/code_0804E9C8.s`
+scindé en lui-même (inchangé jusqu'à `func_080507D0`) +
+`asm/code_080507F8.s` (reste, à partir de `func_080507F8`), nouveau
+`src/code_080507D0.cc`, `fomt.lds` mis à jour (insertion entre
+`asm/code_0804E9C8.o` et `src/code_08050DF0.o`).
+
+Vérification : build de référence de HEAD sauvegardé
+(`/tmp/w90scratch3/reference_HEAD.gba`), rebuild complet avec le
+changement, diff Python octet à octet sur les 8 392 704 octets de la
+ROM contre la référence -- **0 différence**. Diff direct de la plage
+`0x080507D0`-`0x080507F8` (40 octets) de `fomt.gba` contre
+`baserom.gba` -- **identique**. Commit fait.
+
+Compteur mis à jour : **9/13** callés-fonctions opaques de
+`franglais_transition_impl_tick` portés.
+
+### 2. Caractérisation approfondie de `func_0805E99C` et de son helper
+`func_0805EC24` (PAS de tentative de compilation, PAS commité)
+
+#### 2.1 Site d'appel réel (confirme et précise w92)
+
+Les deux appels dans `asm/code_0804E9C8.s` (avant le second, un
+descripteur local de 25 octets est construit sur la pile) donnent la
+signature complète :
+
+```
+func_0805E99C(dest_array, source_list, source_count, descriptor)
+   r0=dest_array   r1=source_list   r2=source_count   r3=descriptor
+```
+
+- `dest_array` : pointeur vers `{u8 count; /* pad 3 */ Entry entries[128];}`
+  avec `Entry = {u32 attr01; u16 attr2; /* pad? */}` (8 octets/entrée,
+  vu la boucle `strh` à `+4` après le `str` à `+0`, incrément de `count`
+  après écriture) -- classique tableau d'attributs OAM logiciel (le
+  "shadow OAM" partagé avec la boucle de texte de dialogue déjà matée,
+  comme deviné dans le contexte de la mission).
+- `source_list` : tableau d'entrées de 8 octets, itéré tant que
+  `source_list != source_list + source_count*8` -- au 2e site d'appel,
+  `source_count` vaut 0 ou une valeur lue via `ldrh [r0+4]` selon un
+  test `if (r1 != 0)`, cohérent avec "0, 1 ou 2 portraits" évoqué dans
+  la mission (personnage seul vs dialogue à 2 interlocuteurs).
+- `descriptor` : structure locale construite inline au site d'appel,
+  champs `+0`(u16 x=0x34), `+2`(u16 y=0x5c), `+4`(u16, résultat de
+  `func_080074C0`), `+6`(u16, résultat de `func_08007D4C`+0x78),
+  `+0xc`(u32, zéro ici), `+0x10`(u8), `+0x11`(u8), `+0x14`(u32, zéro
+  ici), `+0x18`(u8=1) -- confirme EXACTEMENT la liste de champs déjà
+  déduite en w92, avec les deux accesseurs de pool déjà matés
+  (`func_080074C0`/`func_08007D4C`, w91) qui remplissent `+4`/`+6` :
+  lien direct établi entre le compositeur et les accesseurs de handle
+  déjà portés.
+
+#### 2.2 Nouveau détail : la table 32-octets indexée par
+`descriptor+0x11 & 0x1F`
+
+Le bloc `.L0805EA6C`-`.L0805EBFC` (jamais élucidé avant ce round) lit
+`descriptor->unk_0x11` (bitfield : bits [2:0] -> shape, bit[3] ->
+size-bit-bas, bit[4] -> size-bit-haut, bits[7:5] -> un index de table),
+construit un mot d'attribut OAM-like en 3 étapes `ands`/`orrs` avec
+masques `0xF1FFFFFF`/`0xEFFFFFFF`/`0xDFFFFFFF` (positions bit 25-27,
+28, 29 -- exactement les positions shape/size/affine d'un attr0/attr1
+GBA empaqueté dans un mot 32 bits custom, pas le format matériel
+directement), PUIS utilise l'index de table (`unk_0x11 & 0x1F`, <<5,
+soit une ligne de 32 octets) pour indexer `dest_array + 4 +
+index*32` -- c'est-à-dire une ligne DANS le tableau de destination
+lui-même (pas une table externe séparée), à l'intérieur de laquelle
+sont lus 4 halfmots aux offsets locaux `+6`, `+0xe`, `+0x16`, `+0x1e`
+(donc 4 sous-entrées de 8 octets, valeur à l'offset+6 de chacune) --
+recombinés en 2 mots 32 bits passés en 5e argument (pointeur pile) à
+`func_0805EC24`. Autrement dit : le compositeur relit des entrées DÉJÀ
+écrites plus tôt dans le même tableau de destination pour construire
+les paramètres de la matrice affine -- logique pour un système de
+sprite affine dont la transformation dépend d'un état déjà stocké
+(angle de rotation courant, par exemple).
+
+#### 2.3 `func_0805EC24` : matrice affine style BIOS `ObjAffineSet`
+
+Signature reconstruite depuis le site d'appel (dans `func_0805E99C`) :
+`func_0805EC24(int* out_x, int* out_y, u32 width, u32 height, i16
+angle_coeffs[4])` (5e argument sur la pile). Corps :
+
+1. Les 4 halfmots de `angle_coeffs` subissent chacun la même
+   transformation `v' = (i16)((v*17*16 [+0xff si v*272<0]) >> 8)` --
+   c'est l'idiome agbcc standard pour `(i16)(v*272/256)` avec troncature
+   vers zéro (pas floor), reconnu dans plusieurs décompilations GBA
+   pour des tables de sinus/cosinus à échelle fixe (probablement
+   `v*17/16`, un facteur d'échelle Q4.4 dont l'origine exacte -- unité
+   de la table source -- reste à élucider).
+2. Les 4 valeurs transformées sont multipliées 2 à 2 (produit croisé
+   façon déterminant 2x2 : `a*d - b*c`) pour calculer un facteur
+   d'échelle/discriminant `r5` (`asrs r5, r1, #8` après un `muls`/`subs`
+   avec la même correction de troncature +0xff).
+3. Si le discriminant est nul (`.L0805ED3E`), la fonction ne modifie
+   PAS `*out_x`/`*out_y` (sortie anticipée, pas d'écriture) --
+   protection division par zéro explicite.
+4. Sinon, deux numérateurs sont calculés (produits croisés avec
+   `width`/`height`), puis DEUX chemins de division : un raccourci pour
+   les 2 valeurs de discriminant les plus fréquentes (`0x100`
+   positif/négatif, testées par égalité exacte -- `movs r0,#0x80;
+   lsls r0,r0,#1` = 0x100, et `0xFFFFFF00` = -0x100) qui remplacent la
+   division par un simple décalage arithmétique `>>8` (avec la même
+   correction de troncature), et un appel réel à `__divsi3` dans le cas
+   général. Résultats accumulés (`+=`) dans `*out_x`/`*out_y` après
+   soustraction d'un terme `width`/`height`-dépendant décalé de 8 bits.
+
+Ce squelette (discriminant nul -> no-op, discriminant == puissance de 2
+connue -> shift, sinon -> division réelle) est la signature classique
+d'un calcul de matrice de rotation/échelle affine en virgule fixe --
+mais reproduire cette forme en C source (l'idiome de troncature +0xff
+doit réapparaître spontanément à CHAQUE point de division signée pour
+matcher, comme déjà observé sur des fonctions plus simples des rounds
+précédents) est un travail d'ampleur comparable à `func_0805E8F0` (near
+miss w93, jamais résolu) mais sur une fonction 3x plus longue avec EN
+PLUS deux branches de raccourci `__divsi3`/shift à faire apparaître
+sélectivement. Non tenté ce round (aucune compilation d'essai) --
+recommandé pour un round dédié avec tout son budget, en commençant par
+isoler juste l'étape 1 (transformation des 4 coefficients, motif répété
+4x identique) via le harnais rapide avant d'attaquer le produit croisé
+et les branches de division.
+
+### 3. Ce qui reste (4/13)
+
+- `func_0805E99C` (compositeur, 648 octets) : dépend de `func_0805EC24`
+  (ci-dessus, jamais commencé côté C) ET du bloc `.L0805EA6C` (table
+  32-octets, ci-dessus, jamais commencé non plus). Caractérisation
+  quasi complète maintenant (seul le détail fin du bloc shape/size
+  d'ouverture `.L0805E9BA`-`.L0805EA00`, mentionné en w92, reste flou :
+  arithmétique de largeur/hauteur GBA, structure de contrôle claire
+  mais pas la forme C exacte).
+- `func_0805EC24` : caractérisé ce round (§2.3), jamais tenté en C.
+- `func_0805E8F0` (101 lignes) : near-miss w93 (blocage sur la rotation
+  de boucle), pas retouché ce round.
+- `func_08050868` (323 lignes), `func_080ADD78` (233 lignes) : toujours
+  pas caractérisés au-delà de leur taille en lignes de désassemblage.
+
+Scratch utilisé : `/tmp/w90scratch3/{try.sh,t_*.cc,t*.cc,target_*.bin,
+reference_HEAD.gba}` -- hors dépôt, non committé.
