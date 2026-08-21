@@ -561,6 +561,60 @@ jamais utilisée dans ce dépôt).
   (`self->x = self->y;` où `y` est lui-même un bitfield d'une largeur qui,
   une fois relu, agbcp doit re-décomposer par négation) plutôt qu'un
   entier brut.
+  **Round w69 : piste "masque = bitfield de l'appelant" réfutée
+  définitivement, near-miss resserré à un pur artefact d'allocation de
+  registre, PAS committé.** Les sites d'appel (`asm/code_0805E760.s`,
+  `asm/code_08093AC8.s` x5, `asm/code_080C7F00.s` x16, `asm/new_game.s`)
+  ont été inspectés un par un : **tous** matérialisent l'argument masque
+  via un simple `movs r1, #N` (valeurs vues : 1, 2, 4, 8, 0x10, 0x20,
+  0xb, 0x2c -- des combinaisons de flags bit-à-bit, jamais une relecture
+  de champ). La piste "masque relu depuis un autre bitfield côté
+  appelant" est donc fermée : l'argument est un vrai flag runtime, pas un
+  bitfield readback.
+  Séparément, l'idée "bitfield struct réel" (rule 16/16bis) a été
+  retestée malgré l'avertissement round w49 -- et elle n'est PAS
+  incompatible avec un argument dynamique : la LARGEUR du champ (6 bits)
+  est fixée à la compilation (ce qui pilote le codegen par négation),
+  indépendamment du fait que la VALEUR combinée soit un argument runtime
+  (`self->low |= mask;` est une compound-assignment de bitfield tout à
+  fait ordinaire). Modéliser le champ comme
+  `struct { unsigned char low:6; unsigned char high:2; } PACKED;`
+  (le `PACKED` est nécessaire -- sans lui, agbcp alloue une unité `ldr`
+  32 bits pour l'extraction ET un second `ldrb` séparé pour le masque
+  haut, un double-load qui ne correspond pas à la cible) reproduit
+  exactement le mécanisme de négation runtime (`movs #0x40; negs`,
+  bit-à-bit identique à `rsbs r,r,#0` -- même opcode Thumb, vérifié)
+  ET la taille totale (38 octets, 19 instructions) de `func_08050EBC` --
+  un progrès énorme par rapport au round w39 (structure du désassemblage
+  totalement différente). **Reste un near-miss PUR d'allocation de
+  registre** : selon que le corps est écrit en une compound-assignment
+  (`pack->low |= mask;`) ou en deux temps (`mask |= pack->low; pack->low
+  = mask;`), et selon que la fonction retourne `self` ou est `void`,
+  agbcp choisit tantôt `r0` tantôt `r2` comme registre de travail pour
+  l'extraction/les constantes -- 12+ variantes de phrasing C testées
+  (compound vs 2-statement, avec/sans `return self`, local nommé
+  volatile/non-volatile, ordre des sous-expressions, `mask = ~mask`
+  explicite, accès direct vs pointeur `pack` caché) convergent TOUTES
+  vers la même taille (38 octets) mais aucune ne reproduit exactement
+  QUEL registre porte quelle valeur simultanément sur les 19
+  instructions. Meilleure variante trouvée (compound `pack->low |=
+  mask;`, `void`, PACKED, pas de `return self`) : structure et ORDRE de
+  10/19 instructions strictement identiques à la cible (y compris
+  `orrs r1, r0` exact), mais ne déclenche PAS le `push {r4,lr}` de la
+  cible (tient dans r0-r3 sans callee-save) -- alors que la variante à 2
+  statements déclenche bien le `push {r4,lr}` mais avec les rôles
+  r0/r2 inversés par rapport à la cible sur la moitié restante des
+  instructions. **Signal pratique pour la suite** : le déclencheur exact
+  du `push {r4,lr}` (pourquoi la cible a besoin d'un registre
+  callee-saved alors qu'une formulation logiquement équivalente tient
+  dans r0-r3) reste à trouver -- piste non épuisée : essayer de
+  contraindre l'ordre d'évaluation via des statements intermédiaires
+  supplémentaires typés différemment (`u8` vs `u32`) pour le "raw byte"
+  et le "champ bas" séparément, ou tenter un agent `fable` (cf. stratégie
+  d'escalade DECOMP_RULES.md) si un budget dédié est alloué -- cette
+  cible est maintenant un candidat solide (near-miss resserré à un pur
+  problème de register allocation, pas de structure), contrairement à
+  avant round w69 où la structure elle-même divergeait totalement.
 - Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
   (**1084 octets** à l'origine, entre `func_08050EBC` et `func_08051320`) --
   découvert round w39 (**angle mort du scanner automatique**,
