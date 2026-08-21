@@ -11437,3 +11437,131 @@ Scratch : `/tmp/w91/` (`try.sh` harnais diff octet-à-octet, `t*.cc`,
 suggérée : `func_0805E99C` (compositeur 2 sprites, jamais attaqué),
 puis les 3 accesseurs restants de la famille hardware
 (`func_08008B6C`/`func_08008B88`/`func_08008CD0`).
+
+## Round w92 (worktree `w90`, branche `parallel-90`) -- 5 accesseurs
+courts matés bit-exact (5/10 restants portés), `func_0805E99C` reconnu
+trop gros pour ce budget, un near-miss précis sur `func_080507D0`
+
+Mission : porter `func_0805E99C` en priorité (compositeur 2 sprites),
+puis les callés restants par ordre de taille croissante. Verdict après
+lecture complète du désassemblage de `func_0805E99C` (324 lignes,
+648 octets, corps + literal pool, un appel imbriqué vers
+`func_0805EC24` lui-même non porté) : budget du round consacré à la
+place aux 5 callés les plus petits (8 à 28 lignes chacun), tous matés,
+plutôt qu'à un risque élevé de session entière non commitée sur le
+compositeur. Choix assumé, cf. §3 pour la caractérisation laissée à un
+futur round.
+
+### 0. Protocole de vérification (identique à `w91`)
+
+`rm -rf build fomt.gba fomt.elf fomt.map`, stub `build/franglais_stub.bin`
+de 4096 octets à zéro, `make compare` (sha1 échoue toujours comme
+attendu, ROM non-vanilla), build de référence de HEAD sauvegardé
+(`/tmp/w90_reference.gba`), puis après CHAQUE commit : rebuild complet +
+diff Python octet-à-octet contre cette référence (**0/8 392 704** à
+chaque étape) + diff direct de la plage `[adresse, adresse+taille[` de
+`fomt.gba` contre `baserom.gba` pour la fonction commitée. Harnais
+d'itération rapide ajouté : `/tmp/w90scratch2/try.sh` (compile un seul
+`.cc` isolément via `agbcp`+`as`, extrait `.text`, diff contre les
+octets cible extraits de `baserom.gba` -- IMPORTANT : appelle
+`tools/scripts/align_sections.sh` avant l'assemblage, sinon le padding
+de fin de fonction diffère). En isolation, les seuls octets qui restent
+différents après un vrai match sont les relocations non résolues (`bl`
+vers un symbole externe, adresse littérale d'un symbole global) --
+confirmé attendu et non un vrai écart, vérifié ensuite par le rebuild
+complet.
+
+### 1. Les 5 matchs : `func_08008CD0`, `func_0805E850`,
+`func_08008B6C`/`func_08008B88`, `func_080ADD08`
+
+- **`func_08008CD0`** (accesseur `MusicPlayerEnt`, 6 instructions) :
+  lit le bit 31 (`MUSICPLAYER_STATUS_PAUSE`, déjà dans `include/m4a.h`)
+  de `MusicPlayer::status` et retourne l'inverse. Piège : `!(bool)(x
+  >> 31)` fait émettre une normalisation booléenne (`cmp`/`blt`) par
+  agbcp -- il faut écrire le XOR explicite en `u32`
+  (`((u32)status >> 31) ^ 1`) pour obtenir `lsrs`/`movs`/`eors` sans
+  branche.
+- **`func_0805E850`** : init 2 phases de `SpriteAnimator` (écrit le
+  pointeur `DefinedSprite*` dans le champ opaque +0x00, puis délègue à
+  `func_0805E860`, déjà déclaré côté signature dans
+  `src/code_0803A804.cc:23` pour un autre appelant). Retour `void` :
+  le `r0` final n'est que le résidu du `bl`, jamais rechargé -- confirmé
+  par la cible qui ne fait pas de `mov r0` après l'appel.
+- **`func_08008B6C`/`func_08008B88`** : 2 callés de plus de la famille
+  `MusicPlayerEnt` (`m4aMPlayStart` direct vs variante "start or
+  change" qui compare le morceau déjà chargé + `MUSICPLAYER_STATUS_PAUSE`).
+  Ont matché du premier coup une fois la famille reconnue.
+- **`func_080ADD08`** : copie générique de 32 octets (`*dest = **src;
+  return dest;`) compilée en 3 salves `ldm`/`stm` (3+3+2 registres).
+  Point clé : garder un TYPE DE RETOUR pointeur même si l'unique
+  appelant ignore la valeur -- une version `void` laisse le compilateur
+  réutiliser `r0` comme accumulateur de boucle (`push {r4,lr}` seul),
+  alors que la cible préserve `r0` intact (`push {r4,r5,lr}` +
+  `adds r2,r0,#0` avant la boucle) précisément parce qu'il doit rester
+  disponible comme valeur de retour. Généralise la leçon déjà tirée sur
+  `func_08008F0C` (w91 leçon 3) à un cas "retour ignoré mais
+  structurellement nécessaire".
+
+Compteur mis à jour : **8/13 callés-fonctions opaques de
+`franglais_transition_impl_tick` portés** (`func_080074C0`,
+`func_08007D4C`, `func_08008F0C` par `w91` + les 5 ci-dessus).
+
+### 2. Near-miss précis : `func_080507D0` (table 2D `gUnk_080F9F3C`,
+8 lignes, PAS commité)
+
+```c
+u8 func_080507D0(u32 a, u32 b)
+{
+    u32 idx0 = a;
+    if (idx0 > 7) idx0 = 0;
+
+    u32 idx1 = b;
+    if ((b - 1) > 5) idx1 = 1;
+
+    return gUnk_080F9F3C[idx0 * 6 + idx1];
+}
+```
+matche les 10 premiers octets EXACTS (`push{lr}` / `adds r2,r0,#0` /
+`cmp r2,#7` / `bls` / `movs r2,#0`, soit tout le bloc de clamp de `a`)
+puis diverge : la cible calcule `subs r0, r1, #1` en utilisant `r1`
+(=`b`) DIRECTEMENT (pas de copie), garde `b`/`idx1` dans `r1` jusqu'à la
+toute fin, et utilise **`r0`** comme registre accumulateur pour
+`idx0*6` -- alors que nos versions (testé : variable `idx1` séparée,
+mutation directe de `b`, ré-ordonnancement de l'expression de retour,
+`table[idx1+idx0*6]` vs `table[idx0*6+idx1]`) font TOUTES migrer `b`
+vers un registre frais (`r3`) et utilisent `r1` comme accumulateur --
+jamais `r0`. Hypothèse non testée restante : le clamp de `a` doit
+peut-être être écrit comme une expression conditionnelle unique
+touchant DIRECTEMENT le paramètre (`if (a > 7) a = 0;`, sans variable
+`idx0` séparée) mais avec un ordre de calcul du min/max qui laisse `r0`
+libre plus tôt -- pas eu le temps de tester toutes les combinaisons
+paramètre-mutable/variable-séparée croisées (2×2) pour les DEUX
+clamps ; seule la combinaison "idx0 séparé + idx1 séparé" et "idx0
+séparé + b muté" ont été essayées. Aucun fichier `src/`/`asm/`/
+`fomt.lds` touché pour cette fonction.
+
+### 3. Ce qui reste pour un round suivant (5/13)
+
+- `func_0805E99C` (compositeur 2 sprites OAM, 324 lignes/648 octets) :
+  caractérisé ce round (paramètres : `r0`=tableau destination
+  count+entrées 8 octets, `r1`/`r2`=liste source itérée par pas de 8
+  octets, `r3`=descripteur avec champs à `+0`,`+2`,`+4`,`+6`,`+8`,`+0xc`,
+  `+0x10`,`+0x11`,`+0x14`,`+0x18` -- ressemble à un encodage attr0/1/2
+  OAM GBA classique shape/size/priority/palette/affine). Appelle un
+  helper NON dans la liste des 13, `func_0805EC24`, qui devra être
+  déclaré `extern "C"` opaque (signature observable au call site :
+  `(int*, int*, int, int)`) sans le porter lui-même -- légitime,
+  contrairement à deviner un callé de `franglais_transition_impl_tick`
+  directement. Non tenté : la portion shape/size (bloc
+  `.L0805E9E0`-`.L0805EA00`) calcule largeur/hauteur GBA par arithmétique
+  plutôt que par table, seule la structure de contrôle est claire, pas
+  la forme C exacte.
+- `func_080507D0` : near-miss ci-dessus, 8 lignes, très proche.
+- `func_08050868` (323 lignes), `func_080ADD78` (233 lignes),
+  `func_0805E8F0` (101 lignes, signature déjà déclarée dans
+  `src/code_0803A804.cc:23` mais corps jamais porté) : pas touchés ce
+  round, pas caractérisés au-delà de leur taille en lignes de
+  désassemblage.
+
+Scratch utilisé : `/tmp/w90scratch2/{try.sh,t_*.cc,target_*.bin}` --
+hors dépôt, non committé.
