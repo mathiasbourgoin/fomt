@@ -113,6 +113,10 @@ SECTIONS
         asm/code_08008D84.o(.text);
         src/code_08008DB8.o(.text);
         asm/code_08008DE8.o(.text);
+        src/code_08009790.o(.text);
+        asm/code_080097A4.o(.text);
+        src/code_08009878.o(.text);
+        asm/code_080098AC.o(.text);
         src/code_080098DC.o(.text);
         asm/code_08009908.o(.text);
         src/code_080099EC.o(.text);
@@ -147,6 +151,8 @@ SECTIONS
         src/code_08011ED8.o(.text);
         src/code_08011FE8.o(.text);
         asm/code_08012028.o(.text);
+src/code_0801DD3C.o(.text);
+asm/code_0801DD78.o(.text);
         src/code_0801DE30.o(.text);
         asm/code_0801DE3C.o(.text);
         src/entity.o(.text);
@@ -405,6 +411,8 @@ SECTIONS
         asm/code_080C7F00.o(.text);
         src/code_080CAD08.o(.text);
         asm/code_080CAD10.o(.text);
+        src/code_080D0C68.o(.text);
+        asm/code_080D0CD4.o(.text);
 
         src/m4a_1.o(.text);
         src/m4a.o(.text);
