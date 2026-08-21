@@ -163,11 +163,33 @@ même pic de pression de registres.
   d'appel directe avec les constructeurs sœurs `func_080D79CC`/
   `func_080D7AD4`, qui stampent la même paire de vtables pour un tout
   autre objet englobant). Voir `src/code_08008980.cc` pour le détail.
-- `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
-  FSM de démarrage documentée dans `docs/ENGINE.md` côté dépôt patch.
-  Dimensionnée round 6 : 0x6F4 octets (~800 lignes de `.s`), prologue
-  `push {r4,r5,r6,r7,lr}; mov r7,sl; mov r6,sb` -- signature identique à
-  `DrawGlyphAt`/`func_0805E790`. **Pas tentée, pas de budget dédié.**
+- `franglais_boot_fsm_run` (`func_08093364`, `asm/code_08093220.s:152` --
+  **corrigé round w79** : l'ancienne référence `asm/code_0805E760.s`
+  était fausse, ce fichier ne contient pas cette adresse) -- FSM de
+  démarrage documentée dans `docs/ENGINE.md` côté dépôt patch. Taille
+  réelle mesurée round w79 (borne de fin confirmée contre
+  `func_08093AC8`) : **0x764 octets** (1892o), pas `0x6F4` (1780o) comme
+  noté round 6 -- ~795 lignes de `.s`, prologue `push {r4,r5,r6,r7,lr};
+  mov r7,sl; mov r6,sb; mov r5,r8` -- signature identique à
+  `DrawGlyphAt`/`func_0805E790`. **Exploration dédiée round w79
+  (worktree w79) : pas de tentative de match (mission = jauger la
+  difficulté, pas produire un match) -- rapport complet dans
+  `SESSION_NOTES.md` round w79.** Chiffres clés : 88 `bl` au total, 46
+  callés distincts dont seulement 4 déjà connus/portés dans ce dépôt
+  (42 opaques), 13 globales opaques distinctes, DEUX tables de saut
+  imbriquées (9+9 cas) sur la même variable d'état -- cumule la classe
+  "pression de registres" ET la classe "FSM dense à table de saut"
+  (cf. `.L0801D9BC` round w76). Particularité méthodologique notée :
+  vu le volume, aucun sous-ensemble de cette fonction ne peut être
+  vérifié isolément via le harnais rapide -- l'allocation de registres
+  (`r7`/`sb`/`sl`) dépend du graphe de vie sur les 88 appels complets,
+  donc il faut essentiellement toute la fonction (tous les 42 callés
+  typés) avant d'obtenir un premier signal utile. Estimation round w79
+  pour un match complet : **15-25 rounds/agents dédiés** (10-15 pour
+  l'inventaire des 42 callés opaques, 5-10 pour la FSM elle-même une
+  fois les callés connus). Plus grosse cible jamais cataloguée dans ce
+  dépôt en volume x callés opaques combinés. **Toujours pas de budget
+  dédié alloué au-delà de cette exploration.**
 
 À l'inverse, la classe "boucle simple, peu de valeurs vivantes, délègue
 le gros du travail à un appel `bl` opaque" (les 2 boucles `DrawString`)

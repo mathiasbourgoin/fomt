@@ -10574,3 +10574,193 @@ mergé) -- ce round l'a redécouvert de son côté avant que w76 ne soit
 visible. Version w76 conservée au merge (`git checkout --ours`), version
 w78 écartée (contenu identique de toute façon). Les 2 near-miss
 caractérisés (`.L0804EB64`, `.L0801D9BC`) restent valables et ouverts.
+
+## Round w79 (worktree `w79`, branche `parallel-79`) -- exploration dédiée
+`func_08093364`/`franglais_boot_fsm_run` : RAPPORT DE DIFFICULTÉ (pas de
+tentative de match forcée, mission = jauger la difficulté réelle)
+
+**Contexte de la mission** : Mathias voulait savoir concrètement à quel
+point une VRAIE grosse fonction moteur (jamais tentée jusqu'ici, aucun
+budget dédié alloué) est difficile à décompiler. Consigne explicite :
+ne pas forcer, produire un rapport honnête même sans match complet.
+
+### Localisation et correction d'une erreur de l'archive
+
+`DECOMP_ARCHIVE.md` (ligne 166) référence `asm/code_0805E760.s` pour
+cette fonction -- **erreur** : ce fichier ne contient que des fonctions
+`func_0805E76*`-`func_0805FBB8`, rien à `0x08093364`. La vraie
+localisation est `asm/code_08093220.s:152` (`grep -rln
+"func_08093364" asm/*.s` -> `code_08093220.s` ET `code_08093AC8.s` pour
+le seul appelant connu, ligne 19). À corriger dans `DECOMP_ARCHIVE.md`
+si cette cible est reprise plus tard.
+
+**Taille réelle mesurée** : `0x08093AC8 - 0x08093364 = 0x764` = **1892
+octets**, pas `0x6F4` (1780o) comme noté round 6 dans l'archive -- écart
+de 112 octets, probablement une mesure approximative faite à l'époque
+sans borne de fin confirmée (la fonction suivante `func_08093AC8` n'a
+été identifiée avec certitude que cette session). La fonction occupe
+l'intégralité de `asm/code_08093220.s` de la ligne 152 à 947 (~795
+lignes de `.s`, cohérent avec l'estimation "~800 lignes").
+
+### Structure : vraie FSM à deux niveaux, pas juste une longue chaîne d'`if`
+
+Désassemblage complet lu et découpé mentalement en blocs :
+
+1. **Prologue** (`push {r4-r7,lr}; mov r7,sl; mov r6,sb; mov r5,r8; push
+   {r5,r6,r7}; sub sp,#0x5c`) -- confirme la signature "pression de
+   registres" déjà notée dans l'archive, identique à `DrawGlyphAt`.
+   `r7` = `self` (tenu en vie sur les ~795 lignes complètes, jusqu'à
+   l'épilogue).
+2. **Bloc d'initialisation one-shot** (lignes 154-297) : gardé par un
+   flag `[sp+0x50]` remis à 0 en toute fin de bloc -- config palette/BG
+   (3x `func_08008918`+`strh` avec des constantes qui montent par pas de
+   `0x101` : `0x1D40`, `0x1E41`, `0x1F42`), 3 DMA-like via
+   `func_08008EB8`/`func_08008E64` (zones VRAM `0x0600F000`,
+   `0x0600F800`, `0x06007FE0` -- tuiles/palette), une allocation
+   (`__builtin_new(0x10)`) d'un objet avec `vtable_unk_080E5B80`,
+   enregistrement d'un handler via `func_080D100C` (callback pointer
+   `func_080D0704`), puis un appel virtuel (`_call_via_r2`, slot +0x10).
+3. **Table de saut #1** (`.L08093598`, 9 entrées, base indexée sur un
+   byte-flag ET l'état courant) : 8 cas sur 9 retombent sur le même
+   défaut, SEUL le cas 6 fait quelque chose (dispatch sur le retour d'un
+   appel virtuel `[vtbl+0x18]`, lui-même un `switch` à 4 cas
+   1/2/3/default) -- un idiome "action en attente exécutée une seule
+   fois au retour de l'état 6", pas un vrai état parmi les 9.
+4. **Table de saut #2** (`.L08093648`, 9 entrées, MÊME variable d'état) :
+   le vrai corps de la FSM, un `switch` classique sur `self+0x3E8`
+   (état, `int`) avec un flag byte compagnon à `self+0x3EC`. Les 9 cas
+   couvrent : lancement d'écrans de config (`func_08050D8C` appelé 8 FOIS
+   avec 8 tables de données globales DIFFÉRENTES en argument -- clairement
+   un "charge cet écran de dialogue/menu"), un appel virtuel de
+   confirmation (`[vtbl+0x18]`/`[vtbl+0x14]`), et un bloc de fin
+   remarquable (case 4, lignes 640-796) qui construit 3 CHAÎNES (via
+   `strlen`+`memcpy` bornés à 0xe caractères + terminateur nul, 3 fois de
+   suite à des offsets `+0x21CC/+0x21E0/+0x21F0` d'un objet -- très
+   probablement les 3 noms d'un nouveau départ de partie : fermier/ferme/
+   date, cohérent avec la note mémoire "accès à la date de jeu" de la
+   session précédente) et un `memmove` de compaction avant insertion.
+
+Cette dernière observation situe fortement cette fonction dans le
+"Pillar Language/Modern" du roadmap FoMT : c'est très probablement l'écran
+de confirmation "nouvelle partie" (saisie des noms), pas un simple menu
+titre. Nom `franglais_boot_fsm_run` cohérent avec ça, mais gardé neutre
+(`func_08093364`) dans ce dépôt par discipline "point de vue vanilla".
+
+### Inventaire chiffré de la difficulté (mesuré, pas estimé à l'oeil)
+
+```
+grep -oP '(?<=bl )\S+' <corps de la fonction> | sort -u | wc -l   -> 46 callés distincts
+grep -c '^\tbl '                                                   -> 88 appels bl au total
+```
+
+Sur les 46 callés distincts, **seuls 4 sont déjà portés/documentés**
+dans ce dépôt (`func_08008E64`, `func_08050E50`, `func_080D100C`,
+`func_08050DF0`/`TransitionCtlQuery`) -- **42 restent strictement
+opaques**, jamais inspectés. 13 globales opaques distinctes en plus
+(`gUnk_080F9F70/74/78`, `gUnk_08100610/638/678/6C4/73C/58C/590/758/790`,
+`vtable_unk_080E5B80`). Aucun de ces callés n'a de signature confirmée
+par corps compilé (règle #3 de `DECOMP_RULES.md` : deviner un prototype
+depuis un usage Ghidra/ASM seul est la cause n°1 de near-miss d'1
+registre) -- chacun nécessiterait sa propre mini-investigation avant
+même d'écrire une ligne de C pour cette fonction, sous peine de
+reproduire l'erreur documentée round 4.
+
+### Expérience harnais (calibrage, pas une tentative de la vraie cible)
+
+Pour valider que le pipeline de vérification rapide fonctionne encore
+dans ce worktree fraîchement créé, un micro-fragment isolé (2 premiers
+`bl` + 1 store, PAS le vrai `func_08093364`) a été compilé via le
+harnais standard (`/tmp/w79_boot_fsm_scratch/`, chemin unique à la
+session comme prévu par le piège documenté) :
+
+```cc
+EC void func_08093364(void *self)
+{
+    func_08008724(self);
+    void *p = func_08008918(self);
+    u16 tmp = 0xea << 5;
+    *(u16 *)((char *)p + 8) = tmp;
+}
+```
+
+Résultat : `self` alloué en `r4` (callee-saved), pas `r7` -- attendu,
+`agbcp` ne choisit un registre haut (`r7`/`sb`/`sl`) que si la durée de
+vie observée sur TOUTE la fonction le justifie (formule
+`floor_log2(refs)*refs/longueur_de_vie` documentée règle #17). **Constat
+méthodologique important pour cette cible précise** : contrairement à
+des fonctions plus courtes où un fragment peut être testé isolément
+avant d'assembler le reste, **`func_08093364` ne peut PAS être vérifiée
+par petits bouts** -- l'allocateur de registres décide de `r7`/`sb`/`sl`
+sur la base du graphe de vie GLOBAL des ~88 appels ; écrire seulement le
+prologue + 20% du corps donnerait une allocation de registres
+totalement différente de la vraie fonction (probablement PAS `r7` pour
+`self` sur un fragment court), rendant tout diff prématuré non
+informatif. **Il faut la fonction ENTIÈRE, avec les 42 callés typés
+correctement, avant d'obtenir le premier signal utile du harnais.**
+C'est une différence qualitative avec les cibles "pression de
+registres" déjà rencontrées (`DrawGlyphAt` ~100 lignes/1 callé opaque
+principal) où un near-miss pouvait être isolé à un seul bloc.
+
+### Décision : pas de tentative de C++ sur la vraie cible ce round
+
+Écrire un corps C++ pour `func_08093364` sans les 42 signatures réelles
+serait de la pure spéculation (violation directe de la règle #3, la
+règle la plus insistée du fichier de discipline) -- et vu le constat
+ci-dessus, aucun sous-ensemble ne peut être vérifié isolément de toute
+façon. Continuer aurait signifié soit halluciner des prototypes (contre
+la discipline du dépôt), soit lancer un chantier de 42 mini-
+investigations non budgété par la mission ("pas urgent, comprendre
+plutôt que matcher"). `git status --short` confirmé propre en fin de
+round -- seul `/tmp/w79_boot_fsm_scratch/` (hors dépôt) contient le
+fragment de calibrage, rien commité, rien laissé dans le worktree.
+
+### Estimation honnête pour terminer cette cible
+
+Comparaison avec la cible "pression de registres" déjà refermée avec
+succès la plus proche en volume connue (`DrawGlyphAt`/`func_0804E4AC`,
+~100 lignes, 1 callé opaque dominant, fermée après 4 rounds `sonnet` +
+1 round `fable`) : `func_08093364` a environ **8x le volume de code**,
+**~10x le nombre de callés opaques** (42 contre 1), et cumule DEUX
+classes de difficulté déjà identifiées séparément dans
+`DECOMP_RULES.md` (pression de registres ET FSM à table de saut dense,
+cf. la cible `.L0801D9BC` round w76, 44 cas, jamais attaquée non plus
+faute de budget). Estimation réaliste, en aucun cas une garantie :
+
+- **~10-15 rounds dédiés** rien que pour inventorier/porter (ou au
+  minimum établir un prototype vérifié par corps compilé) les 42 callés
+  opaques -- beaucoup sont probablement de petits accesseurs (le cluster
+  `func_08094844`..`func_0809496C`, 9 callés consécutifs en adresse,
+  presque certainement des getters d'un même objet "date/fermier" appelés
+  en séquence pour préparer un appel virtuel unique -- ce cluster à lui
+  seul pourrait tomber en 1-2 rounds une fois attaqué comme famille,
+  comme la famille des ~37 destructeurs riches l'a été).
+- **~5-10 rounds supplémentaires** pour la FSM elle-même une fois les
+  callés connus, étant donné la structure à deux tables de saut
+  imbriquées et le risque concret de near-miss "registre partagé entre
+  rôles différents" (règle #17) sur `r8`/`sb`/`sl`, réutilisés pour des
+  valeurs sans rapport apparent selon les cas du `switch` (`sb` porte
+  tour à tour un pointeur retourné par `func_080088DC`, une valeur
+  littérale `0`, et le registre `r0` du callback -- signal d'alerte
+  explicite de la règle #17 déjà repéré à l'oeil sur ce seul
+  désassemblage).
+- **Total réaliste : 15-25 rounds/agents dédiés** pour un match complet,
+  en supposant qu'aucun sous-callé ne tombe dans la classe "ABI partagée
+  entre `bl`" (structurellement infaisable, cf. `Unpack`) -- ce qui ne
+  peut être exclu avant d'avoir inspecté au moins les callés les plus
+  profonds (`func_08050D3C`/`func_08050D5C`/`func_08050E30`/
+  `func_08050E68`, cluster voisin de fonctions déjà partiellement
+  connues comme wrappers, donc probablement pas dans cette classe -- mais
+  non vérifié).
+
+**Verdict de la mission (jauger la difficulté)** : cette cible est,
+concrètement, dans la catégorie la plus dure jamais cataloguée dans ce
+dépôt -- pas par un seul obstacle exotique, mais par l'ACCUMULATION :
+volume x8 par rapport au pire cas déjà fermé, 42 callés jamais vus, et
+une FSM dense qui empêche toute vérification incrémentale (il faut
+essentiellement TOUT écrire avant d'avoir un premier signal du
+harnais). Recommandation pratique : si cette cible est reprise, découper
+le travail en deux mandats séparés et séquentiels (1: inventaire des 42
+callés en petits groupes, avec commits de ports individuels au fil de
+l'eau comme pour la famille des destructeurs riches ; 2: seulement
+ensuite, une attaque dédiée de la FSM elle-même) plutôt qu'un seul round
+qui tenterait les deux de front.
