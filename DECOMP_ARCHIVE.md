@@ -191,6 +191,44 @@ même pic de pression de registres.
   dépôt en volume x callés opaques combinés. **Toujours pas de budget
   dédié alloué au-delà de cette exploration.**
 
+- `franglais_transition_impl_tick` (`func_0804F7A4`, `asm/code_0804E9C8.s:1639` --
+  **exploration dédiée round w80** : compositeur de texte de dialogue,
+  documenté côté dépôt patch dans `docs/DIALOGUE.md`/
+  `docs/DIALOGUE_BOX_ASSET.md`/`docs/OWN_RENDERER_DIALOGUE_POC.md`).
+  Taille mesurée (borne confirmée contre `sub_08050342`) : **0xB9E
+  octets (2974o), ~4x `func_08093364`**, même signature de prologue à
+  très forte pression de registres (`r7=sl; r6=r9; r5=r8`, frame de
+  184o). **Table de dispatch à 7 cas (`self+8` = phase 0-6) entièrement
+  résolue en lisant les octets bruts de `baserom.gba`** (piège du
+  littéral qui contient l'ADRESSE de la table, pas la table elle-même) :
+  phases 0/3 partagent `0x0804F99C`, phases 4/5 partagent `0x0804F892`,
+  phases 1/2/6 ont un corps propre. 46 `bl`, 17 callés distincts, **0
+  avec un corps déjà porté à l'adresse exacte** (seul `func_0805E8F0`,
+  `SpriteAnimator*->u32` déjà déclaré dans `src/code_0803A804.cc:23`,
+  était déjà connu -- révèle que cette fonction embarque un
+  `SpriteAnimator` à l'offset `self+0x534`). **Livrable prioritaire
+  obtenu sans match complet** : les 6 sites d'appel au DMA générique
+  (`func_08008F0C`, déjà repéré dynamiquement côté dépôt patch) copient
+  vers des adresses **OBJ VRAM** (`0x06010000`/`0x06010F00`/`0x06010C00`,
+  vérifiées en RAW sur la ROM) et **OBJ PALRAM** (`0x05000200`) à un
+  pas de `<<5` (32 octets) -- **la granularité d'une tuile GBA 4bpp
+  8x8, une constante matérielle, pas le pas d'avance du texte** (celui-ci
+  reste localisé exclusivement à `0x0804EFE4` dans `func_0804EFAC`, une
+  fonction VOISINE et DISTINCTE, cf. `docs/OWN_RENDERER_DIALOGUE_POC.md`
+  round 2). L'index multiplié par 32 vient d'un compteur d'allocation de
+  tuile (`self+0x3C`, incrémenté de 1 par copie), pas d'une position en
+  pixels ; aucune adresse OAM (`0x0700xxxx`) n'apparaît nulle part dans
+  le pool de littéraux de la fonction. **Conclusion négative utile pour
+  la suite** : cette fonction gère l'upload VRAM/PALRAM (bookkeeping
+  d'allocation de tuiles, une à la fois), pas le positionnement à
+  l'écran -- un futur patch à largeur variable n'a rien à modifier ICI,
+  le point de câblage du pas fixe reste `0x0804EFE4`. Estimation pour un
+  match complet (même méthode que `func_08093364`) : **13-20
+  rounds/agents dédiés** (8-12 pour les 17 callés opaques, 5-8 pour la
+  FSM une fois typés). Détail complet (table de dispatch, champs de
+  state machine, recensement des callés, désassemblage des 6 sites DMA)
+  dans `SESSION_NOTES.md` round w80.
+
 À l'inverse, la classe "boucle simple, peu de valeurs vivantes, délègue
 le gros du travail à un appel `bl` opaque" (les 2 boucles `DrawString`)
 matche du premier ou deuxième coup à chaque fois essayée. **Ne pas

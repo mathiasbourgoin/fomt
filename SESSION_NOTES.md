@@ -10764,3 +10764,232 @@ callés en petits groupes, avec commits de ports individuels au fil de
 l'eau comme pour la famille des destructeurs riches ; 2: seulement
 ensuite, une attaque dédiée de la FSM elle-même) plutôt qu'un seul round
 qui tenterait les deux de front.
+
+## Round w80 (worktree `w80`, branche `parallel-80`) -- désassemblage complet de `franglais_transition_impl_tick` (`func_0804F7A4`), mécanisme de recopie VRAM caractérisé, match complet non tenté
+
+Mission : décompiler les phases 0-6 de `franglais_transition_impl_tick`
+(`0x0804F7A4`), le compositeur du texte de dialogue, seule fonction
+jamais épargnée par le crash Ghidra `ContextChangeException` sur ce
+terrain (`docs/DIALOGUE.md`/`docs/DIALOGUE_BOX_ASSET.md` §6.2, dépôt
+patch). Objectif prioritaire fixé par la mission : localiser
+précisément où/comment le pas fixe de recopie vers la VRAM est câblé en
+dur, pour préparer un futur renderer à chasse variable sur le dialogue.
+Contexte source : `docs/OWN_RENDERER_DIALOGUE_POC.md` round 2 (dépôt
+patch, lu en lecture seule) a mesuré dynamiquement que le texte de
+dialogue est dessiné par blocs de 4 caractères dans des canevas privés
+de 32x16 px, à un pas x FIGÉ à 8 px décidé par une seule instruction
+(`0x0804EFE4`, `lsls r2,r2,#3`) dans une fonction **voisine et
+distincte** (`func_0804EFAC`, 0x0804EFAC-0x0804F060), et que
+`franglais_transition_impl_tick` recopie ensuite chaque bloc vers la
+VRAM -- 357 hits mesurés dynamiquement sur 40 trames de révélation
+réelle, contre 79 pour `DrawGlyphAt`.
+
+### 1. Taille et structure de dispatch, mesurées
+
+Désassemblage complet (`arm-none-eabi-objdump -D -bbinary -marmv4t
+-Mforce-thumb --adjust-vma=0x08000000`, `baserom.gba`), borné par la
+fonction suivante déjà repérée dans `asm/code_0804E9C8.s`
+(`sub_08050342`, ligne 3126) : **`0x0804F7A4` à `0x08050342`, soit
+`0xB9E` octets (2974o)** -- dans la même gamme de volume que
+`franglais_boot_fsm_run` (`func_08093364`, `0x764`o) mais **~4x plus
+gros**. Prologue `push {r4,r5,r6,r7,lr}; mov r7,sl; mov r6,r9; mov
+r5,r8; push {r5,r6,r7}; sub sp,#184` -- signature de fonction à très
+forte pression de registres (r7/r8/r9/r10 tous réquisitionnés dès
+l'entrée en plus de r4-r6, frame de 184 octets), le signal d'alerte
+explicite de `DECOMP_RULES.md` ("si r8/sb/sl/ip utilisés
+simultanément dans le corps, s'arrêter").
+
+**Dispatch de phase confirmé (table de sauts sur `self+8`, 7 cas 0-6,
+`bhi` vers un défaut si >6)** : la base de table est elle-même chargée
+depuis un littéral pool (`ldr r1,[pc,#8]` charge la VALEUR
+`0x0804F7E4`, qui EST l'adresse de la table -- piège classique, ne pas
+confondre l'adresse du littéral avec la valeur qu'il contient). Table
+lue directement en octets bruts sur `baserom.gba` (7 mots 32 bits à
+partir de `0x0804F7E4`) :
+
+| phase | cible | statut |
+|---|---|---|
+| 0 | `0x0804F99C` | partagée avec phase 3 |
+| 1 | `0x0804F800` | unique |
+| 2 | `0x0804F880` | unique |
+| 3 | `0x0804F99C` | partagée avec phase 0 |
+| 4 | `0x0804F892` | partagée avec phase 5 |
+| 5 | `0x0804F892` | partagée avec phase 4 |
+| 6 | `0x0804F90A` | unique |
+
+`self+8` est donc bien le champ d'état principal (0-6) que la mission
+supposait ; `self+0xC` (compteur/sous-état par phase, octet), `self+0xEC`
+(pointeur vers un sous-mode 0-2), `self+0xD0` (zone de ~256 octets,
+struct passée à `func_080ADD78`/`func_080ADD08`, jamais vue ailleurs
+dans ce dépôt), `self+0x550` (`self + 0xAA*8`, un octet-drapeaux testé
+bit à bit -- bit0 en phase1, bit2/bit5 déclenchent des appels son/
+vibration conditionnés), et `self+0xEB` (drapeau "sale"/à retraiter,
+octet) sont les champs de state machine identifiés par lecture directe.
+
+### 2. Recensement des callés -- 46 `bl`, 17 cibles distinctes, 0 corps déjà porté à ces adresses
+
+| adresse | hits | rôle déduit |
+|---|---|---|
+| `0x08007D4C` | 9 | accesseur scalaire (motif `ptr==NULL?0:*(ptr+4)` répété, cf. §3) |
+| `0x080074C0` | 7 | même famille que `0x08007D4C`, jamais vu ailleurs |
+| `0x08008F0C` | 6 | **DMA générique -- le coeur de la mission, voir §3** |
+| `0x08008B6C` | 4 | probablement son/vibration (arg constant `0xC5`/`0xC8`) |
+| `0x080D3914` | 4 | lit une ligne/tuile depuis une source empaquetée (cf. §3) |
+| `0x0805E8F0` | 2 | **signature déjà connue ailleurs dans ce dépôt** (voir ci-dessous) |
+| `0x0805E99C` | 2 | le compositeur de sprites déjà documenté (phase >=7, dépôt patch) |
+| `0x080D0EDA` | 2 | opaque |
+| `0x080D3918` | 2 | opaque, voisin de `0x080D3914` |
+| `0x08008CD0` | 1 | opaque |
+| `0x08008B88` | 1 | opaque (arg constant `0xC9`) |
+| `0x08050342` | 1 | appel à `sub_08050342`, la fonction SUIVANTE (déjà repérée comme frontière) |
+| `0x080507D0` | 1 | opaque |
+| `0x08050868` | 1 | opaque |
+| `0x0805E850` | 1 | opaque, appelé uniquement quand la sous-FSM (phase4/5) atteint son état terminal |
+| `0x080ADD08` | 1 | opaque |
+| `0x080ADD78` | 1 | **le dispatcheur de la sous-FSM phase4/5, retourne 0-5** (voir §1) |
+
+**Seul un callé a une signature déjà établie dans ce dépôt** :
+`func_0805E8F0` est déclaré `extern "C" u32 func_0805E8F0(SpriteAnimator
+*sprite_animator)` dans `src/code_0803A804.cc:23` (utilisé aussi par un
+autre appelant, ligne 64). Le site d'appel ici (`0x0804FDE6`, dans le
+tronc commun `0x0804F99C`) passe `r0 = self + <constante du pool,
+0x08050074 = 0x534>` -- donc **`franglais_transition_impl_tick` possède
+un `SpriteAnimator` embarqué à l'offset `0x534`**, et interroge sa
+frame courante avant chaque cycle de recopie. C'est un fait nouveau et
+concret, directement exploitable par un futur round qui voudrait
+"opaquifier" ce callé. Les 3 autres callés qui remontent un résultat
+`grep` dans `src/*.cc` (`0x08008B6C`/`0x08008B88`/`0x08008CD0`) ne sont
+en réalité que **mentionnés en commentaire** dans des fichiers voisins
+(idiome de scaling, ou frontière de bloc `.byte`) -- **aucun corps réel
+n'est encore porté à ces adresses exactes**. Net : **0 callé
+opaque déjà décompilé sur 17**, pire ratio que `func_08093364`
+(4/46 connus) proportionnellement.
+
+### 3. Le mécanisme de recopie vers la VRAM, désassemblé et localisé précisément -- LE LIVRABLE PRIORITAIRE DE CE ROUND
+
+Les 6 sites d'appel à `0x08008F0C` (le DMA générique déjà repéré
+dynamiquement dans `docs/OWN_RENDERER_DIALOGUE_POC.md`) partagent tous
+le MÊME patron, désassemblé intégralement (exemple représentatif,
+`0x0804FE10`-`0x0804FE48`) :
+
+```
+add  r0, sp, #20            ; &local[20] (pointeur vers un descripteur)
+ldr  r5, [sp, #20]          ; r5 = *local[20] (le pointeur lui-meme)
+mov  r8, r5                 ; r8 = ce pointeur, conserve pour l'appel DMA
+movs r3, #0
+cmp  r5, #0
+beq  ...
+ldrh r3, [r0, #4]           ; si non-NULL : r3 = descripteur->champ_u16 (largeur/compte)
+adds r5, r3, #0             ; r5 = ce compte (0 par defaut si pointeur NULL)
+movs r0, #256
+cmp  r5, r0
+bls  ...
+adds r5, r0, #0             ; CLAMP a 256 (ou 32, ou 3072 selon le site -- voir tableau)
+mov  r0, sl
+ldr  r1, [r0, #4]
+bl   0x08007D4C             ; renvoie un INDEX (tuile/ligne courante)
+adds r2, r0, #0
+adds r4, r7, #0
+adds r4, #60                ; r4 = self+0x3C (compteur de tuiles alloue ce cycle)
+lsls r2, r2, #5             ; <<< r2 = index * 32 -- LA GRANULARITE MATERIELLE FIXE
+ldr  r1, [pc, #572]         ; r1 = 0x06010F00 (base VRAM OBJ, mesuree en octets bruts)
+adds r2, r2, r1             ; r2 = dest = OBJ_VRAM_BASE + index*32
+adds r0, r6, #0             ; r0 = source (canevas local sp+44, OU un pointeur SpriteAnimator selon le site)
+mov  r1, r8                 ; r1 = pointeur descripteur (PAS le compte -- signature a 4 args)
+adds r3, r5, #0             ; r3 = compte clampe
+bl   0x08008F0C             ; DMA(dest?, src?, ptr_descripteur?, compte?) -- ordre exact non confirme sans porter le calle
+```
+
+Les 5 bases VRAM lues en RAW sur `baserom.gba` aux 5 littéraux distincts
+utilisés par les 6 sites : `0x06010000` (x2 sites), `0x06010F00`,
+`0x06010C00` -- **toutes dans la plage OBJ character VRAM du GBA
+(charblock 4, `0x06010000`-`0x06017FFF`)** -- plus **`0x05000200`**,
+qui est **la plage OBJ Palette RAM** (un site copie une palette, compte
+clampé à 32 = 16 couleurs x 2 octets, pas des pixels).
+
+**Conclusion directe et sourcée (le coeur de la réponse à la mission)** :
+le `<<5` (multiplication par 32) qui calcule l'adresse destination
+**N'EST PAS le pas d'avance horizontale du texte** -- c'est la
+**granularité matérielle d'une tuile OBJ 4bpp 8x8 du GBA (32 octets par
+tuile, constante du hardware, pas un choix du jeu)**. L'index multiplié
+vient d'un COMPTEUR D'ALLOCATION DE TUILE (`self+0x3C`, incrémenté de 1
+après chaque copie, `0x0804FE64`-`0x0804FE66` : `adds r0,#1; str
+r0,[r7,#60]`), pas d'une position en pixels sur l'écran. **Cette
+fonction gère l'upload en VRAM/PALRAM de tuiles graphiques et d'une
+palette (bookkeeping d'allocation, une tuile a la fois), elle NE
+positionne PAS les sprites à l'écran** -- aucune adresse OAM
+(`0x07000000`-`0x070003FF`) n'apparaît nulle part dans le pool de
+littéraux de toute la fonction (vérifié en lisant les 38 valeurs
+chargées via `ldr rX,[pc,#N]` sur les 2974 octets).
+
+**Conséquence pour le futur round "renderer maison"** : le pas fixe de
+8 px documenté par `docs/OWN_RENDERER_DIALOGUE_POC.md` round 2
+(`0x0804EFE4`, dans `func_0804EFAC`) reste le SEUL point d'ancrage
+identifié pour une largeur variable -- **`franglais_transition_impl_tick`
+n'est PAS ce point d'ancrage**, contrairement à ce que la mission
+envisageait comme hypothèse de travail. Cette fonction est une pièce
+adjacente incontournable (elle uploade en VRAM les tuiles que
+`func_0804EFAC` a déjà rendues dans leurs canevas privés, à raison d'une
+tuile de 32 octets à la fois, indépendamment de toute notion de
+largeur), mais elle n'a pas de largeur à lire -- il n'y en a
+structurellement pas à ce niveau, la granularité tuile (32o/8px) est
+fixée par le hardware GBA lui-même. **Un patch à largeur variable devra
+composer avec cette granularité** (le nombre de tuiles à uploader par
+bloc de 4 caractères ne peut pas devenir fractionnaire), mais n'a rien à
+modifier DANS cette fonction -- le point de câblage reste exclusivement
+`0x0804EFE4`. C'est une clarification négative utile : elle évite qu'un
+futur round cherche, en vain, un correctif de largeur DANS
+`franglais_transition_impl_tick`.
+
+**Trouvaille annexe (non essentielle à la mission mais notée pour
+mémoire)** : un des sites communs (`0x0804FFEC`-`0x804FFFC`, tronc
+`0x0804F99C`) construit à la main, champ par champ, un petit descripteur
+sur pile (`sp+44`, 25 octets : `strh`/`str`/`strb` a des offsets
+0,2,4,6,8,12,16,17,20,24) avec DEUX coordonnées **codées en dur** `x=40,
+y=104` (`movs r0,#40; strh r0,[r4,#0]` / `movs r0,#104; strh r0,[r4,#2]`)
+-- une position fixe à l'écran, probablement liée au mécanisme de boîte
+de nom déjà documenté et déjà corrigé côté dépôt patch (FOMT-207,
+`FUN_08050B50`), PAS au corps du texte (qui n'a aucune coordonnée en
+dur nulle part dans cette fonction).
+
+### 4. Verdict de faisabilité, honnête -- pas de tentative de match ce round
+
+Comme anticipé par la mission (comparaison explicite avec
+`franglais_boot_fsm_run`) : cette cible cumule **volume x4** par
+rapport au pire cas déjà catalogué dans ce dépôt (`func_08093364`,
+0x764o -> ici 0xB9E o), **17 callés opaques dont 0 avec un corps déjà
+porté à l'adresse exacte** (contre 4/46 pour `func_08093364`), et le
+signal d'alerte explicite "r7/r8/r9/r10 simultanés" de
+`DECOMP_RULES.md`. Aucune tentative de C++ n'a été faite sur le corps
+réel -- écrire un prototype pour `0x08007D4C`/`0x080074C0`/`0x08008F0C`
+sans avoir porté leur corps serait pure spéculation (règle #3). Estimation
+honnête, cohérente avec la méthode utilisée pour `func_08093364` :
+
+- **~8-12 rounds** pour inventorier/porter les 17 callés opaques (dont
+  au moins 2 familles probablement rapides une fois attaquées comme
+  groupe : `0x08007D4C`/`0x080074C0`, motif accesseur identique répété
+  16 fois cumulées ; `0x080D3914`/`0x080D3918`, cluster voisin en
+  adresse, probablement lecteur de ligne/tuile empaqueté).
+- **~5-8 rounds** pour la FSM elle-même une fois les callés typés,
+  étant donné les 7 phases (2 partagent du code, donc réellement 5
+  corps distincts + 1 tronc commun) et le risque de near-miss
+  "registre partagé entre rôles" (règle #17) sur `r8`/`r9`/`sl`,
+  réutilisés pour des rôles visiblement différents selon les blocs
+  (pointeur SpriteAnimator, compteur de tuile, argument brut du
+  paramètre 4 -- pas vérifié en détail, juste repéré).
+- **Total réaliste : 13-20 rounds/agents dédiés** pour un match complet
+  bit-exact, dans la même classe de difficulté que `func_08093364`
+  (register pressure + volume + callés massivement opaques), mais un
+  cran plus gros en octets.
+
+**Ce qui EST acquis, solidement, sans aucune incertitude** : la table
+de dispatch complète (7 phases, 2 partages de code), les champs de
+state machine (`self+8/0xC/0xEB/0xEC/0xD0/0x3C/0x534/0x550`), le
+recensement complet des 46 `bl`/17 callés, et surtout **la
+démonstration, sourcée octet par octet sur `baserom.gba`, que le `<<5`
+de la recopie VRAM code une granularité de tuile matérielle (32o) et
+non un pas de texte** -- exactement le livrable prioritaire demandé par
+la mission, même sans match complet. `git status --short` propre en fin
+de round, rien commité côté code (seul ce fichier et
+`DECOMP_ARCHIVE.md` sont modifiés). Scratch utilisé :
+`/tmp/w80_scratch/{target,body}.dis` (hors dépôt, non committé).
