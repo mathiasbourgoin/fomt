@@ -11900,3 +11900,171 @@ et les branches de division.
 
 Scratch utilisé : `/tmp/w90scratch3/{try.sh,t_*.cc,t*.cc,target_*.bin,
 reference_HEAD.gba}` -- hors dépôt, non committé.
+
+## Round w95 (worktree `w90`, branche `parallel-90`) -- `func_0805EC24` maté
+(10/13), caractérisation complète du bloc shape/size de `func_0805E99C`
+
+Mission : matcher `func_0805EC24` (solveur affine, caractérisé w94)
+via l'approche incrémentale, puis attaquer `func_0805E99C` si le budget
+le permet. Verdict : `func_0805EC24` matché et committé (voir §1). Le
+reste du budget a servi à finir la caractérisation de `func_0805E99C`
+(le seul angle mort de w94, le bloc shape/size `.L0805E9BA`-
+`.L0805EA00`, est maintenant entièrement élucidé, §2) mais aucune
+tentative de compilation sur `func_0805E99C` lui-même ce round -- sa
+taille (648 octets, boucle + 3 sites de bitfield-packing + un appel à
+l'helper qu'on vient de matcher) en fait un chantier à part entière,
+pas un complément de round.
+
+### 0. Protocole
+
+Scratch dans `/tmp/w90scratch4` (le `/tmp/w90scratch3` de w94 avait
+disparu entre sessions, comme d'habitude -- hors dépôt). Harnais
+`try.sh` reconstruit à l'identique (compile un seul `.cc` via
+`arm-none-eabi-cpp`+`agbcp`+`arm-none-eabi-as`, extrait la plage de la
+fonction dans le `.o` via ses symbole+taille `objdump -t`, diff contre
+la cible extraite de `baserom.gba`). Piège rencontré une fois : un
+fichier `asm/*.s` issu d'un split doit garder l'en-tête
+`.INCLUDE "asm/macro.inc"` / `.SYNTAX UNIFIED` -- une simple découpe
+par offset de caractères l'omet et casse `thumb_func_start` à
+l'assemblage (`bad instruction`). Corrigé en le réinjectant à la main
+avant le premier essai de build complet.
+
+### 1. `func_0805EC24` maté (10/13)
+
+Rôle confirmé (cf. caractérisation w94) : solveur de matrice
+affine 2x2 façon BIOS `ObjAffineSet` -- reçoit `(out_x, out_y, width,
+height, angle_coeffs[4])`, calcule le centre courant `cx =
+(*out_x+width/2)<<8` / `cy = (*out_y+height/2)<<8`, rescale chaque
+coefficient par l'idiome `(i16)(v*17*16/256)` (division tronquée vers
+zéro), calcule un déterminant croisé `c0*c3-c1*c2` (même idiome de
+troncature), et si non nul résout `(rx,ry)` par shift rapide (cas
+`déterminant == ±0x100`) ou `__divsi3` réel sinon, avant d'accumuler
+`(rx-cx)>>8` / `(ry-cy)>>8` dans `*out_x`/`*out_y`.
+
+Écrit quasi tel quel depuis la caractérisation w94 (aucune surprise sur
+l'idiome de troncature, qui réapparaît spontanément à chaque point de
+division comme observé sur les fonctions précédentes) :
+
+```c
+extern "C" void func_0805EC24(i32 *out_x, i32 *out_y, u32 width, u32 height, i16 *angle_coeffs)
+{
+    i32 cx = (*out_x + (i32)(width >> 1)) << 8;
+    i32 cy = (*out_y + (i32)(height >> 1)) << 8;
+
+    i16 c0 = (i16)(angle_coeffs[0] * 17 * 16 / 256);
+    i16 c1 = (i16)(angle_coeffs[1] * 17 * 16 / 256);
+    i16 c2 = (i16)(angle_coeffs[2] * 17 * 16 / 256);
+    i16 c3 = (i16)(angle_coeffs[3] * 17 * 16 / 256);
+
+    i32 det = (i32)(c0 * c3 - c1 * c2) / 256;
+    if (det == 0)
+        return;
+
+    i32 num_x = c3 * cx - c1 * cy;
+    i32 num_y = c0 * cy - c2 * cx;
+
+    i32 rx, ry;
+    if (det == 0x100) {
+        rx = num_x / 256;
+        ry = num_y / 256;
+    } else if (det == -0x100) {
+        rx = num_x / 256; rx = -rx;
+        ry = num_y / 256; ry = -ry;
+    } else {
+        rx = __divsi3(num_x, det);
+        ry = __divsi3(num_y, det);
+    }
+
+    *out_x += (rx - cx) >> 8;
+    *out_y += (ry - cy) >> 8;
+}
+```
+
+Deux écarts trouvés par itération sur le harnais isolé (mine=296 octets
+dès le premier essai, 16 octets de diff au départ, réduits en 2
+passes) :
+1. Ordre des opérandes de multiplication dans `num_x`/`num_y` : la
+   cible calcule `c3 * cx` (charge `c3` dans le registre accumulateur
+   PUIS multiplie par `cx`) et pas `cx * c3` -- inverser l'ordre
+   d'écriture change quel opérande agbcp charge en premier, donc quel
+   registre reste libre ensuite. Idem pour le second terme, `c2 * cx`
+   et pas `cx * c2`.
+2. Négation de la branche `déterminant == -0x100` : écrire
+   `rx = -(num_x / 256);` en une expression fait calculer le shift
+   dans un registre temporaire puis négocier dans un registre final
+   différent (`mov`+`neg` croisés) ; il faut deux instructions
+   séparées, `rx = num_x / 256; rx = -rx;`, pour que le compilateur
+   négocie EN PLACE (le même registre porte le résultat du shift puis
+   sa négation) -- généralise la leçon "réassignation en place" déjà
+   observée sur `timer` dans le near-miss w93 de `func_0805E8F0` à un
+   autre opérateur (négation au lieu de soustraction).
+
+Après ces 2 correctifs : match 296/296 en isolation (les 2 seuls octets
+différents restants sont les 2 `bl __divsi3`, relocations non résolues
+en isolation comme attendu -- confirmé résolues après rebuild complet).
+
+Découpage : `asm/code_0805E860.s` scindé en lui-même (inchangé jusqu'à
+`func_0805EC24`) + nouveau `src/code_0805EC24.cc` + nouveau
+`asm/code_0805ED4C.s` (reste, à partir de `func_0805ED4C`), `fomt.lds`
+mis à jour (insertion entre `asm/code_0805E860.o` et
+`src/code_0805FCD0.o`).
+
+Vérification : build de référence de HEAD sauvegardé
+(`/tmp/w90scratch4/reference_HEAD.gba`), rebuild complet avec le
+changement, diff Python octet à octet sur les 8 392 704 octets de la
+ROM contre la référence -- **0 différence**. Diff direct de la plage
+`0x0805EC24`-`0x0805ED4C` (296 octets) de `fomt.gba` contre
+`baserom.gba` -- **identique**. Commit fait.
+
+Compteur mis à jour : **10/13** callés-fonctions opaques de
+`franglais_transition_impl_tick` portés.
+
+### 2. `func_0805E99C` : dernier angle mort élucidé (bloc shape/size),
+toujours pas de tentative de compilation
+
+Le bloc `.L0805E9BA`-`.L0805EA00` (le seul point resté flou en w94,
+noté "arithmétique de largeur/hauteur GBA, structure de contrôle claire
+mais pas la forme C exacte") est en fait une reproduction ARITHMÉTIQUE
+(sans table) de la table standard GBA OAM shape/size -> (largeur,
+hauteur), à partir des champs `shape` (bits [15:14] du mot `attr01` 32
+bits lu à `source_list[i]+0`, extraits via `(word<<16)>>30` -- position
+attr0 shape classique) et `size` (bits [31:30] du même mot, extraits
+via `word>>30` -- position attr1 size classique, le mot 32 bits combine
+donc `attr0` en poids faible et `attr1` en poids fort, cohérent avec le
+format matériel réel superposé sur 32 bits plutôt que 2×16 séparés).
+
+Reconstruction vérifiée à la main contre la table GBA connue (shape
+0=carré, 1=large/horizontal, 2=haut/vertical) :
+- carré (`shape==0`) : `dim = 8 << size` (8,16,32,64) -- branche
+  `.L0805E9CE`-`.L0805E9E0`.
+- non carré (`.L0805E9E0`) : `grande_dim = 8 << ((size+1)/2 + 1)`
+  (donne 16,32,32,64 pour size 0..3, confirmé contre la table réelle)
+  et `petite_dim = 8` si `size==1` sinon `grande_dim/2` (donne 8,8,16,32
+  pour size 0..3, confirmé aussi) ; puis `shape==1` (large) affecte
+  `sb=grande_dim` (largeur) / `r6=petite_dim` (hauteur), `shape==2`
+  (haut) fait l'inverse (`sb=petite_dim`, `r6=grande_dim`).
+
+Cette formule est spontanément un bon candidat de portage direct (pas
+d'idiome de troncature caché, juste des décalages entiers non signés)
+-- mais elle n'a pas été essayée en isolation ce round faute de temps ;
+priorité recommandée pour le prochain round avant d'attaquer le reste
+de la fonction (les 2 blocs de bitfield-packing `.L0805EA00`-
+`.L0805EB04` autour de l'appel à `func_0805EC24`, le bloc de
+bitfield-packing final `.L0805EB04`-`.L0805EBD2` qui construit le mot
+OAM-like complet, et la boucle englobante `source_list`/`dest_array`).
+
+### 3. Ce qui reste (3/13)
+
+- `func_0805E99C` (compositeur, 648 octets) : caractérisation
+  maintenant complète (w92+w94+ce round) -- shape/size arithmétique
+  élucidée ci-dessus, dépend de `func_0805EC24` (matché ce round).
+  Aucune tentative de compilation. Recommandé : commencer par le bloc
+  shape/size (§2 ci-dessus) en isolation avant la boucle et les 2
+  blocs de bitfield-packing.
+- `func_0805E8F0` (101 lignes) : near-miss w93 sur la rotation de
+  boucle, pas retouché depuis.
+- `func_08050868` (323 lignes), `func_080ADD78` (233 lignes) :
+  toujours pas caractérisés au-delà de leur taille.
+
+Scratch utilisé : `/tmp/w90scratch4/{try.sh,t_*.cc,target_*.bin,
+reference_HEAD.gba,build.log}` -- hors dépôt, non committé.
