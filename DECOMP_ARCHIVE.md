@@ -56,6 +56,7 @@ gardée ici.
 | `func_08011ED8` | 2e overload du constructeur de la classe bâtie par `func_08011DC4` (asm, non porté) -- construit une `Location` locale avec un seul champ initialisé (les 2 autres restent non-initialisés, comme l'original), ex-`.byte` bruts (272 octets) après `func_08011DC4` | 10 (w23) | `51cbacc` |
 | `func_08050DF0` (`TransitionCtlQuery`) | handle -> discriminant à +8, retourne 0 si ==6 sinon champ à +0x158 | w38 | `5570e1e` |
 | `func_08050E50`, `func_08050E5C`, `func_08050E74`, `func_08050E80`, `func_08050E8C` | thunks de forwarding handle (déréférence puis tail-call vers un callé opaque), voisins directs de `TransitionCtlQuery` | w39 | `dfd228e` |
+| `func_08008980` | constructeur de placement de l'objet racine (0x6c octets, 6 sous-objets), callee bloquant de `func_08004C68` -- 1re vraie tentative "pression de registres" de cette famille, matché bit-exact au premier essai | w61 | `5a894ec` |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
@@ -142,14 +143,23 @@ même pic de pression de registres.
   `StanHash/fomt` pour cette adresse si elle existe. Voir
   `SESSION_NOTES.md` rounds 9/w22, 10/w27, 4/w29, 5/w31, 6/w34 pour le
   détail complet de chaque itération.
-- `func_08008980` (callee bloquant de `func_08004C68`) -- **caractérisée
-  en détail round 9/w21**, confirmée classe "pression de registres" par
-  inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur
-  tout le corps), PLUS un double-stamp de vtable inexpliqué sur un
-  sous-objet (même question ouverte que le piège `SmartPtr<T>`
-  sous-classe pour `func_08004C68`). Pas attaquée -- c'est la première
-  vraie inspection (pas une retentative à l'aveugle), donc la
-  classification est fiable plutôt que suspectée.
+- ~~`func_08008980`~~ -- **matchée round w61** (`5a894ec`), bit-exact au
+  premier essai malgré la classe "pression de registres" confirmée round
+  9/w21 (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur tout le
+  corps). Seul ajustement nécessaire : nommer explicitement le calcul de
+  `obj+0x50` dans une variable dédiée AVANT l'assignation du temporaire
+  passé par adresse à l'appel opaque `func_080D78F8` (sinon agbcp
+  inversait l'ordre des 2 stores indépendants, cf. règle 5 déjà connue --
+  encore un cas où respecter l'ordre du désassemblage suffit, pas besoin
+  d'idiome neuf). Le double-stamp de vtable sur le sous-objet à +0x34
+  s'est avéré être le pattern `-fvtable-thunks` standard de restamp
+  multi-niveaux d'héritage multiple (chaque niveau de constructeur
+  restampe les vtables de ses sous-objets de base après leur
+  construction) -- PAS lié au piège `SmartPtr<T>` sous-classe de
+  `func_08004C68` malgré la ressemblance de surface (aucune relation
+  d'appel directe avec les constructeurs sœurs `func_080D79CC`/
+  `func_080D7AD4`, qui stampent la même paire de vtables pour un tout
+  autre objet englobant). Voir `src/code_08008980.cc` pour le détail.
 - `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
   FSM de démarrage documentée dans `docs/ENGINE.md` côté dépôt patch.
   Dimensionnée round 6 : 0x6F4 octets (~800 lignes de `.s`), prologue
@@ -397,7 +407,7 @@ exactement sur leur adresse vanilla attendue.
 Voir `DECOMP_RULES.md`, méthode de découpage, point 8 -- déplacé là car
 c'est une règle générique, pas un fait d'historique.
 
-## `func_08004C68` (New Game `Run()`) -- bloquée, 4 callees restants sur 15
+## `func_08004C68` (New Game `Run()`) -- bloquée, 1 groupe de callees restant sur 15
 
 Identifié avec certitude structurelle comme `Run()` de la classe scène de
 l'enregistrement #12 (séquence de saisie New Game : nom joueur, sélecteur
@@ -411,7 +421,8 @@ gratuitement, aucun shape-hunting nécessaire une fois la forme identifiée
 une fois. Round 9/w21 a matché `func_08008A68` et re-classé
 `func_0806EA30`.
 
-**Reste bloqué par 4 callees** :
+**Reste bloqué par 1 groupe de callees** (round w61 a fermé `func_08008980`,
+le dernier callee "pression de registres" -- voir plus haut) :
 
 - `func_080070D4`/`func_08005A00`/`func_0806EA30` (**3 sites, pas 2** --
   round 9/w21 a confirmé que `func_0806EA30` est une 3e instance BYTE
@@ -471,19 +482,21 @@ une fois. Round 9/w21 a matché `func_08008A68` et re-classé
   modifier `include/smart_ptr.hh` plus profondément, risque de régression
   sur les usages déjà matchés ailleurs, à valider par un `make compare`
   complet avant tout commit si tentée.
-- `func_08008980` -- voir section "pression de registres" ci-dessus,
-  caractérisée round 9/w21, pas attaquée.
+- ~~`func_08008980`~~ -- **matchée round w61** (`5a894ec`) : voir section
+  "pression de registres" ci-dessus pour le détail. Le double-stamp de
+  vtable qui restait une question ouverte s'est résolu de lui-même en
+  portant la fonction : pattern `-fvtable-thunks` standard de restamp
+  multi-niveaux, pas une question de type/héritage à élucider séparément.
 - ~~`func_08008A68`~~ -- **matchée round 9/w21** (`2bab4c4`) : utilise
   seulement `r4-r7`, pas `r8`/`sb`/`ip` -- shape simple malgré le
   voisinage avec `func_08008980`, matchée du premier coup.
 
-**Avant de retenter `func_08004C68` elle-même** : soit fermer ces
-callees, soit au minimum établir un prototype `extern "C"` correct pour
-chacun (ce qui NE nécessite PAS de les porter bit-exact -- suffit pour
-les appeler depuis `func_08004C68` en tant que boîte noire). Le
-double-stamp de vtable de `func_08008980` (sous-classe C++ réelle avec
-override de méthode virtuelle pure) reste une question ouverte
-indépendante des callees.
+**Avant de retenter `func_08004C68` elle-même** : il ne reste plus que
+`func_080070D4`/`func_08005A00`/`func_0806EA30` (classe "assignation de
+champ SmartPtr", 9 hypothèses négatives déjà testées, voir plus haut) --
+soit le fermer, soit au minimum établir un prototype `extern "C"`
+correct (ce qui NE nécessite PAS de le porter bit-exact -- suffit pour
+l'appeler depuis `func_08004C68` en tant que boîte noire).
 
 ## Autres cibles ouvertes
 
