@@ -12290,3 +12290,310 @@ sous-bloc peu concluante en l'état).
 
 Scratch utilisé : `/tmp/w90scratch5/{try.sh,t1.cc,t2.cc,t_coeffs.cc,
 t_coeffs2.cc,target.bin}` -- hors dépôt, non committé.
+
+## Round w97 (worktree `w90`, branche `parallel-90`) -- le deadlock
+d'allocation de registres de w96 sur `func_0805E99C` est RÉSOLU
+(prologue, cadre de pile 0x2c, jeu de spills et layout de pile
+byte-exacts), near-miss profond restant : 280/310 instructions
+structurellement identiques, cause racine unique identifiée pour
+l'essentiel du résiduel
+
+Mission : résoudre le blocage w96 ("4 variables pour 3 registres hauts,
+dest_array refuse de rester en pile"). Verdict : le blocage est résolu
+-- la cause de l'échec w96 était un MAUVAIS MODÈLE DE SOURCE, pas un
+réglage fin d'allocation. Aucun match byte-exact (rien commité en
+src/asm/lds, conforme à la règle), mais le diff est passé de "diverge
+dès l'octet 10, 560/648 octets faux, cadre 32 au lieu de 44" (w96) à
+"prologue + cadre + spills + layout de pile + squelette de contrôle +
+toutes les constantes byte-exacts, 280/310 instructions identiques
+après normalisation des numéros de registres, ~30 instructions
+divergentes réparties en 12 sites précis". Compteur inchangé : 10/13.
+
+### 0. Protocole
+
+Scratch `/tmp/w90s6` (perdu au reboot comme d'habitude, contenu clé
+inline ci-dessous). `try.sh` = pipeline EXACT du Makefile (cpp |
+`agbcp -quiet ... -O2 -fhex-asm`, `align_sections.sh`, as, extraction
+par `objdump -t` + `objcopy`), diff octet contre la plage
+0x5E99C..0x5EC24 de `baserom.gba`. Nouvel outil `cmp2.sh` : diff
+d'instructions NORMALISÉES (numéros de registres et adresses masqués)
+via difflib -- métrique bien plus fidèle que le compte d'octets bruts,
+qui est dominé par les renommages en cascade. Méthode règle 17
+(`agbcp -dl -dg`, dumps `gccdump.lreg`/`gccdump.greg`) utilisée pour
+la première fois sur cette fonction -- décisive (§4).
+
+### 1. LA CLEF : `cur` est une STRUCT de 8 octets copiée par valeur,
+en PSEUDO DImode spillé -- et `*(i8*)&` était le poison
+
+Le modèle w96 (2 scalaires `u32 word0/word1` + lecture `y` via
+`*(i8*)&word0`) est FAUX et c'était LUI qui capturait un registre de
+trop. Modèle correct :
+
+- `SrcEntry cur = *src;` où `SrcEntry { u32 w0; u32 w1; }` -- une
+  struct 8 octets copiée par valeur, dont on ne prend JAMAIS
+  l'adresse.
+- Vérifié par micro-sonde isolée (`P c = *src;` + appel externe) :
+  agbcp donne un mode DImode aux structs de 8 octets et les LOGE DANS
+  UN PSEUDO (paire de registres, copie `ldr/ldr` annotée
+  `thumb_load_double_from_address`) -- il ne les met PAS en mémoire.
+- Sous la pression de la boucle, ce pseudo DImode est SPILLÉ par
+  reload -> il atterrit dans la ZONE DE SPILL en HAUT du cadre
+  ([sp,#0x1c]/[sp,#0x20]), juste sous les spills de `dest_array`
+  ([sp,#0x24]) et `end` ([sp,#0x28]). C'est ça qui produit d'un coup :
+  le cadre de 44 octets, la copie appariée `ldr r0,[r2]; ldr r1,[r2,#4];
+  str r0,[sp,#0x1c]; str r1,[sp,#0x20]` (mouvement DImode, PAS un
+  memcpy mot-à-mot entrelacé), l'absence totale d'accès rétrécis
+  (ldrb/strh) sur cur, et le layout exact des locales.
+- **Le poison w96** : `*(i8*)&word0` rend l'objet TREE_ADDRESSABLE ->
+  résident mémoire dès l'expansion -> il prend un slot BAS
+  ([sp,#4]), gcc rétrécit les accès bitfield en ldrb/strb, et CSE
+  hisse `&cur` dans un registre haut libre (observé : r8 !) -- d'où
+  exactement le sur-cadre et le vol de registre constatés en w96.
+  La lecture `y` doit se faire SANS prise d'adresse de cur.
+- Layout de pile obtenu, identique à la cible : sp+0 arg sortant,
+  raw@+4/+8, x@+0xc, y@+0x10, coeffs@+0x14/+0x18, cur@+0x1c/+0x20,
+  dest@+0x24, end@+0x28. L'ordre de déclaration C est IRRÉLEVANT
+  (testé par les 120 permutations : layout inchangé) ; ce qui compte
+  c'est adressable-vs-pseudo et l'ordre des demandes de slots à
+  l'expansion (adressables/agrégats mémoire) puis au reload (spills).
+
+### 2. Le "5e candidat" de w96 confirmé, et l'issue du concours de
+registres
+
+Le pointeur de fin de boucle `end = src + count` est bien une 5e
+valeur longue durée : la cible le SPILLE aussi ([sp,#0x28], rechargé
+une fois par itération en bas de boucle). Résultat final du concours
+(dump `-dl -dg`, ordre d'allocation observé `... width desc height
+mode src dest end cur`) : r7=desc, r6=width, sl=src (curseur),
+{r8,r9}={height,mode}, et dest/end/cur spillés. Notre compilation
+obtient EXACTEMENT ce jeu de spills -- seule inversion restante :
+nous donnons r8 à height et r9 à mode, la cible fait l'inverse (§4).
+
+### 3. Formes C élucidées ce round (vérifiées au byte près dans les
+régions correspondantes)
+
+- **Ordre "bits d'abord"** dans TOUTES les insertions de champs :
+  `(bits) | (mot & masque)` -- flips, étages de la branche table,
+  et les deux blocs d'assemblage finaux. (La cible calcule toujours
+  la valeur insérée AVANT le `ldr masque; ands; orrs`.)
+- `(u8)y` (cast, donne lsls#24/lsrs#24 sur la valeur en registre) et
+  non `y & 0xFF` (qui donne movs #255/ands).
+- `raw.a = (line[1].affineParam << 16) | line[0].affineParam;` --
+  opérande décalé à GAUCHE du `|` (le ldrh de +0xE vient avant celui
+  de +6).
+- Les lectures shape/size/x se font par décalages explicites sur
+  `cur.w0` (u32) : les lectures bitfield seraient rétrécies en ldrb
+  si cur était mémoire, et donnent le même code si cur est pseudo.
+- La garde d'écriture : `u32 c = dest->count; if (c <= 0x7F) {...}`
+  avec `dest->count = c + 1;` (recharge de dest après les stores par
+  aliasing -- reproduit).
+- Blocs d'assemblage w0/w1 finaux et bloc table : UNE SEULE
+  affectation mémoire par bloc via un accumulateur scalaire local
+  (`u32 t` de portée bloc) -- un seul ldr initial + chaîne
+  ands/orrs + un seul str, comme la cible.
+
+Source candidate canonique (280/310, `t18.cc` du scratch) :
+
+```c
+struct SrcEntry { u32 w0; u32 w1; };
+struct DestEntry { u32 attr01; u16 attr2; u16 affineParam; };
+struct CompositeDesc { i16 x, y; u16 unk4, unk6; u16 unk8; u16 pad_a;
+    u32 unk_c; u8 flags; u8 unk11; u16 pad_12; u32 mode; u8 unk18; };
+struct DestArray { u8 count; u8 pad[3]; DestEntry entries[128]; };
+struct CoeffPair { u32 a; u32 b; };
+union CoeffBlock { CoeffPair p; i16 arr[4]; };
+
+extern "C" void func_0805E99C(DestArray *dest, SrcEntry *src, u32 count, CompositeDesc *desc)
+{
+    SrcEntry *end = src + count;
+    for (; src != end; src++) {
+        SrcEntry cur; union CoeffBlock coeffs; i32 y; i32 x;
+        union CoeffBlock raw; u32 shape, size, mode; i32 width, height;
+        cur = *src;
+        shape = (cur.w0 << 16) >> 30;
+        size = cur.w0 >> 30;
+        if (shape == 0) { height = 8 << size; width = height; }
+        else {
+            u32 big = 8 << (((size + 1) >> 1) + 1);
+            u32 small = 8;
+            if (size != 1) small = big >> 1;
+            if (shape != 1) { height = big; width = small; }
+            else            { height = small; width = big; }
+        }
+        x = (i32)(cur.w0 << 7) >> 23;
+        y = *(i8 *)src;                       // forme provisoire, cf. §5.3
+        mode = desc->mode;
+        if (mode == 0) {
+            u8 flags = desc->flags;
+            if (flags & 1) { x = -(x + width);
+                cur.w0 = (((((cur.w0 << 3) >> 31) ^ 1) & 1) << 28) | (cur.w0 & 0xEFFFFFFF); }
+            if (flags & 2) { y = -(y + height);
+                cur.w0 = (((((cur.w0 << 2) >> 31) ^ 1) & 1) << 29) | (cur.w0 & 0xDFFFFFFF); }
+        } else {
+            u8 d11 = desc->unk11;
+            DestEntry *line;
+            { u32 t = (cur.w0 & 0xF1FFFFFF) | ((d11 & 7) << 25);   // étage 1 : cible = bits d'abord,
+              t = (t & 0xEFFFFFFF) | ((((d11 & 8) >> 3) & 1) << 28);  // mais la forme bits-d'abord
+              t = (t & 0xDFFFFFFF) | ((((d11 & 0x10) >> 4) & 1) << 29); // casse le cadre ici, cf. §5.2
+              cur.w0 = t; }
+            line = (DestEntry *)((u8 *)dest + 4 + (d11 & 0x1F) * 32);
+            raw.p.a = (line[1].affineParam << 16) | line[0].affineParam;
+            raw.p.b = ((raw.p.b & 0xFFFF0000) | line[2].affineParam) & 0x0000FFFF
+                      | (line[3].affineParam << 16);                 // se fait replier, cf. §5.1
+            coeffs = raw;
+            func_0805EC24(&x, &y, width, height, coeffs.arr);
+            if (mode == 3) { x -= width / 2; y -= height / 2; }
+        }
+        x += desc->x; y += desc->y;
+        if (mode == 0) {
+            if (x + width <= 0 || x > 0xEF || y + height <= 0 || y > 0x9F)
+                goto next;
+        }
+        { u32 t = (u8)y | (cur.w0 & 0xFFFFFF00);
+          t = ((mode & 3) << 8) | (t & 0xFFFFFCFF);
+          t = ((desc->unk_c & 3) << 10) | (t & 0xFFFFF3FF);
+          t = ((desc->unk18 & 1) << 12) | (t & 0xFFFFEFFF);
+          t = ((x & 0x1FF) << 16) | (t & 0xFE00FFFF);
+          cur.w0 = t; }
+        { u32 t = ((((((cur.w1 << 22) >> 22) + desc->unk6) << 22) >> 22)) | (cur.w1 & 0xFFFFFC00);
+          t = ((desc->unk8 & 3) << 10) | (t & 0xFFFFF3FF);
+          t = (((u16)(((t << 16) >> 28) + desc->unk4) & 0xF) << 12) | (t & 0xFFFF0FFF);
+          cur.w1 = t; }
+        { u32 c = dest->count;
+          if (c <= 0x7F) {
+              DestEntry *e = (DestEntry *)((u8 *)dest + 4 + c * 8);
+              e->attr01 = cur.w0;
+              e->attr2 = (u16)cur.w1;
+              dest->count = c + 1; } }
+    next:;
+    }
+}
+```
+
+### 4. Le swap r8/r9 (mode/height) a une cause racine UNIQUE, chiffrée
+au dump près
+
+`gccdump.greg` sur notre meilleure forme : pseudo height = refs 22,
+live_length 314 -> priorité `floor_log2(22)*22/314 = 0.280` ; pseudo
+mode = refs 14, live_length 154 -> `0.273`. Écart de 2.5% : height
+est alloué juste avant mode et prend r8 ; la cible veut l'inverse.
+Or il nous MANQUE ~10 instructions (pondérées) que la cible a EN PLUS
+à l'intérieur de la plage de vie de height : la chaîne raw.b non
+repliée (~6), les deux chaînes `&1` non repliées (~2 chacune), la
+troncature u16 de palette (~2). Ces instructions allongeraient
+live_length(height) vers ~326 -> priorité 0.270 < 0.273 -> mode passe
+devant et prend r8 TOUT SEUL. Autrement dit : le swap r8/r9 n'est PAS
+un problème d'allocation à régler, c'est un SYMPTÔME des repliages
+(folds) parasites de notre source (§5). Une seule cause, deux
+symptômes (les octets locaux manquants ET le renommage global
+r8<->r9 qui domine le compte de diff brut).
+
+### 5. Les 3 énigmes restantes -- ce qui a été essayé, ce qu'on sait
+
+**5.1 La chaîne raw.b "à lecture non initialisée"** (cible :
+`ldrh lo; ldr [sp,#8] (non initialisé); ands 0xFFFF0000; orrs lo;
+ldrh hi; lsls #16; ands 0xFFFF; orrs; str [sp,#8]` -- séquence
+sémantiquement AUTO-ANNULANTE, les masques effacent la contribution
+non initialisée, valeur finale = lo|hi<<16). NOTRE agbcp la replie
+inexorablement en `lo|hi<<16` sous TOUTES les formes essayées :
+expression composée (fold arbre par distribution), deux affectations
+séparées (store-forwarding CSE + loi distributive de combine +
+suppression du store intermédiaire par CSE), bitfields u32:16/:16
+en mémoire (idem), struct bitfield séparée, union. Le point dur :
+pour que la chaîne survive chez la cible, il faut que le
+store-forwarding OU la distribution de combine ait été bloqué --
+aucune construction C trouvée qui le bloque. Piste sérieuse restante
+: écriture par demi-mots d'un u32 RÉSIDENT REGISTRE via union
+(strict_low_part / subreg:HI) -- non exploré à fond car la paire raw
+doit finir en mémoire pour la copie `coeffs = raw` (ldr/ldr/str/str
+depuis [sp,#4]/[sp,#8], confirmé cible).
+
+**5.2 Les chaînes `&1` des étages 2/3 de la branche table** (cible :
+`movs r0,#8; ands r0,r3; lsrs r0,#3; movs r1,#1; ands r0,r1;
+lsls r0,#28` -- avec `movs r1,#1` DUPLIQUÉ à 6 instructions d'écart
+dans le même bloc de base, donc PAS CSEable => ces instructions ont
+été générées APRÈS CSE, par un split de combine ou par reload -- info
+structurelle forte). Notre compilation replie toujours en
+`ands #8; lsls #24; lsrs #27`. Essais : formes étagées, temporaires
+u8/u32, casts intermédiaires -- tous repliés (combine travaille sur
+le dataflow, pas sur les statements). MAIS : en micro-sonde, une
+INSERTION DE BITFIELD sur une struct à union anonyme RÉSIDENTE
+REGISTRE préserve exactement `movs #8; ands; lsrs #3; lsls #28`
+(sans le `&1`). La struct à union anonyme {bitfields|u32 w0} reste
+bien DImode-pseudo en isolation (sondes mp4/mp5/mp7, y compris en
+boucle avec appel), mais DANS la fonction complète elle retombe en
+mémoire (bisections b2/b4 : le toggle bitfield des flips et la
+lecture bitfield de y déclenchent chacun la rétrogradation ; les 3
+insertions matrixNum/hFlip/vFlip seules -- b3 -- ne la déclenchent
+pas et donnent le même score que la forme explicite). Le générateur
+exact des séquences cibles n'est PAS identifié.
+
+**5.3 La lecture de y en `ldrsb`** (cible : `add r1,sp,#28;
+movs r0,#0; ldrsb r0,[r1,r0]` = reload d'un usage (subreg:QI
+(reg:DI cur)) depuis le slot de spill). `(i8)cur.w0` se fait replier
+par combine en lsls#24/asrs#24 (2 instructions au lieu de 3, faux) ;
+`*(i8*)&cur` est le poison du §1 (interdit) ; `*(i8*)src` (retenu
+provisoirement) donne la BONNE forme ldrsb mais base `mov r1,sl` au
+lieu de `add r1,sp,#28` (2 octets faux + 1 ref de plus sur src). Il
+faut trouver la forme qui fait survivre le subreg:QI de cur jusqu'à
+reload.
+
+### 6. Les 12 sites divergents restants (cmp2, t18 vs cible)
+
+1. 0xe/0x10 : ordre des 2 copies de paramètres du prologue
+   (`adds r7,r3` avant/après `mov sl,r1`).
+2. 0x2e : copie `adds r3,r0,#0` de shape non coalescée (cible) --
+   absente chez nous (notre lsrs écrit r3 direct).
+3. 0x6c-0x72 : la lecture y (§5.3).
+4. 0x80/0x82 : rôles flags/const-1 dans le test `flags & 1` (la
+   cible matérialise 1 dans r4 et le copie, nous copions flags).
+5-7. 0xd2-0xfc : branche table -- ordre bits/masque de l'étage 1 (la
+   forme cible "bits d'abord" y casse notre cadre : dest ressort du
+   spill, cadre 40 -- interaction de pression pure, à re-tester une
+   fois §5.1/5.2 résolus) + les 2 chaînes `&1` (§5.2).
+8. 0x110-0x12a : la chaîne raw.b (§5.1) + les 2 constantes de pool
+   0xFFFF0000/0x0000FFFF chargées tôt.
+9. 0x19c/0x19e : ordre (u8)y vs `ldr [sp,#28]` dans le bloc w0 final
+   (1 instruction déplacée).
+10. 0x1dc/0x216 : nos accès à cur.w1 passent par une adresse formée
+   (`add rX,sp,#28; ldr [rX,#4]`) au lieu de `ldr [sp,#32]` direct --
+   artefact de reload DImode chez nous, sous-produit attendu des
+   points précédents.
+11. 0x224-0x22c : `mov r3,sp; ldrh r0,[r3,#32]` (lecture HImode du
+   slot de spill de cur.w1 -- ldrh n'a pas d'encodage sp-relatif,
+   d'où le mov) -- notre forme diffère tant que cur.w1 n'est pas
+   accédé en subreg propre.
+12. 0x260+ : queue de pool (13 constantes, ordre/dédoublonnage) --
+   suivra mécaniquement le reste.
+
+### 7. Divers
+
+- Compiler la même source avec agbcc/old_agbcc (C) : PIRE au niveau
+  macro (cadre différent dès 0xa) -- agbcp (C++) confirmé comme le
+  bon compilateur, cohérent avec le reste du dépôt.
+- Upstream `StanHash/fomt` vérifié une fois (avant réception de la
+  consigne de ne plus le faire) : `func_0805E99C` y est toujours en
+  asm brut, rien à réutiliser. Consigne enregistrée : ne plus
+  vérifier origin, notre fork est toujours en avance.
+- La métrique "diffbytes bruts" est trompeuse sur cette fonction :
+  542/648 octets diffèrent alors que 280/310 instructions sont
+  identiques modulo renommage -- utiliser cmp2 (normalisation des
+  registres) comme boussole.
+
+### 8. Ce qui reste (3/13, inchangé)
+
+- `func_0805E99C` : 280/310. Prochaine étape recommandée : percer
+  §5.1 (raw.b) EN PREMIER -- c'est la clef de voûte (débloque
+  mécaniquement le swap r8/r9 du §4, et probablement l'équilibre de
+  pression qui interdit la forme "bits d'abord" de l'étage 1). Piste
+  la plus prometteuse : chercher quel lvalue C écrit les demi-mots
+  d'un u32 mémoire SANS que CSE puisse forward le store (2e piste :
+  générer les insertions via une struct bitfield DImode maintenue
+  en registre -- comprendre d'abord pourquoi la fonction complète la
+  rétrograde en mémoire alors que les micro-sondes mp4/mp5/mp7 la
+  gardent en pseudo).
+- `func_0805E8F0`, `func_08050868`, `func_080ADD78` : inchangés.
+
+Scratch utilisé : `/tmp/w90s6/{try.sh,cmp.sh,cmp2.sh,check.py,
+t1..t21.cc,b1..b4.cc,mp*.cc,best.cc,target.bin}` -- hors dépôt, non
+committé ; la source canonique t18 est reproduite intégralement au §3.
