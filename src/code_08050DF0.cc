@@ -1,8 +1,6 @@
 // TransitionCtlQuery (func_08050DF0, 0x08050DF0) -- vanilla-engine-facing
-// name (patch-repo docs refer to this address as
-// franglais_transition_ctl_query, DECOMP_ARCHIVE.md "Autres cibles
-// ouvertes" -- renamed here to stay patch-jargon-free, see
-// DECOMP_RULES.md "point de vue vanilla"). `self` is a handle whose first
+// name, kept free of any downstream-patch jargon (see DECOMP_RULES.md
+// "point de vue vanilla"). `self` is a handle whose first
 // word is a pointer to the real transition-control object; reads its
 // discriminant field at +8, and unless it equals 6 (assumed "no
 // transition"/idle state, unconfirmed), returns the field at +0x158 of
