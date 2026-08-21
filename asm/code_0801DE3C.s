@@ -2946,22 +2946,3 @@ func_0801FD3C: @ 0x0801FD3C
     bl func_080A5A9C
     pop {r1}
     bx r1
-.L0801FD48:
-    .byte 0x40, 0x68, 0x0E, 0x21, 0x40, 0x5E, 0x70, 0x47
-    .byte 0x40, 0x68, 0x0A, 0x21, 0x40, 0x5E, 0x70, 0x47, 0x40, 0x68, 0x00, 0x68, 0x70, 0x47, 0x00, 0x00
-
-    thumb_func_start func_0801FD60
-func_0801FD60: @ 0x0801FD60
-    push {lr}
-    ldr r0, [r0, #4]
-    bl func_080A59BC
-    pop {r0}
-    bx r0
-
-    thumb_func_start func_0801FD6C
-func_0801FD6C: @ 0x0801FD6C
-    push {lr}
-    ldr r0, [r0, #4]
-    bl func_080A5960
-    pop {r0}
-    bx r0
