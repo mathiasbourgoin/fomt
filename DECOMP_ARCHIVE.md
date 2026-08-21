@@ -681,6 +681,23 @@ jamais utilisée dans ce dépôt).
   piste de suite (structure d'argument différente pour `func_08037008`,
   4e paramètre non-scalaire) dans `SESSION_NOTES.md` round w62. Rien
   commité.
+  **Round w67 : CIBLE FERMÉE DÉFINITIVEMENT (11e tentative, 11e
+  négative).** Désassemblage direct de `func_08037008` (jusqu'ici boîte
+  noire) : ses arg4 (`r3` du caller, "c") et arg5 (pile du caller, "d")
+  sont consommés de façon totalement découplée -- `c` est un `unsigned
+  int` scalaire forwardé tel quel comme argument pile du ctor de base
+  `AActorEntity::AActorEntity(GameObject*, const ActorLocation&,
+  unsigned int, unsigned int)` (nom démanglé du callee du callee), `d`
+  est un autre scalaire stocké 8+ instructions plus tard comme simple
+  champ 16 bits (`self+0x3c`) après le retour du ctor de base. Aucun
+  accès groupé/struct visible entre les deux -- réfute la piste
+  "struct/référence non-scalaire" laissée par w62 par simple lecture du
+  désassemblage, sans besoin de compiler une variante candidate. Les 11
+  tentatives cumulées ont maintenant caractérisé le mécanisme des deux
+  côtés de l'appel (caller ET callee) sans trouver de variante C
+  reproduisant l'ordre hybride cible. Pas de 12e itération mécanique
+  prévue sans angle réellement nouveau. Détail dans `SESSION_NOTES.md`
+  round w67. Rien commité.
 - **2 nouvelles fonctions "pression de registres" (round w43)** :
   `func_0803BDFC` (`asm/code_0803A8A4.s`) et `func_08083A7C`
   (`asm/code_08082184.s`) -- `r8`/`sb`(/`sl`) vivants à travers 2 `bl`

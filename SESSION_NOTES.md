@@ -9256,3 +9256,95 @@ registres" au sens propre du terme, PAS des idiomes C manquants
   variantes vagues fermées par w57 -- progression nette (12 -> 26 octets
   bit-exacts) mais toujours pas de match complet sur cette cible, 4
   tentatives sérieuses accumulées maintenant.
+
+## Round w67 (worktree `parallel-67`) -- `func_08037B48`/`func_08037B80`,
+piste "struct/référence non-scalaire" testée, RÉFUTÉE par le désassemblage
+du callee lui-même, cible fermée définitivement (11e tentative, 11e
+négative)
+
+Cible : même near-miss "ordre d'évaluation des arguments d'appel" que
+w43/w62 (`asm/code_08037A04.s:170-196`). Piste laissée par w62 : le 4e
+argument de `func_08037B48` (littéral `r3`) est-il en fait, côté
+`func_08037008` (le callee, jamais porté, traité en boîte noire jusqu'ici),
+une petite struct/référence non-scalaire construite directement dans
+l'aire d'appel sortante -- ce qui expliquerait l'ordre hybride cible sans
+avoir besoin d'un 4e registre callee-saved ?
+
+### Désassemblage de `func_08037008` (`asm/code_08036DC4.s:272-303`)
+
+```
+push {r4,r5,r6,lr}; sub sp,#4
+adds r4,r0,#0            @ r4 = self
+adds r5,r2,#0            @ r5 = arg2 ("b", sauvegardé -- r2 lui-même reste intact)
+ldr r6,[sp,#0x14]         @ r6 = arg5 (pile, argument du CALLER, lu depuis la pile
+                          @   sortante à l'offset qui pointe vers [sp_caller])
+str r3,[sp]               @ arg4 (r3 du caller) sauvegardé tel quel en local
+movs r3,#2                @ r3 = littérale 2 (remplace l'arg4 original pour l'appel suivant)
+bl __12AActorEntityP10GameObjectRC13ActorLocationUiUi
+ldr r0,=vtable_unk_080E7328; str r0,[r4,#0x14]
+str r5,[r4,#0x30]         @ arg2 ("b") stocké comme membre APRÈS le ctor
+adds r1,r4,#0; adds r1,#0x34; movs r0,#0
+strh r0,[r4,#0x34]; strh r0,[r1,#2]; strh r0,[r1,#4]; strh r0,[r1,#6]
+strh r6,[r4,#0x3c]        @ arg5 (pile) stocké comme CHAMP 16 bits, bien APRÈS le ctor
+strh r0,[r4,#0x3e]
+adds r1,#0xc; movs r0,#1; strb r0,[r1]
+adds r0,r4,#0
+add sp,#4; pop {r4,r5,r6}; pop {r1}; bx r1
+```
+
+Le callee du callee est démanglable : `__12AActorEntityP10GameObjectRC13ActorLocationUiUi`
+= `AActorEntity::AActorEntity(GameObject*, const ActorLocation&, unsigned int, unsigned int)`.
+Au moment du `bl`, cet appel de ctor de base utilise : r0=self, r1=GameObject*
+(intact depuis l'entrée de `func_08037008`, jamais renommé), r2=ActorLocation&
+(intact, PAS r5 malgré la sauvegarde), r3=**littérale 2 câblée en dur**
+(PAS l'arg4 du caller), et son propre argument pile = l'arg4 du caller,
+transmis tel quel via `str r3,[sp]` fait AVANT l'écrasement de r3.
+
+### Verdict : hypothèse struct/référence RÉFUTÉE avant même d'écrire du C++
+
+Les 2 arguments non-triviaux de `func_08037B48` (r3="c", pile="d", dans la
+terminologie w62) sont consommés par `func_08037008` de façon totalement
+DÉCOUPLÉE et à des endroits éloignés du corps :
+- `c` (r3 du caller) est un simple `unsigned int` scalaire, sauvegardé en
+  local PUIS transmis inchangé comme dernier argument (passé par la pile)
+  au ctor de base `AActorEntity(...)` -- un forwarding pur, pas un accès
+  de champ de struct.
+- `d` (pile du caller) est un autre `unsigned int` scalaire, chargé dans
+  `r6` et stocké BEAUCOUP plus tard, après le retour du ctor de base,
+  comme simple champ 16 bits de l'objet (`strh r6,[r4,#0x3c]`) -- aucun
+  rapport structurel avec `c`.
+
+Si `c` et `d` étaient les 2 champs d'UNE seule struct/référence passée par
+valeur, on s'attendrait à les voir accédés ENSEMBLE (via une base commune,
+`ldr`/`str` avec offsets `+0`/`+4` typiques d'un accès `arg->field`) --
+au lieu de ça, `c` disparaît dans un forwarding de ctor huit instructions
+avant que `d` ne soit ne serait-ce que touché, et `d` est stocké dans un
+tout autre offset de l'objet (`+0x3c`, format halfword) sans lien visible
+avec le layout du ctor de base. C'est la signature d'ARGUMENTS SCALAIRES
+INDÉPENDANTS, pas d'une struct scindée. La piste laissée par w62 est donc
+close par lecture directe du désassemblage, sans même avoir besoin de
+compiler une variante C++ candidate (le harnais rapide aurait de toute
+façon reproduit le même échec que la piste 2 de w62 -- struct matérialisée
+en pile locale d'abord -- puisque rien dans ce nouveau désassemblage ne
+change la conclusion ABI de w62 sur les structs >4 octets).
+
+### Conclusion : cible fermée définitivement, pas de 12e itération mécanique
+
+11 tentatives cumulées (6 de w43 + 4 de w62 + celle-ci), toutes négatives,
+sur cette classe de near-miss "ordre d'évaluation des arguments d'appel"
+appliquée à `func_08037B48`/`func_08037B80`. Le mécanisme est maintenant
+caractérisé de bout en bout des deux côtés de l'appel (caller ET callee) :
+`func_08037008` confirme que `c`/`d` sont deux scalaires `unsigned int`
+indépendants, ce qui élimine la dernière piste structurelle non testée.
+Sans nouvelle idée de mécanisme agbcp (le blocage réel reste l'absence
+d'un 4e registre callee-saved pour que `r3` rejoigne le groupe différé,
+cf. w62), il n'y a plus de variante C source à tester qui ne soit pas déjà
+couverte par les 10 précédentes. **Cible marquée fermée pour l'instant**
+-- ne pas retenter mécaniquement sans un angle réellement nouveau (p.ex.
+si un futur round symbolise `func_08037008` en entier -- pas seulement son
+prologue -- et découvre un détail de calling convention non anticipé ici).
+
+Aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` (l'analyse est restée
+en lecture seule sur le désassemblage existant, aucun essai de compilation
+n'a été jugé utile vu la réfutation directe). `git status --short` vide en
+fin de round, `origin` intact, rien poussé, aucune PR.
