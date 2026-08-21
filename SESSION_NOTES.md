@@ -9112,3 +9112,147 @@ seul, port propre).
   `fomt.elf`/`fomt.map` nettoyés.
 - `origin` intact (URL de push volontairement cassée), rien poussé,
   aucune PR créée.
+
+## Round w63 (worktree `parallel-63`) -- `func_08075334`, 4e tentative, 3
+nouvelles pistes converties en gains RÉELS, near-miss resserré de 12 à 26
+octets bit-exacts, PAS commité (toujours pas bit-exact)
+
+Cible : `func_08075334` (`asm/code_08070A08.s:9622-9779`, 284 octets,
+`0x08075334`-`0x08075450`), déjà tentée round w37 (évaluation seule) et
+round w57 (near-miss caractérisé, 12 premiers octets matchés, 3 variantes
+fermées). Piste demandée pour ce round : permuter l'ordre de
+première-utilisation des 4 candidats callee-saved (`q`, `&item`,
+`old_write`, taille d'alloc) en s'inspirant de la règle confirmée round
+w61 (`func_08008980`) -- ordre du désassemblage prime sur l'ordre de
+déclaration C.
+
+### Trois gains réels obtenus ce round (tous vérifiés au harnais rapide,
+`arm-none-eabi-cpp`+`agbcp -O2`+`as`, comparaison octet à octet contre
+`baserom.gba` désassemblé à la même adresse)
+
+1. **Inversion if/else complète** (nouvelle piste, pas documentée avant
+   ce round) : le désassemblage original teste `q->write == q->cap_end`
+   et saute (`beq`) EN AVANT vers le code de croissance (placé en dernier
+   dans le fichier), la voie "simple" (pas plein) étant le fall-through
+   immédiat après le test. Toute tentative précédente (w57 incluse,
+   d'après la lecture du round) écrivait naturellement `if (plein) {
+   ...croissance...} else { ...simple... }`, ce qui compile dans agbcp
+   avec la polarité INVERSE (fall-through = croissance, saut = simple) --
+   l'opposé exact de l'original. Correction : écrire la source avec le
+   test et les blobs inversés, `if (q->write != q->cap_end) { ...simple...
+   } else { ...croissance... }`. Confirmé bit-exact sur tout le prologue +
+   test + bloc "simple" + pool littéral (26 premiers octets du CORPS,
+   au-delà du prologue lui-même déjà acquis depuis w57) -- **plus du
+   double du near-miss w57 (12 octets)**. Généralisation probable pour
+   `DECOMP_RULES.md` : quand un `if/else` semble structurellement
+   arbitraire (les deux polarités sont sémantiquement identiques), la
+   direction du branchement (quel bloc est fall-through vs cible de saut)
+   dans le désassemblage cible doit être prise comme donnée dure pour
+   choisir laquelle des deux conditions équivalentes écrire en premier
+   dans le `if`, pas seulement pour valider après coup.
+2. **Idiome `? :` sur des ADRESSES de locales (pas des valeurs) pour un
+   "growth = old_count>=1 ? old_count : 1"** : le désassemblage calcule
+   DEUX adresses de pile inconditionnellement (`add r2,sp,#20` = `&growth`
+   TOUJOURS calculée en premier, `add r0,sp,#16` = `&old_count` en second,
+   valeur par défaut), puis écrase conditionnellement `r0` par `r2` si le
+   test échoue, puis déréférence une seule fois. Reproductible
+   exactement (5 instructions, même partition de piles/mêmes offsets)
+   avec :
+   ```c
+   u32 *fallback = &growth;     // calculée EN PREMIER, inconditionnelle
+   u32 *amount_ptr = &old_count; // valeur par défaut, inconditionnelle
+   if (!(old_count >= 1))
+       amount_ptr = fallback;
+   u32 new_count = old_count + *amount_ptr;
+   ```
+   Une simple expression ternaire (`old_count>=1 ? &old_count : &growth`)
+   ne suffit PAS : elle compile en un schéma à 4 instructions avec un
+   `add` conditionnel (agbcp évite de calculer la 2e adresse si elle
+   n'est pas nécessaire), pas le double-calcul inconditionnel de
+   l'original -- il faut une variable `fallback` séparée, assignée
+   AVANT tout, pour forcer le calcul de l'adresse "de secours" à se
+   produire inconditionnellement. **Résidu non résolu sur ce point
+   précis** : le test compile en `cmp r1,#0; bne` (comparaison contre 0)
+   quelle que soit la formulation testée (`old_count<1`, `!(old_count>=1)`,
+   avec ou sans variable intermédiaire), alors que l'original fait
+   `cmp r4,#1; bcs` (comparaison contre 1, unsigned "supérieur ou égal").
+   Sémantiquement identique (`old_count` est toujours >=0, donc `<1`
+   équivaut à `==0`), mais encodage différent (immédiat + mnémonique) --
+   agbcp semble toujours canoniser une comparaison "unsigned < 1" vers
+   "== 0" quelle que soit la formulation C d'entrée. Piste non
+   épuisée : peut-être un idiome différent (`old_count - 1` testé pour
+   débordement/`bcc` inversé) forcerait le littéral 1, pas tenté par
+   manque de temps.
+3. **Boucle "morte" de fin (curseur base->write sans effet utilisé)** :
+   confirmé, comme documenté round w57, mais l'ORDRE DE LECTURE compte
+   aussi (règle 5 de `DECOMP_RULES.md`, pas seulement le fait de
+   "réutiliser les mêmes variables") -- le désassemblage lit `q->write`
+   AVANT `q->base` (`ldr r2,[r5,#4]` puis `ldr r1,[r5,#0]`), pas l'ordre
+   "naturel" attendu pour une boucle `for(p=base; p!=write; ...)`.
+   Reproduit en introduisant une variable `end` lue en premier :
+   ```c
+   QueueItem *dead_end = q->write;
+   for (QueueItem *dead_p = q->base; dead_p != dead_end; dead_p += 1) {}
+   ```
+
+### Ce qui reste bloqué : 2 classes de résidu, toutes deux "pression de
+registres" au sens propre du terme, PAS des idiomes C manquants
+
+1. **Registre alloué à `q` (`self+0x594`)** : l'original choisit `r5`,
+   toute variante testée ce round (y compris permuter l'ordre de
+   déclaration de `q` vs `item_ptr`, qui n'a AUCUN effet observé sur ce
+   choix) produit `r6`. Cette divergence apparaît dès la PREMIÈRE
+   instruction qui diffère de l'original (offset `0x1a` du corps, sur
+   268 octets testés) -- avant ce point, tout est bit-exact (prologue +
+   épilogue des 4 arguments dans la struct locale `item`). Le calcul
+   lui-même (`ldr r1,=0x594; adds rX,r0,r1`) est identique en nombre
+   d'instructions, seul le registre destination diffère. Hypothèse non
+   confirmée : ce choix dépend d'un décompte GLOBAL du nombre de valeurs
+   "promues" (survivant à travers au moins un branchement ou un appel)
+   dans TOUT le corps de la fonction, pas d'un ordre textuel local -- une
+   fonction miniature isolant juste `q` (sans le reste du corps) alloue
+   `q` dans un registre scratch non-promu (`r2`), donc ce test n'a pas pu
+   isoler la cause. Piste non tentée : forcer artificiellement plus de
+   pression de registres tôt dans le corps (variable factice
+   longue-durée) pour voir si `q` bascule vers `r5`.
+2. **Séparation manquante entre "adresse figée du nouveau buffer" et
+   "curseur d'écriture mobile"** : l'original garde DEUX registres
+   distincts portant la même valeur initiale (`new_base`) juste après le
+   `malloc` -- un gelé pour toujours (jamais incrémenté, relu depuis la
+   pile à la toute fin pour `q->base`/`q->cap_end`) et un second qui
+   avance à travers les boucles de copie (devient `q->write` final). Le
+   candidat de ce round, malgré une déclaration C séparée
+   (`void *new_base; ... QueueItem *dst = (QueueItem*)new_base;`),
+   voit les deux valeurs FUSIONNÉES par agbcp en un seul registre (`r8`),
+   parce qu'aucun usage intermédiaire ne force la distinction -- ce qui
+   économise 1 registre ET économise l'instruction de copie
+   correspondante (mais du coup ne matche pas : taille globale `.text`
+   mesurée `0x10c`/268 octets contre `0x11c`/284 attendus, écart de 16
+   octets/8 instructions). Conséquence en cascade : `alloc_size` (rôle
+   confirmé pour `r8` dans l'original, cf. w57) se retrouve du coup
+   forcé sur `r5`/pile dans le candidat, puisque `r8` est déjà pris par
+   `new_base`. Piste non tentée : forcer un point d'utilisation
+   INTERMÉDIAIRE de `new_base` (distinct de `dst`) entre le `malloc` et
+   la fin de la fonction, pour empêcher la fusion -- pas trouvé de
+   formulation C naturelle qui déclenche ça sans lire artificiellement le
+   pointeur pour rien (ce qui serait probablement lui-même détecté comme
+   store mort et éliminé).
+
+### Repo state en fin de round
+
+- **Rien commité** -- le candidat matche bit-exact les 26 premiers octets
+  du corps (prologue + test + bloc simple + pool littéral), casse au
+  registre alloué à `q` juste après, et diverge en taille globale de 16
+  octets à cause du problème de fusion `new_base`/`dst` documenté
+  ci-dessus. Toutes les variantes testées dans `/tmp/w63scratch/` (hors
+  dépôt), jamais appliquées à `asm/code_08070A08.s`/`fomt.lds`.
+- Un fichier parasite `" "` (même piège que round w57, sortie égarée
+  d'un pipe `cpp | agbcp` pendant le tâtonnement) a été créé par erreur
+  puis supprimé -- `git status --short` propre confirmé.
+- `git status --short` vide en fin de round, `origin` intact, rien
+  poussé, aucune PR.
+- Reste ouvert pour un futur round avec 2 pistes concrètes et non
+  épuisées (cf. section "ce qui reste bloqué" ci-dessus) au lieu des 3
+  variantes vagues fermées par w57 -- progression nette (12 -> 26 octets
+  bit-exacts) mais toujours pas de match complet sur cette cible, 4
+  tentatives sérieuses accumulées maintenant.
