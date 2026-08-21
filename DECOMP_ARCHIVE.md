@@ -58,6 +58,8 @@ gardée ici.
 | `func_08050E50`, `func_08050E5C`, `func_08050E74`, `func_08050E80`, `func_08050E8C` | thunks de forwarding handle (déréférence puis tail-call vers un callé opaque), voisins directs de `TransitionCtlQuery` | w39 | `dfd228e` |
 | `func_08008980` | constructeur de placement de l'objet racine (0x6c octets, 6 sous-objets), callee bloquant de `func_08004C68` -- 1re vraie tentative "pression de registres" de cette famille, matché bit-exact au premier essai | w61 | `5a894ec` |
 | `func_0803BF14` | constructeur sœur de `func_08050EE4`/`func_080512D8` (bitfield struct widths 5/10/4 à self+0x1c, `return self`) -- ex-`.byte` bruts (100 octets) trouvés par `scan_hidden_code_blobs_v2.py`, occupait exactement l'écart non désassemblé entre `func_0803BF08` et `func_0803BF78` (déjà porté) dans `asm/code_0803A8A4.s` | w65 | (voir `git log`) |
+| `func_08008928`, `func_08008930`, `func_08008938` | 3 accesseurs `*(self+0)+OFFSET` (0x24/0x34/0x8c), ex-`.byte` bruts (24 octets) entre `func_08008920` et `func_08008940` dans `asm/hardware.s` -- duplicatas byte-pour-byte des 3 fonctions nommées juste avant, MANQUÉS par `scan_hidden_code_blobs_v2.py` (bug de parsing trouvé ce round, voir `SESSION_NOTES.md` w68) | w68 | (voir `git log`) |
+| `func_08008960`, `func_0800896C` | duplicata byte-pour-byte de `func_08008940` (accesseur +0x494) et de `func_0800894C` (wrapper -> `func_08008AE0` à +0x490) -- ex-`.byte` bruts (32 octets) entre `func_0800894C` et `func_08008980` (déjà porté), flaggés "not plausible" par `scan_hidden_code_blobs_v2.py` dès w65 mais jamais creusés jusqu'ici | w68 | (voir `git log`) |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve

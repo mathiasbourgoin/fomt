@@ -9348,3 +9348,73 @@ Aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` (l'analyse est restée
 en lecture seule sur le désassemblage existant, aucun essai de compilation
 n'a été jugé utile vu la réfutation directe). `git status --short` vide en
 fin de round, `origin` intact, rien poussé, aucune PR.
+
+## Round w68 (worktree `parallel-68`) -- 5 fonctions matchées, 2 blobs cachés à la fin de `asm/hardware.s`, un vrai bug trouvé dans `scan_hidden_code_blobs_v2.py`
+
+**Découverte** : `scan_hidden_code_blobs_v2.py` (aucune restriction de
+taille) ne signale que 2 blocs `.byte` dans tout le dépôt à ce jour, tous
+deux déjà connus dead-ends (`.L0809E1B4`, `.L08008960` -- ce dernier
+"jugé pas creusé, signal faible" round w65). Désassemblage manuel de
+`.L08008960` (`asm/hardware.s`, 32 octets, entre `func_0800894C` et
+`func_08008980` déjà matché) confirme 2 fonctions cachées, chacune
+DUPLIQUÉE BYTE POUR BYTE d'une fonction voisine déjà nommée :
+- `func_08008960` == corps de `func_08008940` (`ldr r0,[r0]; ldr
+  r1,=0x494; adds r0,r0,r1; bx lr`).
+- `func_0800896C` == corps de `func_0800894C` (`push{lr}; ldr r0,[r0];
+  movs r1,#0x92; lsls r1,r1,#3; adds r0,r0,r1; bl func_08008AE0;
+  pop{r1}; bx r1`).
+
+**Bug de scanner trouvé en creusant pourquoi il n'y avait que 2
+candidats** : un 3e blob, `.L08008928` (24 octets, entre `func_08008920`
+et `func_08008940`, MÊME fichier), est structurellement identique (3
+fonctions dupliquées byte pour byte de `func_08008910`/`08008918`/
+`08008920`) mais n'apparaît PAS dans la sortie du scanner. Cause
+root-causée : le piège de parsing documenté dans `DECOMP_RULES.md`
+("`thumb_func_start NAME` apparaît textuellement comme fin du bloc
+PRÉCÉDENT") a bien été corrigé dans `block_is_function()` de la v2, MAIS
+PAS dans `block_pure_bytes()` -- la ligne `thumb_func_start
+func_08008940` finit quand même dans les `lines` du bloc `.L08008928`
+précédent (parseur ligne-par-ligne), ce qui fait échouer
+`BYTE_LINE_RE.match()` dessus, retourne `None`, et fait abandonner
+silencieusement TOUT le run sans jamais l'ajouter à `all_gaps`. Le
+scanner reste donc AVEUGLE à tout blob `.byte` immédiatement suivi d'un
+`thumb_func_start` sans ligne vide intermédiaire -- alors que
+`.L08008960` (immédiatement suivi de `<EOF>`) n'a pas ce problème et EST
+détecté. Script non modifié ce round (pas dans le scope), mais signalé
+ici pour un futur round : **un futur sweep devrait aussi grep
+manuellement les blocs `.byte` collés à un `thumb_func_start` suivant
+sans ligne vide**, cette classe entière est un angle mort silencieux.
+
+**Vérification** : harnais rapide (2 fichiers candidats, cf.
+`/tmp/w68scratch/`) bit-exact au premier essai pour les 5 fonctions
+(aucune ne nécessite d'idiome C particulier, pur pointer-chasing --
+même famille que `func_0800711C`/round 9). Découpage complet de
+`asm/hardware.s` : le fichier se terminait par ces blobs (donc pas de
+"partie après" à part le `.L08008960` lui-même) -- mais **piège vécu et
+corrigé avant le premier commit tenté** : supprimer les octets `.byte`
+EN PLACE sans découper le fichier laisse `func_08008940`/`func_0800894C`
+dans le MÊME objet `asm/hardware.o` que le reste, alors que
+`fomt.lds` n'a qu'UNE entrée pour cet objet -- la première tentative
+avait donc placé `src/code_08008928.o`/`src/code_08008960.o` (nos
+2 nouveaux fichiers) APRÈS tout `asm/hardware.o` dans le linker script,
+ce qui décale nos fonctions APRÈS `func_08008940`/`func_0800894C` au
+lieu de s'intercaler entre les deux (`fomt.map` le révèle immédiatement :
+adresses complètement fausses). Corrigé en scindant `asm/hardware.s`
+pour de vrai (s'arrête après `func_08008920`) et en créant
+`asm/code_08008940.s` (contient `func_08008940`+`func_0800894C`,
+déplacés tels quels) inséré dans `fomt.lds` entre
+`src/code_08008928.o` et `src/code_08008960.o` -- `fomt.map` confirme
+ensuite les adresses vanilla exactes pour les 9 symboles de la zone
+(`func_08008910` à `func_08008A68`/`func_08008AE0`/`func_08008AF0`),
+diff de désassemblage borné (`0x08008928`-`0x08008980`) bit-exact contre
+`baserom.gba`.
+
+Fichiers créés/modifiés : `src/code_08008928.cc` (3 fonctions),
+`src/code_08008960.cc` (2 fonctions, callee opaque `func_08008AE0`
+déclaré `extern "C"`, pas porté), `asm/code_08008940.s` (2 fonctions
+déplacées), `asm/hardware.s` (tronqué), `fomt.lds` (4 nouvelles entrées).
+Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map && make
+compare`), `sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`), diff
+borné byte-à-byte confirmé sur toute la zone reconstituée. `git status
+--short` propre en fin de round, `origin` intact, rien poussé, aucune
+PR.
