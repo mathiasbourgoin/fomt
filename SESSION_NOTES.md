@@ -12597,3 +12597,162 @@ reload.
 Scratch utilisé : `/tmp/w90s6/{try.sh,cmp.sh,cmp2.sh,check.py,
 t1..t21.cc,b1..b4.cc,mp*.cc,best.cc,target.bin}` -- hors dépôt, non
 committé ; la source canonique t18 est reproduite intégralement au §3.
+
+## Round w98 (worktree `w90`, branche `parallel-90`) -- raw.b : la clef
+NE cède PAS à l'analyse GCC 2.9 de bas niveau, cause racine plus
+profonde qu'espéré
+
+Mission : percer §5.1 (la chaîne `raw.b` à lecture "auto-annulante").
+Verdict : NON résolu. Toutes les pistes de reformulation C testées
+(masques, bitfields réels, membres simples, expression complète dans
+le contexte plein de la fonction) donnent le MÊME résultat -- agbcp
+élimine systématiquement la lecture morte et ne produit JAMAIS le
+`ldr [sp,#8]` + double `ands` du binaire cible. Aucun match forcé
+(règle respectée). Compteur inchangé : 10/13, 280/310 sur
+`func_0805E99C`.
+
+### 0. Protocole
+
+Scratch `/tmp/w90s6` bien perdu au reboot comme annoncé ; nouveau
+scratch `/tmp/w90s7` reconstruit (`try.sh`/`tryfull.sh` = pipeline
+cpp | agbcp -quiet ... -O2 -fhex-asm, sans passer par le Makefile
+complet -- suffisant pour comparer la forme du `.s`, pas besoin de
+`align_sections.sh`/`as`/objcopy pour ce sous-problème puisqu'on
+compare de l'assembleur texte, pas des octets liés). Le binaire
+`tools/agbcc/bin/agbcp` n'est PAS strippé (debug_info présent) mais
+sans source embarqué ; la source amont a été récupérée fraîchement
+(`git clone -b cp https://github.com/notyourav/agbcc.git`, dossier
+`gcc_arm/` = back-end/middle-end C++ partagé) pour lire directement
+`expr.c` plutôt que de deviner le comportement de l'optimiseur.
+
+### 1. Vérification de la vérité terrain (aucune erreur de
+transcription trouvée)
+
+Désassemblage direct de `baserom.gba` à `0x0805EAA8..0x0805ECA` (pas
+besoin de lien complet, juste extraction de la plage + `objdump -D -b
+binary -m arm -Mforce-thumb`) : la séquence et les 2 constantes de
+pool sont EXACTEMENT celles rapportées en w97 --
+`0x0805EBFC = 0xFFFF0000`, `0x0805EC00 = 0x0000FFFF`. Séquence
+confirmée instruction par instruction :
+
+```
+ldrh r1,[r3,#22]   @ line[2].affineParam (lo)
+ldr  r0,[sp,#8]    @ lecture "auto-annulante" de raw.b
+ands r0,r2         @ r2 = 0xFFFF0000
+orrs r0,r1
+ldrh r1,[r3,#30]   @ line[3].affineParam (hi)
+lsls r1,r1,#16
+ands r0,r4         @ r4 = 0x0000FFFF  <- l'AND mort qui résiste
+orrs r0,r1
+str  r0,[sp,#8]
+```
+
+Donc pas de piste "erreur de lecture des notes" -- le problème est
+réel et bien caractérisé depuis w97.
+
+### 2. Lecture du code source d'expr.c (agbcc/gcc_arm) : la distinction
+REG-vs-MEM de `store_field`
+
+`store_field()` (expr.c, ~L4584) bascule sur le chemin bitfield
+générique (`store_bit_field`, qui produit le load/and/or/store) dès
+que `mode == VOIDmode || !direct_store[mode] || GET_CODE(target) ==
+REG || GET_CODE(target) == SUBREG || ...` -- **y compris pour un
+champ qui recouvre le mot ENTIER**, du moment que la cible est un
+REGISTRE (pas seulement pour des bitfields "vrais" au sens largeur
+non-alignée). Sinon (cible MEM alignée), c'est la branche `else`
+(store direct adressé, pas d'AND/OR). Hypothèse testée : si `raw`
+reste pseudo-registre (DImode, comme `cur` en w97 §1) au moment de
+l'expansion des deux demi-mots, chaque écriture passerait par
+`store_bit_field` (donc un AND/OR par écriture), et le spill par
+reload matérialiserait le AND mort observé. Infirmée empiriquement
+(§3).
+
+### 3. Quatre sondes empiriques, résultat identique à chaque fois
+
+Toutes compilées avec le VRAI binaire `agbcp` du dépôt (pas une
+simulation) :
+
+- **p1** (fonction minimale, hors boucle, masque complet en une seule
+  expression `raw.p.b = ((raw.p.b & 0xFFFF0000)|lo) & 0xFFFF |
+  (hi<<16)`) : replié en 2 instructions propres (`ldrh;lsl;ldrh;orr;
+  str`), aucun résidu.
+- **p2** (boucle + appel externe, pression register réelle, membres
+  simples NON-bitfield `i16 x2,x3` recouvrant le mot) : combine
+  fusionne directement les 2 écritures en un store unique, sans le
+  moindre AND.
+- **p3** (bitfields C RÉELS `u32 lo:16, hi:16` recouvrant exactement
+  le mot, dans le même contexte de boucle+appel) : MÊME résultat que
+  p2 -- store_bit_field passe bien par le chemin AND/OR en interne,
+  mais un pass ultérieur (combine, très probablement) reconnaît que
+  les deux champs couvrent la totalité du mot et élide le AND
+  "inutile" -- **même pour de vrais bitfields**, contredisant
+  l'hypothèse REG-vs-MEM du §2 : la fusion n'est pas bloquée par le
+  chemin bitfield lui-même.
+- **p4** (reproduction FIDÈLE du candidat t18 complet -- toute la
+  fonction `func_0805E99C`, prologue/boucle/branche table/assemblage
+  final reconstruits depuis §3 du round w97, compilés tels quels avec
+  `cpp | agbcp -O2 -fhex-asm` en dehors du Makefile) : le prologue,
+  le cadre 0x2c et le squelette général reproduisent bien le near-miss
+  280/310 déjà connu, MAIS le site `raw.b` (`.LM31` du `.s` généré)
+  donne encore le résultat propre (`ldrh;ldrh;lsl;orr;str`, aucun
+  résidu) -- **même dans le contexte complet, pression et tout**, le
+  fold subsiste. Ceci exclut définitivement la piste "il faut plus de
+  pression register / plus de contexte" : la fonction complète
+  reconstruite plie déjà exactement comme les micro-sondes.
+
+### 4. Diagnostic révisé
+
+Le fold de `(X & C1 | lo) & C2 | (hi<<16)` en `lo | (hi<<16)` (avec
+C1&C2==0) est une simplification DISTRIBUTIVE `AND(OR(AND))` que
+notre agbcp effectue de façon fiable et reproductible, quelle que
+soit la structuration C testée (expression unique, bitfields, membres
+simples) et quel que soit le contexte (fonction triviale, boucle +
+appel, fonction complète reconstruite). Aucune des 4 sondes n'a réussi
+à faire survivre l'instruction morte. Ceci suggère que le code cible
+NE PROVIENT PAS d'une reformulation différente de la MÊME expression
+sémantique -- il provient probablement d'une forme structurellement
+distincte que nous n'avons pas encore identifiée, où l'AND avec
+0x0000FFFF n'est PAS mathématiquement redondant du point de vue de
+l'optimiseur (donc pas seulement "dur à replier" mais "pas vu comme
+repliable" par construction). Pistes pour la suite, par ordre de
+priorité :
+
+1. **Remettre en question le modèle "self-canceling"** : et si
+   `raw.p.b` n'était PAS auto-référencé du tout ? Réexaminer si le
+   binaire cible pourrait correspondre à une paire d'écritures qui
+   modifient RÉELLEMENT un autre mot déjà porteur d'une valeur utile
+   (ex. `coeffs` directement, sans `raw` intermédiaire, avec le champ
+   `b` initialisé PLUS TÔT dans le bloc à une valeur non triviale par
+   une instruction qu'on n'a pas encore modélisée) -- l'AND ne
+   serait alors PAS mort pour de vrai, et notre "candidat t18" serait
+   simplement incomplet/faux sur ce point précis, pas juste mal
+   formulé.
+2. **Séparer `raw` de `coeffs` dès l'écriture** (pas de copie
+   `coeffs = raw` -- écrire directement dans `coeffs.p.b`, dont
+   l'adresse EST prise plus loin pour l'appel à `func_0805EC24`) :
+   non testé cette manche (les 4 sondes gardent `raw` séparé de
+   `coeffs`). Si `coeffs` est adressable dès le départ (donc
+   TREE_ADDRESSABLE), le chemin `store_field` pourrait emprunter la
+   branche mémoire directe adressée AVANT que combine n'ait la
+   moindre chance de voir les deux écritures comme des pseudo-regs
+   fusionnables -- mais attention à ne pas retomber dans le poison w96
+   (accès rétrécis ldrb/strb) : seul un test empirique tranchera.
+3. Revenir au chemin bitfield DImode-registre-résident suggéré par la
+   note w97 (§5.2, sondes mp4/mp5/mp7) mais cette fois en isolant
+   PRÉCISÉMENT quelle instruction de la fonction complète déclenche la
+   rétrogradation mémoire (bisection binaire sur les instructions
+   entre le début de la boucle et le site `raw.b`, pas seulement sur
+   les 3 candidats déjà écartés en w97).
+
+### 5. Ce qui reste (3/13, inchangé)
+
+- `func_0805E99C` : 280/310, keystone `raw.b` toujours non percée
+  après 2 rounds dédiés (w97, w98). Prochaine étape recommandée :
+  piste §4.1 (remettre en cause le modèle sémantique de `raw.b`
+  lui-même, pas seulement sa formulation C) avant de retenter des
+  variantes syntaxiques.
+- `func_0805E8F0`, `func_08050868`, `func_080ADD78` : inchangés.
+
+Scratch utilisé : `/tmp/w90s7/{try.sh,tryfull.sh,p1..p4.cc,full.cc,
+target_func.bin}` + `/tmp/agbcc_src` (clone amont agbcc, lecture
+seule, hors dépôt) -- hors dépôt, non committé.
