@@ -6,6 +6,46 @@ worked on strictly offline: `origin`'s push URL is deliberately broken
 restored. Never `git push`, never open a PR, never touch `origin`. Commit
 locally only.
 
+## Round (worktree `w60`, branche `parallel-60`) -- cibles déjà matchées,
+zéro nouveau commit, re-vérification confirmée
+
+Mission reçue : porter `func_0803A798` (caractérisé round w43, layout
+`Location` bitfield-chevauchant à élucider), puis `func_0803BF78` si le
+temps le permettait. **Les deux étaient en réalité déjà matchées et
+commitées dans l'historique de CE worktree** avant même de commencer
+(`7a8e706`/`6511983` pour `func_0803A798`, `61040fc` pour `func_0803BF78`,
+hérités des rounds w45/w48) -- l'énoncé de mission reçu était basé sur un
+état d'archive périmé (w43), pas sur l'état réel du worktree. `src/
+code_0803A798.cc` et `src/code_0803BF78.cc` existent déjà, bien
+commentés, avec le layout `Location(0,0,0)` correctement modélisé via
+`include/actor.hh` (pas de code à écrire).
+
+Plutôt que de rouvrir une cible déjà fermée, ce round s'est limité à
+**re-vérifier bit-exact les deux fonctions selon le protocole standard**
+(`sha1sum -c fomt.sha1` échoue TOUJOURS globalement depuis `cb06198`, cf.
+`DECOMP_RULES.md` -- vérification isolée par fonction requise) :
+- `rm -rf build fomt.gba fomt.elf fomt.map`, `head -c 4096 /dev/zero >
+  build/franglais_stub.bin` (stub factice requis pour que le LINK passe,
+  cf. règle standing), `make compare` : lien complet sans erreur
+  structurelle, `sha1sum` échoue comme attendu (ROM intentionnellement
+  non-vanilla).
+- Taille `.text` exacte des deux `.o` : `code_0803A798.o` = `0x6c` (=
+  `0x0803A804-0x0803A798`), `code_0803BF78.o` = `0x50` (=
+  `0x0803BFC8-0x0803BF78`).
+- `fomt.map` : les deux atterrissent à leur adresse ROM d'origine EXACTE
+  (`0x0803a798`/`0x0803bf78`, aucun décalage résiduel cette fois --
+  contrairement au `-0xF4` documenté round w48, apparemment résorbé par
+  les matchs de taille corrigés depuis).
+- Diff de désassemblage borné (`objdump -bbinary -marmv4t -Mforce-thumb
+  --adjust-vma=0x08000000 --start-address/--stop-address`) `fomt.gba` vs
+  `baserom.gba` sur les deux plages : **identique à l'octet près** (seule
+  différence : le nom de fichier affiché par `objdump`).
+
+Aucun commit ce round (rien à committer, `git status --short` propre
+avant et après). `func_0803BDFC` (callee opaque de `func_0803BF78`,
+pression de registres) non touché, conformément au périmètre donné.
+`origin` intact, rien poussé, aucune PR.
+
 ## Round (worktree `w59`, branche `parallel-59`) -- 8e/9e hypothèses testées
 sur `func_080070D4`/`func_08005A00`/`func_0806EA30` ("SmartPtr field
 assignment"), toujours négatives -- mais root-cause précis du mécanisme
