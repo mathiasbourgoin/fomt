@@ -99,6 +99,18 @@ SECTIONS
         src/code_08008980.o(.text);
         src/code_08008A68.o(.text);
         asm/code_08008AE0.o(.text);
+        src/code_08008AE8.o(.text);
+        asm/code_08008AF0.o(.text);
+        src/code_08008BEC.o(.text);
+        asm/code_08008BF8.o(.text);
+        src/code_08008C08.o(.text);
+        asm/code_08008C28.o(.text);
+        src/code_08008CDC.o(.text);
+        asm/code_08008D10.o(.text);
+        src/code_08008D2C.o(.text);
+        asm/code_08008D3C.o(.text);
+        src/code_08008D5C.o(.text);
+        asm/code_08008D84.o(.text);
         src/code_08008DB8.o(.text);
         asm/code_08008DE8.o(.text);
         src/code_080098DC.o(.text);

@@ -105,6 +105,18 @@ def block_pure_bytes(block):
     for _, line in block["lines"]:
         m = BYTE_LINE_RE.match(line)
         if not m:
+            # Known parser quirk (see block_is_function/DECOMP_RULES.md):
+            # a `thumb_func_start NEXT_NAME` directive that textually
+            # precedes the label of the NEXT block still lands inside
+            # THIS block's "lines" in the naive line-by-line parser. It
+            # is not part of this block's byte payload -- it belongs to
+            # the following function block -- so stop consuming here
+            # instead of bailing out with None, or a pure-`.byte` block
+            # immediately glued (no blank line) to the next
+            # thumb_func_start becomes silently invisible to the whole
+            # scan (w68 bug: `.L08008928` in asm/hardware.s).
+            if THUMB_FUNC_START_RE.match(line):
+                break
             return None
         vals = BYTE_VAL_RE.findall(m.group(1))
         if not vals:
