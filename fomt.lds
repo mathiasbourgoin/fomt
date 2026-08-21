@@ -147,6 +147,8 @@ SECTIONS
         src/code_08011ED8.o(.text);
         src/code_08011FE8.o(.text);
         asm/code_08012028.o(.text);
+        src/code_0801DE30.o(.text);
+        asm/code_0801DE3C.o(.text);
         src/entity.o(.text);
         src/code_entity_08020018.o(.text);
         asm/code_entities.o(.text);
@@ -361,6 +363,8 @@ SECTIONS
         src/code_08093A58.o(.text);
         src/code_08093A88.o(.text);
         asm/code_08093AC8.o(.text);
+        src/code_080948F8.o(.text);
+        asm/code_080948FC.o(.text);
         src/code_0809A4D4.o(.text);
         src/code_0809A518.o(.text);
         asm/code_0809A558.o(.text);
@@ -377,6 +381,8 @@ SECTIONS
         src/sheep.o(.text);
         src/code_actor_0809BFE8.o(.text);
         asm/code_actor_0809BFE8.o(.text);
+        src/code_0809C318.o(.text);
+        asm/code_0809C32C.o(.text);
         src/npc.o(.text);
         src/bachelorette.o(.text);
         src/harvest_sprite.o(.text);
@@ -396,6 +402,8 @@ SECTIONS
         src/code_080C7EA8.o(.text);
         src/code_080C7ED0.o(.text);
         asm/code_080C7F00.o(.text);
+        src/code_080CAD08.o(.text);
+        asm/code_080CAD10.o(.text);
 
         src/m4a_1.o(.text);
         src/m4a.o(.text);
@@ -437,6 +445,8 @@ SECTIONS
         asm/code_080E09BC.o(.text);
         *(.gnu.linkonce.t.__lower_bound__H4ZPC12JumpTableEntZiZ28ScriptJumpTableSearchCompareZl_X01T0RCX11X21PX31_X01);
         asm/code_linkonce.o(.text.code_080E0EF0);
+        src/code_080E10F0.o(.text);
+        asm/code_080E10F8.o(.text);
         src/code_080E41B0.o(.text);
         asm/code_080E41E8.o(.text);
         src/code_080E44E4.o(.text);
