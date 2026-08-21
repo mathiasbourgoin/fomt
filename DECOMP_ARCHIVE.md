@@ -56,6 +56,10 @@ gardée ici.
 | `func_08011ED8` | 2e overload du constructeur de la classe bâtie par `func_08011DC4` (asm, non porté) -- construit une `Location` locale avec un seul champ initialisé (les 2 autres restent non-initialisés, comme l'original), ex-`.byte` bruts (272 octets) après `func_08011DC4` | 10 (w23) | `51cbacc` |
 | `func_08050DF0` (`TransitionCtlQuery`) | handle -> discriminant à +8, retourne 0 si ==6 sinon champ à +0x158 | w38 | `5570e1e` |
 | `func_08050E50`, `func_08050E5C`, `func_08050E74`, `func_08050E80`, `func_08050E8C` | thunks de forwarding handle (déréférence puis tail-call vers un callé opaque), voisins directs de `TransitionCtlQuery` | w39 | `dfd228e` |
+| `func_08008980` | constructeur de placement de l'objet racine (0x6c octets, 6 sous-objets), callee bloquant de `func_08004C68` -- 1re vraie tentative "pression de registres" de cette famille, matché bit-exact au premier essai | w61 | `5a894ec` |
+| `func_0803BF14` | constructeur sœur de `func_08050EE4`/`func_080512D8` (bitfield struct widths 5/10/4 à self+0x1c, `return self`) -- ex-`.byte` bruts (100 octets) trouvés par `scan_hidden_code_blobs_v2.py`, occupait exactement l'écart non désassemblé entre `func_0803BF08` et `func_0803BF78` (déjà porté) dans `asm/code_0803A8A4.s` | w65 | (voir `git log`) |
+| `func_08008928`, `func_08008930`, `func_08008938` | 3 accesseurs `*(self+0)+OFFSET` (0x24/0x34/0x8c), ex-`.byte` bruts (24 octets) entre `func_08008920` et `func_08008940` dans `asm/hardware.s` -- duplicatas byte-pour-byte des 3 fonctions nommées juste avant, MANQUÉS par `scan_hidden_code_blobs_v2.py` (bug de parsing trouvé ce round, voir `SESSION_NOTES.md` w68) | w68 | (voir `git log`) |
+| `func_08008960`, `func_0800896C` | duplicata byte-pour-byte de `func_08008940` (accesseur +0x494) et de `func_0800894C` (wrapper -> `func_08008AE0` à +0x490) -- ex-`.byte` bruts (32 octets) entre `func_0800894C` et `func_08008980` (déjà porté), flaggés "not plausible" par `scan_hidden_code_blobs_v2.py` dès w65 mais jamais creusés jusqu'ici | w68 | (voir `git log`) |
 
 ## Classe de problème "pression de registres" -- ne PAS re-tenter sans
 budget dédié et une idée réellement neuve
@@ -142,14 +146,23 @@ même pic de pression de registres.
   `StanHash/fomt` pour cette adresse si elle existe. Voir
   `SESSION_NOTES.md` rounds 9/w22, 10/w27, 4/w29, 5/w31, 6/w34 pour le
   détail complet de chaque itération.
-- `func_08008980` (callee bloquant de `func_08004C68`) -- **caractérisée
-  en détail round 9/w21**, confirmée classe "pression de registres" par
-  inspection directe (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur
-  tout le corps), PLUS un double-stamp de vtable inexpliqué sur un
-  sous-objet (même question ouverte que le piège `SmartPtr<T>`
-  sous-classe pour `func_08004C68`). Pas attaquée -- c'est la première
-  vraie inspection (pas une retentative à l'aveugle), donc la
-  classification est fiable plutôt que suspectée.
+- ~~`func_08008980`~~ -- **matchée round w61** (`5a894ec`), bit-exact au
+  premier essai malgré la classe "pression de registres" confirmée round
+  9/w21 (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur tout le
+  corps). Seul ajustement nécessaire : nommer explicitement le calcul de
+  `obj+0x50` dans une variable dédiée AVANT l'assignation du temporaire
+  passé par adresse à l'appel opaque `func_080D78F8` (sinon agbcp
+  inversait l'ordre des 2 stores indépendants, cf. règle 5 déjà connue --
+  encore un cas où respecter l'ordre du désassemblage suffit, pas besoin
+  d'idiome neuf). Le double-stamp de vtable sur le sous-objet à +0x34
+  s'est avéré être le pattern `-fvtable-thunks` standard de restamp
+  multi-niveaux d'héritage multiple (chaque niveau de constructeur
+  restampe les vtables de ses sous-objets de base après leur
+  construction) -- PAS lié au piège `SmartPtr<T>` sous-classe de
+  `func_08004C68` malgré la ressemblance de surface (aucune relation
+  d'appel directe avec les constructeurs sœurs `func_080D79CC`/
+  `func_080D7AD4`, qui stampent la même paire de vtables pour un tout
+  autre objet englobant). Voir `src/code_08008980.cc` pour le détail.
 - `franglais_boot_fsm_run` (`func_08093364`, `asm/code_0805E760.s`) --
   FSM de démarrage documentée dans `docs/ENGINE.md` côté dépôt patch.
   Dimensionnée round 6 : 0x6F4 octets (~800 lignes de `.s`), prologue
@@ -397,7 +410,7 @@ exactement sur leur adresse vanilla attendue.
 Voir `DECOMP_RULES.md`, méthode de découpage, point 8 -- déplacé là car
 c'est une règle générique, pas un fait d'historique.
 
-## `func_08004C68` (New Game `Run()`) -- bloquée, 4 callees restants sur 15
+## `func_08004C68` (New Game `Run()`) -- bloquée, 1 groupe de callees restant sur 15
 
 Identifié avec certitude structurelle comme `Run()` de la classe scène de
 l'enregistrement #12 (séquence de saisie New Game : nom joueur, sélecteur
@@ -411,7 +424,8 @@ gratuitement, aucun shape-hunting nécessaire une fois la forme identifiée
 une fois. Round 9/w21 a matché `func_08008A68` et re-classé
 `func_0806EA30`.
 
-**Reste bloqué par 4 callees** :
+**Reste bloqué par 1 groupe de callees** (round w61 a fermé `func_08008980`,
+le dernier callee "pression de registres" -- voir plus haut) :
 
 - `func_080070D4`/`func_08005A00`/`func_0806EA30` (**3 sites, pas 2** --
   round 9/w21 a confirmé que `func_0806EA30` est une 3e instance BYTE
@@ -439,30 +453,53 @@ une fois. Round 9/w21 a matché `func_08008A68` et re-classé
   opaque** -- le seul cas testé qui n'a PAS été replié est celui où
   `&tmp` s'échappe vers l'appel opaque `func_08005B68` (convention
   out-param), mais cette forme ne matche pas la cible pour une autre
-  raison (compare sur l'ancienne valeur de `field`). **Piste concrète non
-  encore testée** (à essayer en priorité) : combiner LES DEUX ingrédients
-  qui marchent séparément -- construire `tmp` via la convention
-  hidden-return-value (`SmartPtr<Widget> tmp = func_08005B68(arg);`,
-  seule forme de construction qui compile ET ne pré-zéro pas) **ET**
-  typer `field` comme `T**`/`void**` BRUT (jamais `SmartPtr<T>*`), pour
-  qu'aucune surcharge `operator=` ne puisse jamais être sélectionnée
-  quelle que soit la forme de l'assignation. Round 9/w21 a retenté 3
-  variantes supplémentaires (syntaxe `=`/out-param/alias manuel, détail
-  ci-dessus) mais PAS cette combinaison précise -- reste la piste
-  prioritaire pour un round 10.
-- `func_08008980` -- voir section "pression de registres" ci-dessus,
-  caractérisée round 9/w21, pas attaquée.
+  raison (compare sur l'ancienne valeur de `field`).
+  **Round w59 a testé la combinaison "hidden-return-value + field brut"
+  décrite ici -- 8e et 9e hypothèses, toujours NÉGATIVES** (détail complet
+  `SESSION_NOTES.md` round w59) : (a) la lecture littérale
+  `SmartPtr<Widget> tmp = func_08005B68(arg);` avec le callé déclaré
+  retournant `SmartPtr<Widget>` PAR VALEUR **ne compile toujours pas**
+  (même mur de copy-ctor privé que round 9 test 1 -- referme cette lecture
+  pour de bon, `extern "C"` ou pas, aucune forme de déclaration locale
+  nommée initialisée depuis un prvalue du même type `SmartPtr<T>` ne peut
+  compiler tant que le copy-ctor reste privé) ; (b) en ajoutant un tag
+  `NoInit` local à `SmartPtr<T>` (non committé) pour construire `tmp` via
+  la convention out-param SANS pré-zéro, `&tmp` s'échappe bien vers
+  l'appel opaque MAIS agbcp propage quand même la valeur `0` jusqu'au
+  check final et **élimine intégralement** le check-and-delete mort (16
+  instructions au lieu de 33) -- MÊME résultat avec le vrai défaut
+  `SmartPtr<T> tmp;` (pré-zéro réel, testé en contrôle). **Ceci infirme la
+  généralisation round 9** ("échapper à un appel opaque suffit à empêcher
+  le repliement") : dans ces 2 variantes `&tmp` s'échappe bel et bien vers
+  l'appel opaque et le repliement a quand même lieu intégralement.
+  **Mécanisme affiné** : agbcp semble suivre la dernière valeur connue
+  d'un emplacement mémoire (`[sp+N]`) à travers TOUTE la fonction tant
+  qu'aucun AUTRE appel opaque ne s'intercale entre la dernière écriture et
+  la lecture de vérification -- ici une seule instruction non-appelante
+  (`str r2,[r4]`, l'écriture de `field`) sépare les deux, insuffisant pour
+  perdre la trace. Aucune forme candidate testée à ce jour n'insère un
+  second appel opaque à cet endroit précis sans ajouter une instruction
+  absente de la cible. Piste résiduelle, non essayée, faible confiance :
+  sortir `Move()`/le destructeur de `SmartPtr<T>` de l'en-tête (définition
+  hors ligne, non inlinable) pour forcer un vrai `bl` -- nécessiterait de
+  modifier `include/smart_ptr.hh` plus profondément, risque de régression
+  sur les usages déjà matchés ailleurs, à valider par un `make compare`
+  complet avant tout commit si tentée.
+- ~~`func_08008980`~~ -- **matchée round w61** (`5a894ec`) : voir section
+  "pression de registres" ci-dessus pour le détail. Le double-stamp de
+  vtable qui restait une question ouverte s'est résolu de lui-même en
+  portant la fonction : pattern `-fvtable-thunks` standard de restamp
+  multi-niveaux, pas une question de type/héritage à élucider séparément.
 - ~~`func_08008A68`~~ -- **matchée round 9/w21** (`2bab4c4`) : utilise
   seulement `r4-r7`, pas `r8`/`sb`/`ip` -- shape simple malgré le
   voisinage avec `func_08008980`, matchée du premier coup.
 
-**Avant de retenter `func_08004C68` elle-même** : soit fermer ces
-callees, soit au minimum établir un prototype `extern "C"` correct pour
-chacun (ce qui NE nécessite PAS de les porter bit-exact -- suffit pour
-les appeler depuis `func_08004C68` en tant que boîte noire). Le
-double-stamp de vtable de `func_08008980` (sous-classe C++ réelle avec
-override de méthode virtuelle pure) reste une question ouverte
-indépendante des callees.
+**Avant de retenter `func_08004C68` elle-même** : il ne reste plus que
+`func_080070D4`/`func_08005A00`/`func_0806EA30` (classe "assignation de
+champ SmartPtr", 9 hypothèses négatives déjà testées, voir plus haut) --
+soit le fermer, soit au minimum établir un prototype `extern "C"`
+correct (ce qui NE nécessite PAS de le porter bit-exact -- suffit pour
+l'appeler depuis `func_08004C68` en tant que boîte noire).
 
 ## Autres cibles ouvertes
 
@@ -489,11 +526,21 @@ jamais utilisée dans ce dépôt).
 - `asm/code_08010F54.s` (272 octets) : écartée par consigne explicite
   (round w36) -- chevauche possiblement `franglais_boot_fsm_run`, classe
   "pression de registres" ; ne s'engager que sur idée neuve.
-- `func_08075334` (`asm/code_08070A08.s`) : nouvelle cible identifiée
-  round w36 -- vrai helper de push de file/tableau dynamique (`malloc`,
-  ring buffer à `self+0x594`), 8 sites d'appel symboliques déjà dans le
-  dépôt (contexte d'appel abondant, contrairement à `.L0809E1B4`) ;
-  candidat sérieux pour un futur round dédié, non trivial.
+- `func_08075334` (`asm/code_08070A08.s`) : vrai helper de push de
+  file/tableau dynamique (`malloc`, ring buffer à `self+0x594`), 8 sites
+  d'appel symboliques déjà dans le dépôt (contexte d'appel abondant,
+  contrairement à `.L0809E1B4`). Identifiée round w36, évaluée-mais-pas-
+  engagée round w37 ("pression de registres" confirmée à la lecture).
+  **Round w57 dédié : near-miss caractérisé précisément, PAS commité** --
+  les 12 premiers octets du corps (au-delà du prologue) sont bit-exacts
+  une fois l'ordre d'assignation des champs de l'item local corrigé
+  (`f4=a1` avant `f0=(u16)a2`, ordre du désassemblage, pas celui du
+  struct), mais 3 variantes testées au-delà divergent toutes sur
+  l'allocation des 4 registres callee-saved (`r5`/`r8`/`r9`/`sl`) qui
+  doivent simultanément survivre à 2 appels opaques (`malloc`, `free`) --
+  piste concrète laissée pour la suite (permutation de l'ordre de
+  première-utilisation des 4 valeurs en jeu) : voir `SESSION_NOTES.md`
+  round w57 pour le détail exact des 3 variantes déjà écartées.
 - `func_08050E98`/`func_08050EBC` (setters de bitfield 6 bits sur le
   même champ `self+0x550`, voisins de `TransitionCtlQuery`) : near-miss
   round w39, PAS committé -- extraction du champ bas (double-shift)
@@ -514,6 +561,60 @@ jamais utilisée dans ce dépôt).
   (`self->x = self->y;` où `y` est lui-même un bitfield d'une largeur qui,
   une fois relu, agbcp doit re-décomposer par négation) plutôt qu'un
   entier brut.
+  **Round w69 : piste "masque = bitfield de l'appelant" réfutée
+  définitivement, near-miss resserré à un pur artefact d'allocation de
+  registre, PAS committé.** Les sites d'appel (`asm/code_0805E760.s`,
+  `asm/code_08093AC8.s` x5, `asm/code_080C7F00.s` x16, `asm/new_game.s`)
+  ont été inspectés un par un : **tous** matérialisent l'argument masque
+  via un simple `movs r1, #N` (valeurs vues : 1, 2, 4, 8, 0x10, 0x20,
+  0xb, 0x2c -- des combinaisons de flags bit-à-bit, jamais une relecture
+  de champ). La piste "masque relu depuis un autre bitfield côté
+  appelant" est donc fermée : l'argument est un vrai flag runtime, pas un
+  bitfield readback.
+  Séparément, l'idée "bitfield struct réel" (rule 16/16bis) a été
+  retestée malgré l'avertissement round w49 -- et elle n'est PAS
+  incompatible avec un argument dynamique : la LARGEUR du champ (6 bits)
+  est fixée à la compilation (ce qui pilote le codegen par négation),
+  indépendamment du fait que la VALEUR combinée soit un argument runtime
+  (`self->low |= mask;` est une compound-assignment de bitfield tout à
+  fait ordinaire). Modéliser le champ comme
+  `struct { unsigned char low:6; unsigned char high:2; } PACKED;`
+  (le `PACKED` est nécessaire -- sans lui, agbcp alloue une unité `ldr`
+  32 bits pour l'extraction ET un second `ldrb` séparé pour le masque
+  haut, un double-load qui ne correspond pas à la cible) reproduit
+  exactement le mécanisme de négation runtime (`movs #0x40; negs`,
+  bit-à-bit identique à `rsbs r,r,#0` -- même opcode Thumb, vérifié)
+  ET la taille totale (38 octets, 19 instructions) de `func_08050EBC` --
+  un progrès énorme par rapport au round w39 (structure du désassemblage
+  totalement différente). **Reste un near-miss PUR d'allocation de
+  registre** : selon que le corps est écrit en une compound-assignment
+  (`pack->low |= mask;`) ou en deux temps (`mask |= pack->low; pack->low
+  = mask;`), et selon que la fonction retourne `self` ou est `void`,
+  agbcp choisit tantôt `r0` tantôt `r2` comme registre de travail pour
+  l'extraction/les constantes -- 12+ variantes de phrasing C testées
+  (compound vs 2-statement, avec/sans `return self`, local nommé
+  volatile/non-volatile, ordre des sous-expressions, `mask = ~mask`
+  explicite, accès direct vs pointeur `pack` caché) convergent TOUTES
+  vers la même taille (38 octets) mais aucune ne reproduit exactement
+  QUEL registre porte quelle valeur simultanément sur les 19
+  instructions. Meilleure variante trouvée (compound `pack->low |=
+  mask;`, `void`, PACKED, pas de `return self`) : structure et ORDRE de
+  10/19 instructions strictement identiques à la cible (y compris
+  `orrs r1, r0` exact), mais ne déclenche PAS le `push {r4,lr}` de la
+  cible (tient dans r0-r3 sans callee-save) -- alors que la variante à 2
+  statements déclenche bien le `push {r4,lr}` mais avec les rôles
+  r0/r2 inversés par rapport à la cible sur la moitié restante des
+  instructions. **Signal pratique pour la suite** : le déclencheur exact
+  du `push {r4,lr}` (pourquoi la cible a besoin d'un registre
+  callee-saved alors qu'une formulation logiquement équivalente tient
+  dans r0-r3) reste à trouver -- piste non épuisée : essayer de
+  contraindre l'ordre d'évaluation via des statements intermédiaires
+  supplémentaires typés différemment (`u8` vs `u32`) pour le "raw byte"
+  et le "champ bas" séparément, ou tenter un agent `fable` (cf. stratégie
+  d'escalade DECOMP_RULES.md) si un budget dédié est alloué -- cette
+  cible est maintenant un candidat solide (near-miss resserré à un pur
+  problème de register allocation, pas de structure), contrairement à
+  avant round w69 où la structure elle-même divergeait totalement.
 - Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
   (**1084 octets** à l'origine, entre `func_08050EBC` et `func_08051320`) --
   découvert round w39 (**angle mort du scanner automatique**,
@@ -541,13 +642,33 @@ jamais utilisée dans ce dépôt).
     manuel, et vérifier si la fonction est un ctor candidat au `return
     self`.
   - `func_08050F4C` (18o) -- near-miss "copie explicite élidée" (`v?1:v`
-    normalisation booléenne), reconfirmé round w44 (essai `!!(v)` façon
-    anti-pattern #12 : toujours 16 octets au lieu de 18).
-  - `func_08050F74` (44o) -- near-miss registre r4/r5 échangé + wraparound
-    `__umodsi3`, détail `SESSION_NOTES.md` round w41.
-  - `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o) -- 3 fonctions
-    "pression de registres" (`r8`/`r9`/`sl` vivants dans le corps),
-    identifiées mais jamais tentées, candidates pour escalade `fable`.
+    normalisation booléenne). Mécanisme root-causé pour de bon round w64
+    (`SESSION_NOTES.md`) : agbcc/agbcp fusionnent TOUJOURS `v`/`result`
+    dans un seul registre dès qu'aucun appel externe ne sépare la copie
+    du test (confirmé sur >12 formulations, y compris en C pur via
+    `agbcc` direct, écartant un artefact du frontend C++) ; une barrière
+    `asm volatile` force bien 2 registres séparés mais avec les rôles
+    `r0`/`r1` INVERSÉS par rapport à la cible (le compilateur alloue
+    systématiquement `r0` à la valeur qui survit jusqu'au retour, l'
+    inverse de la cible) ; seule une épingle de registre explicite
+    (`register ... asm("r0")`, sans précédent dans tout le dépôt, non
+    plausible comme vraie source pour un getter trivial) reproduit un
+    match octet pour octet -- non commité. Toujours ouvert, mais plus
+    aucune piste de reformulation C plausible identifiée.
+  - `func_08050F74` (44o) -- **MATCHÉ round w64** (`SESSION_NOTES.md`) :
+    le near-miss r4/r5 échangé + reload `__umodsi3` (w41) se résout en
+    introduisant des copies locales séparées des 2 paramètres assignées
+    via une instruction à part (`xx = x;`, pas `u32 xx = x;` combiné) --
+    contrairement à `func_08050F4C` ci-dessus, la présence d'un vrai
+    appel externe (`__umodsi3`) entre la copie et le test empêche le
+    fold, et l'allocation naturelle retombe alors directement dans le
+    bon sens. Découpage : `asm/code_08050F74.s` (ancien blob 836o)
+    remplacé par `src/code_08050F74.cc` + `asm/code_08050FA0.s` (792o
+    restants).
+  - `08050FA0`/`080510E8`/`0805116C` (312o/128o/328o, désormais dans
+    `asm/code_08050FA0.s`) -- 3 fonctions "pression de registres"
+    (`r8`/`r9`/`sl` vivants dans le corps), identifiées mais jamais
+    tentées, candidates pour escalade `fable`.
   Round w44 (sweep étendu `scan_hidden_code_blobs_v2.py`, toute taille) a
   reconfirmé que ces fragments sont les SEULS candidats "medium" restants
   dans tout `asm/*.s` avec `.L0809E1B4` ci-dessous -- aucun nouveau blob
@@ -555,17 +676,6 @@ jamais utilisée dans ce dépôt).
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
-- **Famille "entity factory" `func_080324BC`, 3 sites restants** (round
-  worktree w40 a matché 38 des 41 sites connus, cf. `SESSION_NOTES.md`) :
-  `asm/code_080E41E8.s`, `asm/code_entities_080320DC.s` (2 sites),
-  `asm/code_entities.s` (1 site) contiennent chacun un appel `bl
-  func_080324BC` avec exactement le même shape (alloc 0x8c + store
-  f0/f4/f8/fc sur la pile + `func_080324BC(obj, ctx, kind, subkind, f0,
-  f4, f8, (bool)fc)`, callee traité en boîte noire). Candidat direct pour
-  un prochain round : même méthode, même prototype, piège `bool`/`char`
-  déjà documenté (`DECOMP_RULES.md` #13). `func_080324BC` lui-même reste
-  non porté (`r8`/`sb` utilisés tout du long -- signal "pression de
-  registres", pas attaqué).
 - **`func_08050E68` (`asm/code_08050E68.s`) : PAS une cible valide, à
   RETIRER définitivement** (découvert round w43) -- ce "thunk" (`ldr
   r3,=0x08801C25; bx r3`, tail jump direct) pointe vers
@@ -608,25 +718,50 @@ jamais utilisée dans ce dépôt).
   callees `func_08037008`+`func_08037244`, PLUS un near-miss
   masque-par-négation déjà connu sur `self+0x44 & ~3`) -- pas testés,
   probablement affectés par les deux classes à la fois.
+  **Round w62 : mécanisme root-causé empiriquement (4 nouvelles variantes
+  + 1 struct POD, 10 au total, toujours PAS reproduit) -- dépendance de
+  données 4e<-5e écartée par le calcul (pas de relation arithmétique entre
+  les 2 paires de constantes connues) ; struct-by-value scindée
+  registre+pile écartée (agbcp la matérialise toujours en mémoire locale
+  d'abord, taille/registres totalement différents). Modèle confirmé sur
+  8 variantes : les 3 arguments triviaux (`obj`,`a`,`b`, copies de valeurs
+  déjà dans un registre callee-saved AVANT `__builtin_new`) sont TOUJOURS
+  différés juste avant le `bl`, quelle que soit la formulation ; entre
+  `r3` et `pile`, celui déclaré/écrit EN PREMIER dans le C source est
+  TOUJOURS calculé en premier -- mais la cible exige un ordre hybride
+  (`pile` d'abord, PUIS le groupe trivial, PUIS `r3` en tout dernier)
+  qu'aucun réordonnancement textuel ne produit, parce que `r3` ne peut
+  rejoindre le groupe "différé" (réservé aux valeurs déjà vivantes dans
+  `r4`/`r5`/`r6`, les 3 seuls callee-saved du prologue -- pas de 4e
+  registre disponible pour `r3`). Détail complet des 10 variantes et
+  piste de suite (structure d'argument différente pour `func_08037008`,
+  4e paramètre non-scalaire) dans `SESSION_NOTES.md` round w62. Rien
+  commité.
+  **Round w67 : CIBLE FERMÉE DÉFINITIVEMENT (11e tentative, 11e
+  négative).** Désassemblage direct de `func_08037008` (jusqu'ici boîte
+  noire) : ses arg4 (`r3` du caller, "c") et arg5 (pile du caller, "d")
+  sont consommés de façon totalement découplée -- `c` est un `unsigned
+  int` scalaire forwardé tel quel comme argument pile du ctor de base
+  `AActorEntity::AActorEntity(GameObject*, const ActorLocation&,
+  unsigned int, unsigned int)` (nom démanglé du callee du callee), `d`
+  est un autre scalaire stocké 8+ instructions plus tard comme simple
+  champ 16 bits (`self+0x3c`) après le retour du ctor de base. Aucun
+  accès groupé/struct visible entre les deux -- réfute la piste
+  "struct/référence non-scalaire" laissée par w62 par simple lecture du
+  désassemblage, sans besoin de compiler une variante candidate. Les 11
+  tentatives cumulées ont maintenant caractérisé le mécanisme des deux
+  côtés de l'appel (caller ET callee) sans trouver de variante C
+  reproduisant l'ordre hybride cible. Pas de 12e itération mécanique
+  prévue sans angle réellement nouveau. Détail dans `SESSION_NOTES.md`
+  round w67. Rien commité.
 - **2 nouvelles fonctions "pression de registres" (round w43)** :
   `func_0803BDFC` (`asm/code_0803A8A4.s`) et `func_08083A7C`
   (`asm/code_08082184.s`) -- `r8`/`sb`(/`sl`) vivants à travers 2 `bl`
   successifs (`__builtin_new` puis un helper 7-8 arguments). Ne pas
   tenter sans budget dédié ; utilisables en boîte noire par des wrappers
   dérivés plus simples (cf. `func_0803BF78` ci-dessus).
-- **Famille "entity factory" `func_080324BC`, 3 sites restants** (round
-  worktree w40 a matché 38 des 41 sites connus, cf. `SESSION_NOTES.md`) :
-  `asm/code_080E41E8.s`, `asm/code_entities_080320DC.s` (2 sites),
-  `asm/code_entities.s` (1 site) contiennent chacun un appel `bl
-  func_080324BC` avec exactement le même shape (alloc 0x8c + store
-  f0/f4/f8/fc sur la pile + `func_080324BC(obj, ctx, kind, subkind, f0,
-  f4, f8, (bool)fc)`, callee traité en boîte noire). Candidat direct pour
-  un prochain round : même méthode, même prototype, piège `bool`/`char`
-  déjà documenté (`DECOMP_RULES.md` #13). `func_080324BC` lui-même reste
-  non porté (`r8`/`sb` utilisés tout du long -- signal "pression de
-  registres", pas attaqué).
-- **Famille "entity factory" `func_080324BC`, 3 sites restants -- statut
-  affiné round w42 (39e site matché, 2 restants reclassés)** : des 4 sites
+- **Famille "entity factory" `func_080324BC` -- CLOSE, les 3 derniers
+  sites tous matchés (rounds w42/w46)** : des 4 sites
   d'appel `bl func_080324BC` recensés hors `code_entities_08034CEC.s`
   (`asm/code_080E41E8.s` x1, `asm/code_entities_080320DC.s` x2,
   `asm/code_entities.s` x1), un seul (`func_080E44E4`,

@@ -93,6 +93,10 @@ SECTIONS
         src/code_0800711C.o(.text);
         src/hardware.o(.text);
         asm/hardware.o(.text);
+        src/code_08008928.o(.text);
+        asm/code_08008940.o(.text);
+        src/code_08008960.o(.text);
+        src/code_08008980.o(.text);
         src/code_08008A68.o(.text);
         asm/code_08008AE0.o(.text);
         src/code_08008DB8.o(.text);
@@ -222,6 +226,7 @@ SECTIONS
         src/code_0803A804.o(.text);
 
         asm/code_0803A8A4.o(.text);
+        src/code_0803BF14.o(.text);
         src/code_0803BF78.o(.text);
         asm/code_0803BFC8.o(.text);
         src/script_engine.o(.text);
@@ -244,7 +249,8 @@ SECTIONS
         asm/code_08050F4C.o(.text);
         src/code_08050F60.o(.text);
         src/code_08050F70.o(.text);
-        asm/code_08050F74.o(.text);
+        src/code_08050F74.o(.text);
+        asm/code_08050FA0.o(.text);
         src/code_080512B8.o(.text);
         src/code_080512C8.o(.text);
         src/code_080512D0.o(.text);

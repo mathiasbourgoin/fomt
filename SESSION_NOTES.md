@@ -6,6 +6,167 @@ worked on strictly offline: `origin`'s push URL is deliberately broken
 restored. Never `git push`, never open a PR, never touch `origin`. Commit
 locally only.
 
+## Round (worktree `w60`, branche `parallel-60`) -- cibles déjà matchées,
+zéro nouveau commit, re-vérification confirmée
+
+Mission reçue : porter `func_0803A798` (caractérisé round w43, layout
+`Location` bitfield-chevauchant à élucider), puis `func_0803BF78` si le
+temps le permettait. **Les deux étaient en réalité déjà matchées et
+commitées dans l'historique de CE worktree** avant même de commencer
+(`7a8e706`/`6511983` pour `func_0803A798`, `61040fc` pour `func_0803BF78`,
+hérités des rounds w45/w48) -- l'énoncé de mission reçu était basé sur un
+état d'archive périmé (w43), pas sur l'état réel du worktree. `src/
+code_0803A798.cc` et `src/code_0803BF78.cc` existent déjà, bien
+commentés, avec le layout `Location(0,0,0)` correctement modélisé via
+`include/actor.hh` (pas de code à écrire).
+
+Plutôt que de rouvrir une cible déjà fermée, ce round s'est limité à
+**re-vérifier bit-exact les deux fonctions selon le protocole standard**
+(`sha1sum -c fomt.sha1` échoue TOUJOURS globalement depuis `cb06198`, cf.
+`DECOMP_RULES.md` -- vérification isolée par fonction requise) :
+- `rm -rf build fomt.gba fomt.elf fomt.map`, `head -c 4096 /dev/zero >
+  build/franglais_stub.bin` (stub factice requis pour que le LINK passe,
+  cf. règle standing), `make compare` : lien complet sans erreur
+  structurelle, `sha1sum` échoue comme attendu (ROM intentionnellement
+  non-vanilla).
+- Taille `.text` exacte des deux `.o` : `code_0803A798.o` = `0x6c` (=
+  `0x0803A804-0x0803A798`), `code_0803BF78.o` = `0x50` (=
+  `0x0803BFC8-0x0803BF78`).
+- `fomt.map` : les deux atterrissent à leur adresse ROM d'origine EXACTE
+  (`0x0803a798`/`0x0803bf78`, aucun décalage résiduel cette fois --
+  contrairement au `-0xF4` documenté round w48, apparemment résorbé par
+  les matchs de taille corrigés depuis).
+- Diff de désassemblage borné (`objdump -bbinary -marmv4t -Mforce-thumb
+  --adjust-vma=0x08000000 --start-address/--stop-address`) `fomt.gba` vs
+  `baserom.gba` sur les deux plages : **identique à l'octet près** (seule
+  différence : le nom de fichier affiché par `objdump`).
+
+Aucun commit ce round (rien à committer, `git status --short` propre
+avant et après). `func_0803BDFC` (callee opaque de `func_0803BF78`,
+pression de registres) non touché, conformément au périmètre donné.
+`origin` intact, rien poussé, aucune PR.
+
+## Round (worktree `w59`, branche `parallel-59`) -- 8e/9e hypothèses testées
+sur `func_080070D4`/`func_08005A00`/`func_0806EA30` ("SmartPtr field
+assignment"), toujours négatives -- mais root-cause précis du mécanisme
+d'élimination trouvé, plus net que la généralisation de round 9
+
+### Mission
+
+Reprendre la piste explicitement laissée par round 9/w21 comme "next
+thing to try" (`DECOMP_ARCHIVE.md`) : combiner (1) construction de `tmp`
+via la convention "hidden-return-value"/out-param SANS pré-zéro (au lieu
+du défaut `SmartPtr<T> tmp;` qui zéro-initialise), ET (2) typer `field`
+comme `void**`/`T**` BRUT plutôt que `SmartPtr<T>*`, pour empêcher toute
+sélection d'`operator=`. Traiter les 3 callés opaques (`func_08005B68`,
+`func_080050F8`, `func_0806DB38`) en boîte noire, prototype `extern "C"`.
+
+### Ce qui a été effectivement testé (harnais rapide, `func_08005A00`
+comme représentant des 3 sites -- forme byte-pour-byte identique)
+
+D'abord, confirmation par lecture du corps compilé de `func_080050F8`
+(déjà présent, non porté, dans `asm/code_08004C68.s`) : il suit
+exactement le motif "constructeur de placement" déjà établi ailleurs
+dans ce dépôt (`self` en r0, écrit `self[0]=0` puis d'autres champs,
+`return self` -- càd le "return self" de la règle 16bis, PAS une
+convention hidden-return-value ARM/CFront). Donc le vrai prototype du
+callé est `void func_080050F8(WidgetPtr *out, void *arg)` (convention
+out-param déjà identifiée round 9, confirmée ici par lecture directe du
+corps plutôt que déduite).
+
+1. **Essai littéral de l'énoncé de la piste** :
+   `SmartPtr<Widget> tmp = func_08005B68(arg);` où le callé est déclaré
+   comme retournant `SmartPtr<Widget>` PAR VALEUR (vraie convention
+   hidden-return-value ABI). **Ne compile pas** -- ré-confirme
+   EXACTEMENT l'échec déjà documenté round 9 test 1 (`SmartPtr::SmartPtr
+   (SmartPtr&)` privé, invoqué même pour une init par copie d'un prvalue
+   de même type -- ce compilateur ne fait pas l'élision de copie
+   obligatoire ici, même en syntaxe `=`). Referme cette lecture littérale
+   de "hidden-return-value" pour de bon : aucune syntaxe de déclaration
+   locale nommée `SmartPtr<T> tmp = /(...)` initialisée depuis un
+   *prvalue* du MÊME type `SmartPtr<T>` ne peut compiler tant que le
+   copy-ctor reste privé -- ce n'est pas un problème de syntaxe `=` vs
+   `()` (round 9) ni de linkage `extern "C"` (re-testé ici, même échec).
+
+2. **8e hypothèse (nouvelle) : convention out-param + tag
+   `NoInit` ajouté à `SmartPtr<T>`** -- pour éviter le pré-zéro du
+   défaut `SmartPtr(T*ptr=nullptr)` sans casser le vrai constructeur
+   copie privé, ajout local (fichier de test, PAS committé dans
+   `include/smart_ptr.hh`) d'un ctor `SmartPtr(NoInit)` no-op qui laisse
+   `inner` non initialisé, puis :
+   ```cc
+   WidgetPtr::NoInit no_init_tag;
+   WidgetPtr tmp(no_init_tag);       // construction directe, PAS de copy-ctor
+   func_080050F8(&tmp, sub);          // &tmp s'échappe vers l'appel opaque
+   void **tmp_alias = (void **)&tmp;  // extraction via alias void** (anti
+   void *saved = *tmp_alias;          // type-based-alias, cf. ci-dessous)
+   *tmp_alias = 0;
+   *field = saved;                     // écriture BRUTE, pas d'operator=
+   ```
+   **Compile, taille de pile correcte au niveau du pré-zéro (aucun
+   `movs r0,#0; str r0,[sp]` avant l'appel -- exactement comme la
+   cible), MAIS le check-and-delete mort de fin de fonction disparaît
+   ENTIÈREMENT** (16 instructions produites contre 33 attendues, aucune
+   trace de `cmp`/`beq`/`_call_via_r2`) -- agbcp propage la valeur 0
+   écrite dans `*tmp_alias` jusqu'au point de vérification final MALGRÉ
+   l'alias `void**` de type différent (aucune analyse d'aliasing basée
+   sur les types n'empêche ce suivi -- agbcp raisonne apparemment sur
+   l'EMPLACEMENT MÉMOIRE physique `[sp+0]`, pas sur le type statique du
+   pointeur utilisé pour y accéder).
+
+3. **9e hypothèse (contrôle) : même chose mais avec le VRAI défaut
+   `SmartPtr<T> tmp;` (pré-zéro réintroduit)** -- pour vérifier si le
+   store réel du ctor par défaut (contrairement au tag `NoInit`, un
+   no-op complet) "ancre" suffisamment `tmp` pour empêcher le
+   repliement du check final, indépendamment de la question du
+   pré-zéro. **Même résultat : le check final disparaît ENTIÈREMENT
+   aussi**, seul le pré-zéro (1 store) réapparaît comme prévu. Ceci
+   **infirme la lecture optimiste de la généralisation round 9**
+   ("l'échappement d'adresse vers l'appel opaque est ce qui empêche le
+   repliement") : ici `&tmp` s'échappe bel et bien vers l'appel opaque
+   `func_080050F8` dans LES DEUX variantes 2 et 3, et le repliement a
+   quand même lieu intégralement. L'échappement seul n'est donc PAS un
+   verrou suffisant contre ce peephole -- ce qui semble réellement
+   compter, empiriquement, c'est si la dernière écriture connue de
+   `[sp+0]` (ici, toujours notre propre `0` explicite, posé APRÈS le
+   retour de l'appel opaque) reste **entièrement dans la portée de
+   raisonnement local du compilateur jusqu'au point de vérification**,
+   sans qu'aucun autre appel opaque ne s'intercale ENTRE cette dernière
+   écriture et la lecture de vérification -- ici, seul un `str r2,[r4]`
+   (écriture de `field`, pas un appel) sépare les deux, ce qui n'est pas
+   suffisant pour "faire perdre la trace" à agbcp.
+
+### Verdict et piste pour la suite
+
+**8e et 9e hypothèses : négatives, mais concluent proprement la piste
+"escape-to-opaque-call" comme suffisante en soi.** Le point de blocage
+réel est désormais mieux cerné : il faudrait qu'un DEUXIÈME appel
+opaque (ou un effet de bord dont agbcp ne peut PAS prouver l'innocuité)
+s'intercale entre le `tmp.inner = 0` et la relecture de vérification --
+or dans les 3 sites cibles, il n'y a structurellement qu'UNE seule
+instruction (`str r2,[r4]`, l'écriture de `field`) entre les deux, ce
+qui exclut toute forme candidate insérant un second `bl` à cet endroit
+précis (ça ajouterait une instruction absente de la cible). Piste non
+essayée à ce stade, à faible confiance mais pas totalement épuisée :
+un `Move()`/dtor NON défini dans l'en-tête (compilé séparément, hors
+ligne, pour forcer un vrai `bl` non inlinable) -- nécessiterait de
+modifier `include/smart_ptr.hh` de façon plus invasive (séparer
+déclaration/définition), risque de régression sur les usages déjà
+matchés de `SmartPtr<T>` ailleurs dans le dépôt, à valider avec
+`make compare` complet avant tout commit si tentée.
+
+### État du dépôt en fin de round
+
+Aucune modification committée : `include/smart_ptr.hh` n'a PAS été
+touché (le tag `NoInit` n'existe que dans un fichier de test hors du
+dépôt suivi, `/tmp/w59scratch/`). `git status --short` confirmé propre
+avant et après ce round. `make compare`/`sha1sum -c fomt.sha1` non
+ré-exécutés (aucun changement de `src/`/`asm/`/`fomt.lds` à vérifier) --
+seul le harnais rapide (compilateur+assembleur, sans lien) a servi tout
+au long de ce round, conformément à la discipline "ne jamais laisser un
+candidat non convergé appliqué au dépôt". `origin` intact, rien poussé,
+aucune PR. Travaillé seul dans `w59`/`parallel-59`.
+
 ## Round (worktree `w48`, branche `parallel-48`) -- `func_0803A798` matché
 bit-exact (1 commit), incertitude d'héritage multiple de w47 levée,
 + découverte méthodologique : ce worktree a un décalage global constant
@@ -8533,3 +8694,839 @@ ci-dessus pour la recommandation (rejouer en pas-à-pas pour trancher).
 - `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
   Remote `decomp-main` ajouté localement pour la synchro -- purement
   interne, jamais poussé non plus.
+
+## Round w57 (worktree `parallel-57`) -- `func_08075334` round dédié, near-miss caractérisé précisément, PAS commité
+
+Cible assignée : `func_08075334` (`asm/code_08070A08.s:9622-9779`, 284 octets,
+`0x08075334`-`0x08075450`), le vrai helper de push identifié round w36 (voir
+plus haut) et évalué round w37 (classe "pression de registres" confirmée,
+pas engagé faute d'idée neuve). Ce round dispose du budget dédié demandé par
+`DECOMP_RULES.md`/`DECOMP_ARCHIVE.md` -- tentative réelle menée jusqu'au bout
+du harnais rapide (pas de `make compare` puisque rien n'est commité).
+
+### Compréhension du rôle (confirmée, réutilisable telle quelle)
+
+Vrai tableau/queue dynamique ancré à `self+0x594` :
+`struct Queue { QueueItem *base/*+0*/, *write/*+4*/; void *unk8/*+8*/;
+QueueItem *cap_end/*+0xc*/; };` avec `QueueItem` = 16 octets
+`{u16 f0; u16 pad; u32 f4; u32 f8; u32 fc;}`. `func_08075334(self, a1, a2,
+a3, a4)` construit un `QueueItem` local (`f4=a1, f0=(u16)a2, f8=a3, f4=a4`
+-- **ordre d'assignation f4 PUIS f0 PUIS f8 PUIS fc, pas l'ordre des champs
+du struct** -- règle #5 de `DECOMP_RULES.md`, confirmé bit-exact sur les 12
+premiers octets du corps une fois cet ordre respecté, alors que l'ordre
+"naturel" `f0,f4,f8,fc` produit un registre scratch supplémentaire dès la
+2e instruction). Si `write==cap_end` (plein) : calcule `old_count =
+(write-base)>>4`, `growth = old_count>=1 ? old_count : 1` (doublement de
+capacité, ou 1 si vide), `new_count = old_count+growth`, `malloc` (panic via
+`func_080D3BC0(size)` si échec, jamais porté, juste `extern "C"` déclaré),
+copie les `old_count` items existants dans le nouveau buffer, copie le
+nouvel item à la suite, un no-op de recherche de pointeur (boucle qui avance
+un curseur de `base` à `write` par pas de 16 SANS AUCUN EFFET utilisé
+ensuite, cf. plus bas), `free(base)` (ancien), puis met à jour
+`base/write/cap_end`. Sinon (place libre) : écrit l'item à `*write` (si
+`write!=nullptr` -- garde défensive) puis `write += 1` dans tous les cas.
+
+### Ce qui a été confirmé bit-exact
+
+Harnais rapide (`arm-none-eabi-cpp`+`agbcp -O2`+`as`, sans lien) : les
+**12 premiers octets** du corps (au-delà du prologue, qui matchait déjà du
+premier coup) sont devenus byte-exacts une fois l'ordre d'assignation des
+champs corrigé (`item.f4=a1; item.f0=(u16)a2; item.f8=a3; item.fc=a4;`,
+PAS l'ordre du struct). Nouvelle règle générale confirmée pour
+`DECOMP_RULES.md` (extension de la #5) : **pour une struct locale construite
+à partir de plusieurs paramètres, l'ordre des ASSIGNATIONS suit l'ordre du
+désassemblage, indépendamment de l'ordre de DÉCLARATION des champs dans le
+struct** -- un champ physiquement au début du struct (offset 0) peut être
+écrit APRÈS un champ à un offset supérieur si le code source l'écrit dans
+cet ordre.
+
+### Blocage précis : la taille globale matche (0x11c) mais AUCUNE
+variante testée ne matche au-delà des ~12 premiers octets du corps réel
+
+Trois variantes testées (toutes taille `.text` = `0x11c`, confirmée via
+`arm-none-eabi-readelf -S`), aucune bit-exacte au-delà du prologue+écriture
+de l'item local :
+
+1. **Variante "tout en `q->champ` direct, aucun cache"** : diverge dès
+   l'adresse `self+0x594` (le compilateur choisit `r9` pour porter le
+   pointeur `q`, alors que l'original le garde en `r5` -- parce qu'aucune
+   variable locale `&item` distincte n'existe dans cette variante pour
+   "réclamer" `r9`, cf. point 2 ci-dessous).
+2. **Variante avec `QueueItem *item_ptr = &item;` déclaré juste après `q`,
+   utilisé UNIQUEMENT dans la branche de croissance** (pas dans la branche
+   simple, qui recalcule `&item` via `mov r1,sp` à chaque usage, jamais
+   caché) : corrige l'allocation de `r5`/`r9` pour le pointeur `q` et
+   l'adresse de l'item (confirme l'hypothèse), mais casse ailleurs -- taille
+   `.text` retombe à `0x10c` (16 octets manquants) quand `q->base` est relu
+   deux fois FRAÎCHEMENT (avant ET après le `malloc`, sans variable locale
+   cache) au lieu d'être caché dans une variable survivant l'appel opaque.
+3. **Variante hybride (cache `old_base`/`old_write` comme variables locales
+   traversant le `malloc`/`free`, `item_ptr` séparé)** : taille repasse à
+   `0x11c` (bon), mais le registre alloué au pointeur `q` change encore une
+   fois (`sl`/r10 au lieu de `r5`), et la boucle "dead" de recherche
+   (`base` -> `write` par pas de 16, résultat jamais utilisé avant le
+   `free`) génère un jeu de registres différent (`r3`/`r6` vs `r1`/`r2` dans
+   l'original) dès qu'elle est réécrite avec des variables fraîchement
+   nommées plutôt que les MÊMES variables `old_base`/`old_write` déjà
+   utilisées plus haut dans la fonction.
+
+**Root cause probable, jamais isolée avec certitude faute de temps** : cette
+fonction utilise SIMULTANÉMENT 4 valeurs devant survivre à travers 2 appels
+opaques (`malloc`, `func_080D3BC0`/`free`) -- `q` (pointeur self+0x594),
+`&item` (adresse de l'item local), la valeur `old_write`/`cap_end` (avant
+croissance, réutilisée ~6 fois dans les boucles de copie), et la taille
+d'allocation (`r8`, pour calculer le nouveau `cap_end` après coup). Seuls 4
+registres callee-saved sont disponibles pour ce rôle (`r5`/`r8`/`r9`/`sl`
+d'après le prologue) -- l'allocateur de registres d'agbcp (linéaire, faible,
+pas de vrai graphe de coloriage) semble très sensible à l'ORDRE TEXTUEL de
+PREMIÈRE UTILISATION de chacune de ces 4 valeurs dans le C source pour
+décider quelle valeur va dans quel registre, bien plus que dans les cibles
+"pression de registres" déjà rencontrées (`DrawGlyphAt`, `func_08010F54.s`)
+qui n'avaient que 2-3 valeurs en jeu. Aucune des 3 variantes testées n'a
+trouvé le bon ordre de première-utilisation reproduisant simultanément les 4
+choix de registres de l'original. Signal pratique pour un futur round :
+tester systématiquement les permutations d'ORDRE DE DÉCLARATION (pas
+seulement de contenu) des 4 candidats callee-saved (`q`, `&item`,
+`old_write`/`cap_end`, taille d'alloc) en gardant strictement la variante 3
+(taille correcte) comme base, avant de retoucher la logique elle-même.
+
+### Repo state en fin de round
+
+- **Rien commité** -- aucune tentative n'est bit-exacte au-delà du prologue.
+  Toutes les variantes ont été testées dans `/tmp/w57scratch/` (hors dépôt),
+  jamais appliquées à `asm/code_08070A08.s`/`fomt.lds`.
+- Un fichier parasite `" "` (nommé espace, sortie égarée d'un pipe
+  `cpp | agbcp` sans `-o` explicite pendant le tâtonnement) a été créé par
+  erreur puis supprimé avant la fin du round -- `git status --short` propre
+  confirmé après suppression.
+- `git status --short` vide en fin de round, `origin` intact, rien poussé,
+  aucune PR.
+- Reste ouvert pour un futur round, avec une piste concrète (permutation de
+  l'ordre de première-utilisation des 4 valeurs callee-saved) plutôt que la
+  caractérisation vague "pression de registres" laissée par w37 -- cf.
+  section ci-dessus pour le détail exact des 3 variantes déjà écartées, à ne
+  pas retenter telles quelles.
+
+## Round w62 (worktree `parallel-62`) -- `func_08037B48`/`func_08037B80`,
+classe "ordre d'évaluation des arguments d'appel" (round w43), 4 nouvelles
+variantes testées, mécanisme root-causé mais TOUJOURS PAS reproduit, rien
+commité
+
+Cible : `func_08037B48`/`func_08037B80` (`asm/code_08037A04.s`), le near-miss
+"ordre d'évaluation" documenté round w43 (`DECOMP_ARCHIVE.md`) et jamais
+résolu depuis (6 variantes déjà closes à l'époque). Piste demandée pour ce
+round : (1) vérifier si le "littéral" `r3` (4e argument) dépend en fait
+d'une valeur calculée par le 5e argument (pile) -- dépendance de données
+forçant l'ordre ; (2) sinon, essayer la généralisation "ordre d'assignation
+suit l'ordre du désassemblage" trouvée round w57 sur des champs de struct
+locale.
+
+### Rappel de la cible exacte (`func_08037B48`, `asm/code_08037A04.s:170-196`)
+
+```
+push {r4,r5,r6,lr}; sub sp,#4
+adds r5,r0,#0                  @ a
+adds r6,r1,#0                  @ b
+movs r0,#0x44; bl __builtin_new
+adds r4,r0,#0                  @ obj
+movs r0,#0xc                   @ arg5 (pile) -- calculé
+str r0,[sp]                    @ arg5 (pile) -- stocké IMMÉDIATEMENT (2 instrs adjacentes)
+adds r0,r4,#0                  @ arg1 = obj
+adds r1,r5,#0                  @ arg2 = a
+adds r2,r6,#0                  @ arg3 = b
+ldr r3,=0x379                  @ arg4 (r3) -- chargé EN DERNIER, juste avant bl
+bl func_08037008
+ldr r0,=vtable_unk_080E725C; str r0,[r4,#0x14]; adds r0,r4,#0
+add sp,#4; pop {r4,r5,r6}; pop {r1}; bx r1
+```
+
+### Piste 1 (dépendance de données 4e<-5e argument) : ÉCARTÉE par le calcul
+
+`func_08037B48` : pile=0xc (12), r3=0x379 (889). `func_08037B80` : pile=0xa
+(10), r3=0x207 (519). Aucune relation arithmétique simple entre les deux
+paires (889-12=877, 519-10=509 -- pas de delta constant, pas de multiple,
+pas de relation bit à bit évidente sur les 2 exemples disponibles). Piste
+non poursuivie plus loin faute de signal.
+
+### Piste 2 (struct POD local, champs assignés dans l'ordre du
+désassemblage comme round w57) : ÉCARTÉE, mauvaise mécanique ABI
+
+Testé un `struct Arg4 { u32 r3val; u32 pileval; };` passé PAR VALEUR comme
+unique 4e argument (8 octets, `r3val`->r3 + `pileval`->pile en théorie),
+avec assignation `arg.pileval = 0xc; arg.r3val = 0x379;` (ordre du
+désassemblage, à la w57). Résultat harnais rapide : agbcp ne SPLIT PAS la
+struct entre registre et pile comme espéré -- il construit la struct
+ENTIÈREMENT sur une pile temporaire locale (+`sub sp,#0xc` au lieu de
+`#4`), la recopie ensuite octet par octet vers l'emplacement d'appel, et
+utilise `r8` (poussé/restauré en plus) pour porter `b` pendant ce temps --
+taille et registres totalement différents de la cible, écart de ~24 octets.
+**Cette classe de near-miss n'est donc PAS une struct-by-value scindée
+registre+pile** (au moins pas sous cette forme -- l'ABI de cet agbcp
+semble ne jamais scinder un struct >4 octets entre r3 et la pile, il le
+matérialise toujours en mémoire locale d'abord). Abandonné après 1 essai,
+signal négatif clair (taille + registres, pas la peine d'itérer sur les
+variantes de ce sous-angle).
+
+### Piste 3 (mécanique réelle isolée empiriquement, 8 variantes du harnais
+rapide, AUCUNE bit-exacte)
+
+Modèle déduit après 8 variantes de reformulation C (littéral inline pour
+les deux ; l'un nommé l'autre inline, dans les deux sens ; les deux nommés,
+dans les deux ordres de déclaration ; déclaration combinée `unsigned int
+pile = 0xc, r3 = 0x379;` ; passage par référence `const&` sur l'argument
+pile ; extraction des 3 arguments triviaux (`obj`,`a`,`b`) en variables
+locales explicites nommées AVANT l'appel, pour tester si ça change leur
+ordre de matérialisation) :
+
+- **Les 3 arguments triviaux (`obj`,`a`,`b` -- de simples copies de
+  valeurs déjà vivantes dans `r4`/`r5`/`r6`) sont TOUJOURS différés au tout
+  dernier moment, juste avant le `bl`, QUELLE QUE SOIT la formulation C**
+  (même en les extrayant en variables locales explicites nommées juste
+  avant l'appel -- agbcp les alias silencieusement à leur registre source
+  sans émettre de copie séparée à l'endroit où elles sont "déclarées").
+  Confirmé robuste sur 8/8 variantes, jamais contredit.
+- **Entre les 2 arguments non-triviaux (`r3` littéral pool-load, `pile`
+  littéral immédiat+store), celui qui apparaît EN PREMIER dans l'ordre
+  textuel/de déclaration source est TOUJOURS calculé en premier** -- vrai
+  qu'il soit écrit en ligne dans l'appel ou pré-déclaré en variable nommée
+  juste avant, dans les 2 ordres testés. Si `pile` est premier : son
+  calcul (`movs r0,#0xc`) sort immédiatement à l'endroit voulu, MAIS son
+  `str` (le stockage réel vers la pile d'appel) est décalé d'un cran,
+  après le calcul de `r3` (`ldr r3,=lit`) qui s'intercale -- **jamais
+  adjacent au `movs` comme l'exige la cible**. Si `r3` est premier :
+  chargé immédiatement, puis `pile` (calcul+store, cette fois adjacents)
+  suit -- toujours avant le bloc des 3 triviaux, jamais après.
+- **Aucune des 2 combinaisons (r3 avant pile / pile avant r3) ne
+  reproduit la cible**, qui exige un ordre "hybride" impossible à obtenir
+  par simple réordonnancement textuel : `pile` (calcul+store adjacents)
+  EN PREMIER, PUIS les 3 triviaux (`obj`,`a`,`b`), PUIS `r3` EN DERNIER,
+  juste avant le `bl` -- c'est-à-dire que `r3` devrait rejoindre le groupe
+  des arguments "différés au dernier moment" comme `obj`/`a`/`b`, ce
+  qu'aucune variante testée n'obtient (il se comporte toujours comme un
+  calcul "non-trivial" évalué tôt, jamais différé).
+- **Hypothèse pourquoi `r3` ne peut PAS rejoindre le groupe différé** :
+  le groupe différé (`obj`,`a`,`b`) ne fonctionne que pour des valeurs
+  déjà vivantes dans un registre callee-saved AVANT l'appel à
+  `__builtin_new` (`r4`/`r5`/`r6`, exactement les 3 seuls registres
+  callee-saved utilisés par le prologue `push {r4,r5,r6,lr}`) -- agbcp
+  semble différer UNIQUEMENT les copies identité de valeurs déjà logées
+  dans un registre persistant, jamais le calcul d'un littéral frais. Pour
+  que `r3=0x379` rejoigne ce groupe, il faudrait un 4e registre
+  callee-saved vivant à travers le `bl __builtin_new`, ce que la cible
+  N'A PAS (seulement 3 poussés) -- donc cette voie est mécaniquement
+  fermée sauf à me tromper sur le rôle de `r4`/`r5`/`r6`.
+
+### Conclusion : caractérisation affinée, toujours pas résolu, rien commité
+
+Le mécanisme exact de agbcp pour ce cas précis (littéral pool-load `r3`
+différé APRÈS un groupe d'arguments triviaux, alors que tout littéral
+"non-trivial" testé dans ce round se comporte comme un calcul précoce)
+reste non reproduit après 10 variantes cumulées (6 de w43 + 4 nouvelles ce
+round, sans compter la struct POD testée séparément). Aucun fichier
+modifié dans `asm/`/`src/`/`fomt.lds` -- tout le tâtonnement est resté
+dans `/tmp/w62scratch/` (hors dépôt), jamais appliqué. `git status --short`
+vide en fin de round, `make compare` propre non re-testé (rien à
+comparer), `origin` intact, rien poussé, aucune PR.
+
+**Piste concrète pour un futur round**, non testée faute de budget : si
+`r3` doit vraiment se comporter comme un argument "différé", peut-être
+que la vraie signature de `func_08037008` a RÉELLEMENT une structure
+différente au niveau du 4e paramètre -- par exemple un type énuméré
+`enum` avec une valeur nommée plutôt qu'un `unsigned int` littéral brut
+(pourrait changer la classe de "complexité" perçue par agbcp lors du
+scheduling des arguments), ou alors le vrai découpage argument est
+`(self,a1,a2,a3)` avec `a3` un petit struct/union de 8 octets scindé
+`{u32 lo; u32 hi;}` mais construit champ par champ SUR LA PILE D'APPEL
+ELLE-MÊME (pas une struct locale séparée comme testé ici, cf. piste 2)
+-- distinction fine entre "struct locale copiée vers l'appel" (testé,
+échoue) et "struct construite directement dans l'aire d'appel sortante"
+(pas testé, demanderait de forcer via `&arg` un alias direct sur `[sp]`
+en C, techniquement difficile à exprimer proprement en C portable). À
+tenter avec un budget dédié avant d'abandonner définitivement cette
+classe.
+
+## Round w65 (worktree `parallel-65`) -- match `func_0803BF14`, nouveau blob
+caché trouvé par scan v2
+
+**Découverte** : `scan_hidden_code_blobs_v2.py` (aucune restriction de
+taille) signale 3 blocs `.byte` plausibles/non-plausibles au total dans
+tout le dépôt à ce jour. Deux sont des dead-ends déjà connus
+(`.L0809E1B4`/`asm/code_actor_0809BFE8.s`, `.L08008960`/`asm/hardware.s`,
+ce dernier jugé "not plausible" par le scanner et jamais mentionné
+ailleurs -- pas creusé ce round, signal faible). Le troisième,
+**`.L0803BF14` dans `asm/code_0803A8A4.s` (100 octets, jugé "PLAUSIBLE
+CODE")**, n'apparaissait dans AUCUN des deux fichiers de suivi
+(`grep -rn "0803BF14"` négatif avant ce round) -- cible neuve, jamais
+caractérisée.
+
+Ce blob occupe exactement l'espace entre la fin de `func_0803BF08`
+(dernière fonction `asm` du fichier) et le début de `func_0803BF78`
+(première entrée `fomt.lds` du fichier déjà porté, `src/code_0803BF78.o`)
+-- covered par aucun découpage antérieur : `0x0803BF14 + 0x64 (100o) =
+0x0803BF78` pile. Le fichier avait donc été scindé un jour sans que ce
+segment intermédiaire ne soit désassemblé, laissé en `.byte` brut.
+Aucun appelant symbolique trouvé (`grep -rn "0803BF14" asm/*.s`
+négatif), cohérent avec le reste des fonctions de ce fichier (dispatch
+via vtable non symbolisée).
+
+**Désassemblage** : constructeur, même forme que `func_08050EE4`/
+`func_080512D8` (round w49, cf. `DECOMP_RULES.md` règle #16/16bis) :
+2 champs pointeur mis à zéro, 1 pointeur de vtable (`vtable_unk_080E7758`,
+déjà déclaré globalement dans `asm/vtables.s`), 3 champs scalaires
+depuis les registres `r1`/`r2`/`r3`, PUIS un champ scalaire depuis le
+1er argument-pile (`self+0x18`), PUIS un mot de bitfields packés
+(largeurs 5/10/4, offset `self+0x1c`) depuis les 3 arguments-pile
+suivants -- masques de clear construits par négation runtime
+(`movs #N; negs`) pile le codegen bitfield-struct déjà documenté.
+Épilogue `pop {r1}; bx r1` (pas `r0`) confirmant `return self;` (r0
+occupé par la valeur de retour vivante).
+
+**Signature retenue** :
+`func_0803BF14(void *self, u32 a1, u32 a2, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7)`
+-- 8 arguments (self + 3 registre + 4 pile), cf. `push {r4,r5,r6,r7,lr}`
++ 4 `ldr [sp,#20..32]`.
+
+**Near-miss d'ordre résolu** (1 seule variante nécessaire) : le premier
+essai (ordre C = affectation du champ-pile `self->unk_18` en tout
+premier, avant les zérotages/vtable/champs-registre) produisait le bon
+contenu mais un ORDRE différent -- les 4 loads d'arguments-pile
+regroupés en tête, PUIS le store de `self->unk_18` (`ldr;ldr;ldr;ldr;
+str` au lieu de `ldr;str;ldr;ldr;ldr` dans la cible). Résolu en plaçant
+l'affectation de `self->unk_18` APRÈS les zérotages/vtable/champs-
+registre mais AVANT les bitfields (groupée avec les 3 loads d'arguments-
+pile suivants) -- reproduit exactement `ldr r4,[sp,#20]; str r4,[r0,#24];
+ldr r6,[sp,#24]; ldr r5,[sp,#28]; ldr r7,[sp,#32]`. Signal généralisable
+pour de futurs near-miss "ordre des loads d'arguments-pile" : le
+premier argument-pile utilisé isolément (pas suivi immédiatement d'autres
+usages d'arguments-pile) se charge+stocke seul ; un groupe d'arguments-
+pile utilisés consécutivement dans le C se charge en bloc avant le
+premier usage du groupe.
+
+**Vérification** : harnais rapide (compilateur+assembleur sans lien)
+byte-exact dès la 2e variante ; taille `.text` de `build/src/code_0803BF14.o`
+= `0x64` (100 octets, exact) ; `rm -rf build fomt.gba fomt.elf fomt.map &&
+make compare` (échec `sha1sum` attendu, ROM intentionnellement non-vanilla
+depuis `cb06198`) ; diff `objdump` borné `--start-address=0x0803BF14
+--stop-address=0x0803BF78` sur `fomt.elf` linké vs `baserom.gba`
+(`--adjust-vma=0x08000000`) -- IDENTIQUE, opcode par opcode ; recoupé par
+un diff des octets bruts (`objdump -s`/`od -An -tx1`) -- IDENTIQUE.
+
+Commit propre : `asm/code_0803A8A4.s` (suppression du blob `.byte`),
+`fomt.lds` (nouvelle entrée `src/code_0803BF14.o`), `src/code_0803BF14.cc`
+(nouveau). `origin` intact, rien poussé, aucune PR.
+
+Reste ouvert dans ce fichier : `func_0803BDFC` (pression de registres,
+callee opaque de `func_0803BF78`) et `func_08083A7C` -- pas retentés ce
+round.
+
+## Round w64 (worktree `parallel-64`) -- match `func_08050F74` (near-miss
+r4/r5 root-causé pour de bon) ; `func_08050F4C` root-causé mécaniquement
+mais toujours PAS matché (mur confirmé, pas juste reconfirmé)
+
+Mission : reprendre les 2 near-miss `func_08050F4C`/`func_08050F74`
+laissés ouverts par w44 (`asm/code_08050F4C.s`, `asm/code_08050F74.s`),
+avec priorité sur le premier (18 octets, plus petit espace de formes).
+
+### `func_08050F4C` (18o, normalisation booléenne `v?1:v`) -- mécanisme
+enfin root-causé, toujours PAS matché
+
+Désassemblage exact de la cible (`arm-none-eabi-objdump -bbinary
+--adjust-vma=0x08050F4C` sur les 18 octets bruts, confirmé octet pour
+octet) :
+
+```
+push {lr}
+ldrb r0, [r0, #4]      ; v = self->flag (byte)
+adds r1, r0, #0        ; result = v   (copie explicite dans r1)
+cmp  r0, #0
+beq  skip
+movs r1, #1            ; result = 1
+skip:
+adds r0, r1, #0        ; return result (copie r1 -> r0)
+pop  {r1}
+bx   r1
+```
+
+**Plus d'une douzaine de formulations C testées ce round** (en plus de
+celles déjà réfutées par les rounds précédents) -- toutes replient
+la copie `r1` et reproduisent EXACTEMENT le même 16 octets (`ldrb r0,...;
+cmp r0,#0; beq; movs r0,#1; pop{r1}; bx r1`), quel que soit
+l'arrangement de surface :
+- `v != 0 ? 1 : v` (pas seulement `v ? 1 : v`) ;
+- variable intermédiaire nommée avec assignation SÉPARÉE (`result = v;`
+  puis `if (v) result = 1;`, statement à part, pas dans le même
+  `u32 result = v;`) ;
+- `goto`/label explicite, `do {} while(0)`, `switch` avec `case`/`default`
+  fall-through, retour anticipé à 2 `return` distincts ;
+- 2e paramètre factice pour occuper `r1` à l'entrée (n'a aucun effet, le
+  fold se produit quand même après réutilisation du registre) ;
+- fonction `static` séparée appelée en interne (agbcc l'INLINE quand même
+  au niveau RTL et refait le même fold -- pas un simple artefact du site
+  d'appel) ;
+- obfuscation algébrique de la copie (`v + 0`, `v | 0`, `+v`,
+  `v ? v : v`) -- toutes évaluées à `v` par le compilateur malgré sa
+  faiblesse générale, donc repliées quand même ;
+- **compilé en C pur via `agbcc` directement (pas `agbcp`/C++)** : même
+  résultat exact, donc ce n'est PAS un artefact du frontend C++ --
+  confirmé que le fold vient d'une passe RTL commune aux deux frontends.
+
+**Root-cause confirmé via 2 expériences positives** (qui PROUVENT le
+mécanisme sans donner un match plausible) :
+1. Une barrière `asm volatile ("" : "+r"(result) : "r"(v));` empêche
+   bien le compilateur de fusionner les deux valeurs -- obtient
+   effectivement 18 octets (9 instructions), MAIS avec les rôles
+   registre INVERSÉS par rapport à la cible : `v` atterrit dans `r1`,
+   `result` dans `r0`, alors que la cible charge `v` directement dans
+   `r0` (partagé avec le pointeur `self` mourant) et ne matérialise
+   `result` que dans `r1`. Confirmé sur PLUSIEURS variantes d'ordre des
+   opérandes de la contrainte asm (`"+r"(v):"r"(result)` vs
+   `"+r"(result):"r"(v)` vs `"+r"(v),"+r"(result)` groupés) -- toutes
+   donnent la MÊME allocation inversée, donc ce n'est pas un simple
+   artefact de l'ordre textuel des opérandes : agbcc semble toujours
+   assigner `r0` à la pseudo-valeur qui survit jusqu'au `return`, `r1` à
+   celle qui ne sert qu'au test -- l'inverse de ce que la cible fait.
+2. Des variables de registre explicites (`register u32 v asm("r0") = ...;
+   register u32 result asm("r1") = v;`) forcent l'allocation EXACTE de
+   la cible et produisent un **match octet pour octet parfait** (les 18
+   octets, vérifié `cmp -l` -- confirmé qu'il ne s'agit PAS d'un artefact
+   de padding/alignement). Ceci prouve que le mécanisme est intégralement
+   compris : la cible a bien `v` en `r0`/`result` en `r1`, un vrai
+   compilateur PEUT produire ces octets -- mais ce chemin passe par une
+   épingle de registre explicite, un idiome qui n'a AUCUN précédent dans
+   tout le dépôt (`grep -rn 'register.*asm("r' src/ include/` : 0 match)
+   et qui est structurellement implausible comme source réelle pour un
+   simple getter/normaliseur trivial de ce type. **Non commité** --
+   remplacer la source réelle par une épingle de registre artificielle
+   irait à l'encontre de la discipline du dépôt (reproduire le VRAI
+   code source, pas forcer les octets par un hack).
+
+**Conclusion pratique** : ce near-miss n'est plus un simple "ça replie
+la copie, cause inconnue" (état des rounds w39/w41/w44) -- c'est
+maintenant : "le compilateur alloue TOUJOURS `r0`->valeur-de-retour /
+`r1`->valeur-de-test dès qu'on force 2 registres séparés via un
+mécanisme visible du RTL (asm barrier), l'inverse exact de ce que la
+cible utilise, et SEULE une épingle de registre explicite (non
+plausible comme vraie source) obtient les 2 registres dans le bon sens
+tout en gardant les 2 valeurs séparées". Aucune piste de reformulation
+C plausible restante identifiée ce round. Laissé en `.byte`
+(`asm/code_08050F4C.s`, inchangé), non commité. Piste pour un futur
+round, non testée : vérifier si la VRAIE fonction appelante passe déjà
+une valeur DIFFÉRENTE dans `r1` au moment de l'appel (auquel cas la
+copie ne serait pas `result=v` mais un vrai 2e paramètre logique,
+invisible depuis ce fragment isolé sans site d'appel symbolique connu)
+-- pas vérifiable sans retrouver un appelant.
+
+### `func_08050F74` (44o) -- MATCHÉ, near-miss r4/r5 + reload `__umodsi3`
+résolu
+
+Signature réelle : `void func_08050F74(void *self, u32 x, u32 y)` --
+clampe `y` (3e argument) modulo 3 (`__umodsi3`, seulement si `y > 2`)
+dans un champ 2 octets à `self+22`, clampe `x` (2e argument) modulo 28
+(seulement si `x > 27`) dans un champ 2 octets à `self+20`, puis remet à
+0 un flag octet à `self+25`. Moduli (3, 28) très évocateurs du domaine
+saison/jour-du-mois de ce jeu (3 saisons, mois de 28 jours) mais rôle de
+la classe non confirmé indépendamment depuis ce seul fragment -- gardé
+en style "offsets bruts" comme les voisins `func_08050F60`/
+`func_08050F70` plutôt que de nommer une classe non établie.
+
+Root-cause du near-miss documenté par w41 (`self`/`x` alloués
+`r5`/`r4`, inversés par rapport à la cible `r4`/`r5` ; le résultat du 2e
+`__umodsi3` était rapatrié dans le registre-maison de `x` avant le
+`strh` final au lieu d'être stocké directement depuis `r0`) :
+**introduire des copies locales séparées `yy`/`xx` des 2 paramètres,
+assignées via une instruction SÉPARÉE (`xx = x;`) plutôt qu'une
+déclaration+initialisation combinée (`u32 xx = x;`), suffit à faire
+allouer `self`->`r4`/`x`->`r5` naturellement, dans le bon ordre, SANS
+aucune épingle de registre.** Contraste net avec `func_08050F4C`
+ci-dessus : ici, la présence d'un VRAI appel externe (`__umodsi3`) entre
+la copie et le test empêche le compilateur de refaire le même fold
+(les registres doivent survivre à travers un `bl`, donc pas de
+coalescing possible) -- exactement le genre de "mur" qui, une fois
+franchi par la bonne structure de source, retombe sur l'allocation
+naturelle plutôt que sur une inversion. Vérifié :
+- harnais rapide : désassemblage identique à la cible à l'octet près,
+  à l'exception des 2 encodages `bl` (offset relatif vers un symbole
+  non résolu dans le harnais isolé -- attendu, résolu correctement une
+  fois lié) ;
+- build complet (`rm -rf build fomt.gba fomt.elf fomt.map && make
+  compare`, avec `build/franglais_stub.bin` factice pour satisfaire le
+  lien comme documenté dans `DECOMP_RULES.md`) : taille `.text` de
+  `build/src/code_08050F74.o` = `0x2c` = 44 octets, adresse
+  `fomt.map` correcte, contenu de `fomt.gba` linké comparé octet pour
+  octet à `baserom.gba` sur les 44 octets de la fonction -- **match
+  parfait** ;
+- `sha1sum -c fomt.sha1` échoue toujours (attendu, ROM non-vanilla
+  depuis `cb06198`, cf. `DECOMP_RULES.md`) -- pas un signal d'échec pour
+  cette vérification.
+
+Découpage : `asm/code_08050F74.s` (ancien blob monolithique de 836
+octets, contenait aussi les 3 fonctions "pression de registres" jamais
+tentées) supprimé, remplacé par `src/code_08050F74.cc` (44 octets
+portés) + `asm/code_08050FA0.s` (792 octets restants : `08050FA0`/
+`080510E8`/`0805116C`, toujours en `.byte`, candidats escalade `fable`
+inchangés). `fomt.lds` mis à jour en conséquence. 1 commit (`func_08050F74`
+seul, port propre).
+
+### Repo state en fin de round
+
+- 1 commit de match (`func_08050F74`).
+- `func_08050F4C` toujours en `.byte`, non commité -- mécanisme
+  entièrement compris et documenté ci-dessus, mais aucune formulation C
+  plausible trouvée ; candidat pour reformulation depuis un futur
+  appelant retrouvé, sinon fermer définitivement cette piste.
+- `git status --short` vide après le commit, `build/`/`fomt.gba`/
+  `fomt.elf`/`fomt.map` nettoyés.
+- `origin` intact (URL de push volontairement cassée), rien poussé,
+  aucune PR créée.
+
+## Round w63 (worktree `parallel-63`) -- `func_08075334`, 4e tentative, 3
+nouvelles pistes converties en gains RÉELS, near-miss resserré de 12 à 26
+octets bit-exacts, PAS commité (toujours pas bit-exact)
+
+Cible : `func_08075334` (`asm/code_08070A08.s:9622-9779`, 284 octets,
+`0x08075334`-`0x08075450`), déjà tentée round w37 (évaluation seule) et
+round w57 (near-miss caractérisé, 12 premiers octets matchés, 3 variantes
+fermées). Piste demandée pour ce round : permuter l'ordre de
+première-utilisation des 4 candidats callee-saved (`q`, `&item`,
+`old_write`, taille d'alloc) en s'inspirant de la règle confirmée round
+w61 (`func_08008980`) -- ordre du désassemblage prime sur l'ordre de
+déclaration C.
+
+### Trois gains réels obtenus ce round (tous vérifiés au harnais rapide,
+`arm-none-eabi-cpp`+`agbcp -O2`+`as`, comparaison octet à octet contre
+`baserom.gba` désassemblé à la même adresse)
+
+1. **Inversion if/else complète** (nouvelle piste, pas documentée avant
+   ce round) : le désassemblage original teste `q->write == q->cap_end`
+   et saute (`beq`) EN AVANT vers le code de croissance (placé en dernier
+   dans le fichier), la voie "simple" (pas plein) étant le fall-through
+   immédiat après le test. Toute tentative précédente (w57 incluse,
+   d'après la lecture du round) écrivait naturellement `if (plein) {
+   ...croissance...} else { ...simple... }`, ce qui compile dans agbcp
+   avec la polarité INVERSE (fall-through = croissance, saut = simple) --
+   l'opposé exact de l'original. Correction : écrire la source avec le
+   test et les blobs inversés, `if (q->write != q->cap_end) { ...simple...
+   } else { ...croissance... }`. Confirmé bit-exact sur tout le prologue +
+   test + bloc "simple" + pool littéral (26 premiers octets du CORPS,
+   au-delà du prologue lui-même déjà acquis depuis w57) -- **plus du
+   double du near-miss w57 (12 octets)**. Généralisation probable pour
+   `DECOMP_RULES.md` : quand un `if/else` semble structurellement
+   arbitraire (les deux polarités sont sémantiquement identiques), la
+   direction du branchement (quel bloc est fall-through vs cible de saut)
+   dans le désassemblage cible doit être prise comme donnée dure pour
+   choisir laquelle des deux conditions équivalentes écrire en premier
+   dans le `if`, pas seulement pour valider après coup.
+2. **Idiome `? :` sur des ADRESSES de locales (pas des valeurs) pour un
+   "growth = old_count>=1 ? old_count : 1"** : le désassemblage calcule
+   DEUX adresses de pile inconditionnellement (`add r2,sp,#20` = `&growth`
+   TOUJOURS calculée en premier, `add r0,sp,#16` = `&old_count` en second,
+   valeur par défaut), puis écrase conditionnellement `r0` par `r2` si le
+   test échoue, puis déréférence une seule fois. Reproductible
+   exactement (5 instructions, même partition de piles/mêmes offsets)
+   avec :
+   ```c
+   u32 *fallback = &growth;     // calculée EN PREMIER, inconditionnelle
+   u32 *amount_ptr = &old_count; // valeur par défaut, inconditionnelle
+   if (!(old_count >= 1))
+       amount_ptr = fallback;
+   u32 new_count = old_count + *amount_ptr;
+   ```
+   Une simple expression ternaire (`old_count>=1 ? &old_count : &growth`)
+   ne suffit PAS : elle compile en un schéma à 4 instructions avec un
+   `add` conditionnel (agbcp évite de calculer la 2e adresse si elle
+   n'est pas nécessaire), pas le double-calcul inconditionnel de
+   l'original -- il faut une variable `fallback` séparée, assignée
+   AVANT tout, pour forcer le calcul de l'adresse "de secours" à se
+   produire inconditionnellement. **Résidu non résolu sur ce point
+   précis** : le test compile en `cmp r1,#0; bne` (comparaison contre 0)
+   quelle que soit la formulation testée (`old_count<1`, `!(old_count>=1)`,
+   avec ou sans variable intermédiaire), alors que l'original fait
+   `cmp r4,#1; bcs` (comparaison contre 1, unsigned "supérieur ou égal").
+   Sémantiquement identique (`old_count` est toujours >=0, donc `<1`
+   équivaut à `==0`), mais encodage différent (immédiat + mnémonique) --
+   agbcp semble toujours canoniser une comparaison "unsigned < 1" vers
+   "== 0" quelle que soit la formulation C d'entrée. Piste non
+   épuisée : peut-être un idiome différent (`old_count - 1` testé pour
+   débordement/`bcc` inversé) forcerait le littéral 1, pas tenté par
+   manque de temps.
+3. **Boucle "morte" de fin (curseur base->write sans effet utilisé)** :
+   confirmé, comme documenté round w57, mais l'ORDRE DE LECTURE compte
+   aussi (règle 5 de `DECOMP_RULES.md`, pas seulement le fait de
+   "réutiliser les mêmes variables") -- le désassemblage lit `q->write`
+   AVANT `q->base` (`ldr r2,[r5,#4]` puis `ldr r1,[r5,#0]`), pas l'ordre
+   "naturel" attendu pour une boucle `for(p=base; p!=write; ...)`.
+   Reproduit en introduisant une variable `end` lue en premier :
+   ```c
+   QueueItem *dead_end = q->write;
+   for (QueueItem *dead_p = q->base; dead_p != dead_end; dead_p += 1) {}
+   ```
+
+### Ce qui reste bloqué : 2 classes de résidu, toutes deux "pression de
+registres" au sens propre du terme, PAS des idiomes C manquants
+
+1. **Registre alloué à `q` (`self+0x594`)** : l'original choisit `r5`,
+   toute variante testée ce round (y compris permuter l'ordre de
+   déclaration de `q` vs `item_ptr`, qui n'a AUCUN effet observé sur ce
+   choix) produit `r6`. Cette divergence apparaît dès la PREMIÈRE
+   instruction qui diffère de l'original (offset `0x1a` du corps, sur
+   268 octets testés) -- avant ce point, tout est bit-exact (prologue +
+   épilogue des 4 arguments dans la struct locale `item`). Le calcul
+   lui-même (`ldr r1,=0x594; adds rX,r0,r1`) est identique en nombre
+   d'instructions, seul le registre destination diffère. Hypothèse non
+   confirmée : ce choix dépend d'un décompte GLOBAL du nombre de valeurs
+   "promues" (survivant à travers au moins un branchement ou un appel)
+   dans TOUT le corps de la fonction, pas d'un ordre textuel local -- une
+   fonction miniature isolant juste `q` (sans le reste du corps) alloue
+   `q` dans un registre scratch non-promu (`r2`), donc ce test n'a pas pu
+   isoler la cause. Piste non tentée : forcer artificiellement plus de
+   pression de registres tôt dans le corps (variable factice
+   longue-durée) pour voir si `q` bascule vers `r5`.
+2. **Séparation manquante entre "adresse figée du nouveau buffer" et
+   "curseur d'écriture mobile"** : l'original garde DEUX registres
+   distincts portant la même valeur initiale (`new_base`) juste après le
+   `malloc` -- un gelé pour toujours (jamais incrémenté, relu depuis la
+   pile à la toute fin pour `q->base`/`q->cap_end`) et un second qui
+   avance à travers les boucles de copie (devient `q->write` final). Le
+   candidat de ce round, malgré une déclaration C séparée
+   (`void *new_base; ... QueueItem *dst = (QueueItem*)new_base;`),
+   voit les deux valeurs FUSIONNÉES par agbcp en un seul registre (`r8`),
+   parce qu'aucun usage intermédiaire ne force la distinction -- ce qui
+   économise 1 registre ET économise l'instruction de copie
+   correspondante (mais du coup ne matche pas : taille globale `.text`
+   mesurée `0x10c`/268 octets contre `0x11c`/284 attendus, écart de 16
+   octets/8 instructions). Conséquence en cascade : `alloc_size` (rôle
+   confirmé pour `r8` dans l'original, cf. w57) se retrouve du coup
+   forcé sur `r5`/pile dans le candidat, puisque `r8` est déjà pris par
+   `new_base`. Piste non tentée : forcer un point d'utilisation
+   INTERMÉDIAIRE de `new_base` (distinct de `dst`) entre le `malloc` et
+   la fin de la fonction, pour empêcher la fusion -- pas trouvé de
+   formulation C naturelle qui déclenche ça sans lire artificiellement le
+   pointeur pour rien (ce qui serait probablement lui-même détecté comme
+   store mort et éliminé).
+
+### Repo state en fin de round
+
+- **Rien commité** -- le candidat matche bit-exact les 26 premiers octets
+  du corps (prologue + test + bloc simple + pool littéral), casse au
+  registre alloué à `q` juste après, et diverge en taille globale de 16
+  octets à cause du problème de fusion `new_base`/`dst` documenté
+  ci-dessus. Toutes les variantes testées dans `/tmp/w63scratch/` (hors
+  dépôt), jamais appliquées à `asm/code_08070A08.s`/`fomt.lds`.
+- Un fichier parasite `" "` (même piège que round w57, sortie égarée
+  d'un pipe `cpp | agbcp` pendant le tâtonnement) a été créé par erreur
+  puis supprimé -- `git status --short` propre confirmé.
+- `git status --short` vide en fin de round, `origin` intact, rien
+  poussé, aucune PR.
+- Reste ouvert pour un futur round avec 2 pistes concrètes et non
+  épuisées (cf. section "ce qui reste bloqué" ci-dessus) au lieu des 3
+  variantes vagues fermées par w57 -- progression nette (12 -> 26 octets
+  bit-exacts) mais toujours pas de match complet sur cette cible, 4
+  tentatives sérieuses accumulées maintenant.
+
+## Round w67 (worktree `parallel-67`) -- `func_08037B48`/`func_08037B80`,
+piste "struct/référence non-scalaire" testée, RÉFUTÉE par le désassemblage
+du callee lui-même, cible fermée définitivement (11e tentative, 11e
+négative)
+
+Cible : même near-miss "ordre d'évaluation des arguments d'appel" que
+w43/w62 (`asm/code_08037A04.s:170-196`). Piste laissée par w62 : le 4e
+argument de `func_08037B48` (littéral `r3`) est-il en fait, côté
+`func_08037008` (le callee, jamais porté, traité en boîte noire jusqu'ici),
+une petite struct/référence non-scalaire construite directement dans
+l'aire d'appel sortante -- ce qui expliquerait l'ordre hybride cible sans
+avoir besoin d'un 4e registre callee-saved ?
+
+### Désassemblage de `func_08037008` (`asm/code_08036DC4.s:272-303`)
+
+```
+push {r4,r5,r6,lr}; sub sp,#4
+adds r4,r0,#0            @ r4 = self
+adds r5,r2,#0            @ r5 = arg2 ("b", sauvegardé -- r2 lui-même reste intact)
+ldr r6,[sp,#0x14]         @ r6 = arg5 (pile, argument du CALLER, lu depuis la pile
+                          @   sortante à l'offset qui pointe vers [sp_caller])
+str r3,[sp]               @ arg4 (r3 du caller) sauvegardé tel quel en local
+movs r3,#2                @ r3 = littérale 2 (remplace l'arg4 original pour l'appel suivant)
+bl __12AActorEntityP10GameObjectRC13ActorLocationUiUi
+ldr r0,=vtable_unk_080E7328; str r0,[r4,#0x14]
+str r5,[r4,#0x30]         @ arg2 ("b") stocké comme membre APRÈS le ctor
+adds r1,r4,#0; adds r1,#0x34; movs r0,#0
+strh r0,[r4,#0x34]; strh r0,[r1,#2]; strh r0,[r1,#4]; strh r0,[r1,#6]
+strh r6,[r4,#0x3c]        @ arg5 (pile) stocké comme CHAMP 16 bits, bien APRÈS le ctor
+strh r0,[r4,#0x3e]
+adds r1,#0xc; movs r0,#1; strb r0,[r1]
+adds r0,r4,#0
+add sp,#4; pop {r4,r5,r6}; pop {r1}; bx r1
+```
+
+Le callee du callee est démanglable : `__12AActorEntityP10GameObjectRC13ActorLocationUiUi`
+= `AActorEntity::AActorEntity(GameObject*, const ActorLocation&, unsigned int, unsigned int)`.
+Au moment du `bl`, cet appel de ctor de base utilise : r0=self, r1=GameObject*
+(intact depuis l'entrée de `func_08037008`, jamais renommé), r2=ActorLocation&
+(intact, PAS r5 malgré la sauvegarde), r3=**littérale 2 câblée en dur**
+(PAS l'arg4 du caller), et son propre argument pile = l'arg4 du caller,
+transmis tel quel via `str r3,[sp]` fait AVANT l'écrasement de r3.
+
+### Verdict : hypothèse struct/référence RÉFUTÉE avant même d'écrire du C++
+
+Les 2 arguments non-triviaux de `func_08037B48` (r3="c", pile="d", dans la
+terminologie w62) sont consommés par `func_08037008` de façon totalement
+DÉCOUPLÉE et à des endroits éloignés du corps :
+- `c` (r3 du caller) est un simple `unsigned int` scalaire, sauvegardé en
+  local PUIS transmis inchangé comme dernier argument (passé par la pile)
+  au ctor de base `AActorEntity(...)` -- un forwarding pur, pas un accès
+  de champ de struct.
+- `d` (pile du caller) est un autre `unsigned int` scalaire, chargé dans
+  `r6` et stocké BEAUCOUP plus tard, après le retour du ctor de base,
+  comme simple champ 16 bits de l'objet (`strh r6,[r4,#0x3c]`) -- aucun
+  rapport structurel avec `c`.
+
+Si `c` et `d` étaient les 2 champs d'UNE seule struct/référence passée par
+valeur, on s'attendrait à les voir accédés ENSEMBLE (via une base commune,
+`ldr`/`str` avec offsets `+0`/`+4` typiques d'un accès `arg->field`) --
+au lieu de ça, `c` disparaît dans un forwarding de ctor huit instructions
+avant que `d` ne soit ne serait-ce que touché, et `d` est stocké dans un
+tout autre offset de l'objet (`+0x3c`, format halfword) sans lien visible
+avec le layout du ctor de base. C'est la signature d'ARGUMENTS SCALAIRES
+INDÉPENDANTS, pas d'une struct scindée. La piste laissée par w62 est donc
+close par lecture directe du désassemblage, sans même avoir besoin de
+compiler une variante C++ candidate (le harnais rapide aurait de toute
+façon reproduit le même échec que la piste 2 de w62 -- struct matérialisée
+en pile locale d'abord -- puisque rien dans ce nouveau désassemblage ne
+change la conclusion ABI de w62 sur les structs >4 octets).
+
+### Conclusion : cible fermée définitivement, pas de 12e itération mécanique
+
+11 tentatives cumulées (6 de w43 + 4 de w62 + celle-ci), toutes négatives,
+sur cette classe de near-miss "ordre d'évaluation des arguments d'appel"
+appliquée à `func_08037B48`/`func_08037B80`. Le mécanisme est maintenant
+caractérisé de bout en bout des deux côtés de l'appel (caller ET callee) :
+`func_08037008` confirme que `c`/`d` sont deux scalaires `unsigned int`
+indépendants, ce qui élimine la dernière piste structurelle non testée.
+Sans nouvelle idée de mécanisme agbcp (le blocage réel reste l'absence
+d'un 4e registre callee-saved pour que `r3` rejoigne le groupe différé,
+cf. w62), il n'y a plus de variante C source à tester qui ne soit pas déjà
+couverte par les 10 précédentes. **Cible marquée fermée pour l'instant**
+-- ne pas retenter mécaniquement sans un angle réellement nouveau (p.ex.
+si un futur round symbolise `func_08037008` en entier -- pas seulement son
+prologue -- et découvre un détail de calling convention non anticipé ici).
+
+Aucun fichier modifié dans `asm/`/`src/`/`fomt.lds` (l'analyse est restée
+en lecture seule sur le désassemblage existant, aucun essai de compilation
+n'a été jugé utile vu la réfutation directe). `git status --short` vide en
+fin de round, `origin` intact, rien poussé, aucune PR.
+
+## Round w68 (worktree `parallel-68`) -- 5 fonctions matchées, 2 blobs cachés à la fin de `asm/hardware.s`, un vrai bug trouvé dans `scan_hidden_code_blobs_v2.py`
+
+**Découverte** : `scan_hidden_code_blobs_v2.py` (aucune restriction de
+taille) ne signale que 2 blocs `.byte` dans tout le dépôt à ce jour, tous
+deux déjà connus dead-ends (`.L0809E1B4`, `.L08008960` -- ce dernier
+"jugé pas creusé, signal faible" round w65). Désassemblage manuel de
+`.L08008960` (`asm/hardware.s`, 32 octets, entre `func_0800894C` et
+`func_08008980` déjà matché) confirme 2 fonctions cachées, chacune
+DUPLIQUÉE BYTE POUR BYTE d'une fonction voisine déjà nommée :
+- `func_08008960` == corps de `func_08008940` (`ldr r0,[r0]; ldr
+  r1,=0x494; adds r0,r0,r1; bx lr`).
+- `func_0800896C` == corps de `func_0800894C` (`push{lr}; ldr r0,[r0];
+  movs r1,#0x92; lsls r1,r1,#3; adds r0,r0,r1; bl func_08008AE0;
+  pop{r1}; bx r1`).
+
+**Bug de scanner trouvé en creusant pourquoi il n'y avait que 2
+candidats** : un 3e blob, `.L08008928` (24 octets, entre `func_08008920`
+et `func_08008940`, MÊME fichier), est structurellement identique (3
+fonctions dupliquées byte pour byte de `func_08008910`/`08008918`/
+`08008920`) mais n'apparaît PAS dans la sortie du scanner. Cause
+root-causée : le piège de parsing documenté dans `DECOMP_RULES.md`
+("`thumb_func_start NAME` apparaît textuellement comme fin du bloc
+PRÉCÉDENT") a bien été corrigé dans `block_is_function()` de la v2, MAIS
+PAS dans `block_pure_bytes()` -- la ligne `thumb_func_start
+func_08008940` finit quand même dans les `lines` du bloc `.L08008928`
+précédent (parseur ligne-par-ligne), ce qui fait échouer
+`BYTE_LINE_RE.match()` dessus, retourne `None`, et fait abandonner
+silencieusement TOUT le run sans jamais l'ajouter à `all_gaps`. Le
+scanner reste donc AVEUGLE à tout blob `.byte` immédiatement suivi d'un
+`thumb_func_start` sans ligne vide intermédiaire -- alors que
+`.L08008960` (immédiatement suivi de `<EOF>`) n'a pas ce problème et EST
+détecté. Script non modifié ce round (pas dans le scope), mais signalé
+ici pour un futur round : **un futur sweep devrait aussi grep
+manuellement les blocs `.byte` collés à un `thumb_func_start` suivant
+sans ligne vide**, cette classe entière est un angle mort silencieux.
+
+**Vérification** : harnais rapide (2 fichiers candidats, cf.
+`/tmp/w68scratch/`) bit-exact au premier essai pour les 5 fonctions
+(aucune ne nécessite d'idiome C particulier, pur pointer-chasing --
+même famille que `func_0800711C`/round 9). Découpage complet de
+`asm/hardware.s` : le fichier se terminait par ces blobs (donc pas de
+"partie après" à part le `.L08008960` lui-même) -- mais **piège vécu et
+corrigé avant le premier commit tenté** : supprimer les octets `.byte`
+EN PLACE sans découper le fichier laisse `func_08008940`/`func_0800894C`
+dans le MÊME objet `asm/hardware.o` que le reste, alors que
+`fomt.lds` n'a qu'UNE entrée pour cet objet -- la première tentative
+avait donc placé `src/code_08008928.o`/`src/code_08008960.o` (nos
+2 nouveaux fichiers) APRÈS tout `asm/hardware.o` dans le linker script,
+ce qui décale nos fonctions APRÈS `func_08008940`/`func_0800894C` au
+lieu de s'intercaler entre les deux (`fomt.map` le révèle immédiatement :
+adresses complètement fausses). Corrigé en scindant `asm/hardware.s`
+pour de vrai (s'arrête après `func_08008920`) et en créant
+`asm/code_08008940.s` (contient `func_08008940`+`func_0800894C`,
+déplacés tels quels) inséré dans `fomt.lds` entre
+`src/code_08008928.o` et `src/code_08008960.o` -- `fomt.map` confirme
+ensuite les adresses vanilla exactes pour les 9 symboles de la zone
+(`func_08008910` à `func_08008A68`/`func_08008AE0`/`func_08008AF0`),
+diff de désassemblage borné (`0x08008928`-`0x08008980`) bit-exact contre
+`baserom.gba`.
+
+Fichiers créés/modifiés : `src/code_08008928.cc` (3 fonctions),
+`src/code_08008960.cc` (2 fonctions, callee opaque `func_08008AE0`
+déclaré `extern "C"`, pas porté), `asm/code_08008940.s` (2 fonctions
+déplacées), `asm/hardware.s` (tronqué), `fomt.lds` (4 nouvelles entrées).
+Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map && make
+compare`), `sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`), diff
+borné byte-à-byte confirmé sur toute la zone reconstituée. `git status
+--short` propre en fin de round, `origin` intact, rien poussé, aucune
+PR.
+
+## Round w71 -- correctif du bug de transcription réel de `asm/vtables.s` (slot `vtable_unk_080E5BF8+0xC`)
+
+**Contexte** : la campagne de symbolisation de `vtables.s` cette nuit
+(rounds w50/w51/w52) a introduit une **vraie erreur de transcription
+manuelle** sur un slot, découverte ce matin par une longue enquête
+dynamique (mGBA) sur un bug de `SoftReset` observé sur la ROM
+`--source-port` du dépôt patch, juste après confirmation du nom du
+chien à l'écran de création de personnage.
+
+**Diagnostic complet (mené par un agent sur `harvest-moon-franglais`,
+documenté dans `docs/FOMT_PATCH_PIPELINE_POC.md` "suite 7")** : `SceneMain`
+(`func_0800082C`) lit sa "scène suivante" via un appel virtuel sur
+`vtable_unk_080E5BF8+0xC`. Ce slot pointait vers `func_08010138` (un
+accesseur trivial à 6 instructions qui retourne sa valeur en `r0` au
+lieu de l'écrire via le pointeur de sortie caché que `SceneMain`
+attend) au lieu du vrai `func_0801004C` (un vrai lanceur de scène qui
+écrit correctement via ce pointeur). Les deux fonctions sont voisines
+en adresse (236 octets d'écart) -- confusion de transcription humaine
+classique lors du round w50, pas une erreur de méthode.
+
+Conséquence : le slot de sortie reste nul, `SceneMain` interprète ça
+comme "pas de scène suivante", détruit la scène courante (dont le
+destructeur remet `gUnk_0300040C` à zéro, confirmé dynamiquement),
+retourne à `AgbMain` qui démonte tout et appelle `exit()` -> `SoftReset`.
+Rien à voir avec les 4 hooks trampolines franglais (tous innocentés ou
+non-testables par ailleurs), ni avec le contenu des chaînes traduites.
+
+**Correctif** : `asm/vtables.s`, slot `vtable_unk_080E5BF8+0xC`,
+`.4byte func_08010138` -> `.4byte func_0801004C`.
+
+**Vérification** :
+- Rebuild complet propre (`rm -rf build fomt.gba fomt.elf fomt.map &&
+  make`), lien réussi sans erreur.
+- Diff byte à byte des 4 octets du slot corrigé (`fomt.gba` vs
+  `baserom.gba` à `0x080E5C04`) : identiques (`4d000108` des deux
+  côtés) -- confirmation directe que le slot est maintenant bit-exact
+  avec le vanilla.
+- `arm-none-eabi-nm fomt.elf` confirme `func_0801004C` lié à
+  `0x0801004C`, adresse cohérente.
+- `sha1sum -c fomt.sha1` échoue comme attendu (ROM intentionnellement
+  non-vanilla depuis `cb06198`), non représentatif.
+
+État du worktree en fin de round : 1 fichier modifié (`asm/vtables.s`),
+`git status --short` propre après commit, `build/`/`fomt.gba`/
+`fomt.elf`/`fomt.map` nettoyés, `origin` intact, rien poussé, aucune PR.
