@@ -9530,3 +9530,719 @@ non-testables par ailleurs), ni avec le contenu des chaînes traduites.
 État du worktree en fin de round : 1 fichier modifié (`asm/vtables.s`),
 `git status --short` propre après commit, `build/`/`fomt.gba`/
 `fomt.elf`/`fomt.map` nettoyés, `origin` intact, rien poussé, aucune PR.
+
+## Round w70 (worktree `parallel-70`) -- bug de scanner corrigé pour de bon, 18 fonctions matchées, 5 pistes moyennes caractérisées
+
+**Bug de `scan_hidden_code_blobs_v2.py` corrigé** (signalé mais pas
+corrigé round w68) : `block_pure_bytes()` retournait `None` dès qu'un
+bloc pur-`.byte` était immédiatement suivi (sans ligne vide) d'un
+`thumb_func_start` -- cette ligne de directive "fuit" dans les `lines`
+du bloc PRÉCÉDENT via le parseur ligne-par-ligne naïf, `BYTE_LINE_RE` ne
+la matche pas, `block_pure_bytes` abandonne tout le run silencieusement.
+Fix : si la ligne ne matche pas `BYTE_LINE_RE` mais matche
+`THUMB_FUNC_START_RE`, on arrête simplement la collecte des octets
+(cette ligne appartient au bloc suivant), au lieu de retourner `None`.
+
+**Impact du fix** : re-scan complet de `asm/*.s` (aucune limite de
+taille, script v2) est passé de **1 gap détecté** (le dead-end connu
+`.L0809E1B4`) à **68 gaps détectés**. Tous les gaps sont de petite/
+moyenne taille (4 à 1724 octets) ; 26 marqués "PLAUSIBLE CODE" par
+l'heuristique du script.
+
+**18 fonctions matchées ce round**, toutes vérifiées bit-exact (harnais
+rapide + `cmp` binaire brut contre `baserom.gba` sur la plage
+d'adresses complète) :
+
+- `asm/code_08008AE0.s` (13 fonctions, 1 seule caractérisée mais non
+  portée) : toute une famille "API son" jamais repérée jusqu'ici,
+  voisine de fonctions déjà connues (mais toujours non portées)
+  `func_08008AE0`..`func_08008DA8`. Détail complet dans le message du
+  commit correspondant (`func_08008AE8`/dup, `func_08008BEC`/
+  `func_08008C08`/`func_08008C18` wrappers m4aMPlay*, `func_08008CDC`/
+  `CE4`/`CEC`/`CF4`/`CFC` accesseurs + lookup gMusicPlayerTable,
+  `func_08008D2C`/`func_08008D34` += /-= 0x40, `func_08008D5C`/
+  `func_08008D70` lecture gSongTable). **`func_08008D10` reste non
+  porté** (voir ci-dessous, nouvelle classe de near-miss).
+- 5 fonctions isolées dans 5 fichiers différents : `func_080948F8`
+  (doublon), `func_080E10F0`/`func_080E10F4` (2 stubs `return 0`),
+  `func_0801DE30` (sibling wrapper), `func_080CAD08` (setter 3 champs),
+  `func_0809C318` (sibling avec offset +6, near-miss d'ordre
+  d'instructions résolu en réordonnant les 2 statements C -- calculer
+  le résultat de l'appel opaque AVANT de matérialiser `self+6`,
+  cf. commentaire dans `src/code_0809C318.cc`).
+
+**Nouvelle classe de near-miss identifiée, non résolue -- `func_08008D10`** :
+la fonction calcule un "index" constant (valeur 5) en passant par un
+**chargement pleine-largeur depuis le pool littéral suivi d'un
+double-shift `lsls #24`/`lsrs #24`** (`ldr r1,[pc,#N]; lsls r1,r1,#24;
+lsrs r1,r1,#24`), au lieu du `movs r1, #5` trivial qu'on obtiendrait
+pour n'importe quel litéral entier de cette taille -- confirmé sur son
+propre sibling `func_08008CFC` (index 0) qui LUI compile bien en
+`movs r1, #0` direct. Formulations testées sans succès : littéral
+entier direct, `1+4`, énumérateur C++ (`enum {KIND_F=5}`), variable
+locale `u32` explicite avec cast `(u8)(idx<<24>>24)`, `static const
+u32`, `sizeof(struct Five)` (5 octets), `volatile u32` (produit bien le
+double-shift mais via un load PILE, pas pool littéral, et avec 2
+instructions de plus). Root-cause non trouvée -- porté comme fonction
+asm nommée mais toujours non traduite en C plutôt que laissé en blob
+anonyme (voir `asm/code_08008D10.s`).
+
+**5 cibles caractérisées mais pas attaquées ce round** (complexité
+supérieure, budget de round épuisé) -- candidates pour un futur round :
+
+- `asm/code_08036DC4.s` `.L08037250` (28o, entre `func_08037244` et le
+  suivant) : local 8 octets zéro-initialisé (4x `strh` du littéral 0)
+  puis recopié en 2 mots vers `self+0x34`/`self+0x38` -- pattern
+  "Location locale" (motif `func_08011ED8` déjà documenté) plutôt
+  qu'une simple paire d'affectations directes. Piste : struct locale à
+  4 champs `u16` zéro-initialisée, puis affectation de structure
+  complète vers les 2 champs cible.
+- `asm/code_08036DC4.s` `.L08036E00` (44o, entre le `.L08036DFC`/pool et
+  le suivant) : appelle un vrai constructeur C++
+  (`__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi`, déjà visible dans le
+  fichier juste avant), stampe une vtable -- nécessite de comprendre le
+  layout complet de la classe avant de porter, plus gros effort.
+- `asm/code_080756D0.s` `.L08075E00` (36o, entre `func_08075DEC` et le
+  suivant) : 2 appels conditionnels à `func_08008E64` (encore non
+  porté), lisant 5 champs de `self` (offsets 0xC/0x10/0x14/0x18/0x1C/
+  0x20) -- moyenne complexité, faisable mais pas tenté.
+- `asm/code_actor_0809BFE8.s` `.L0809C4EC` (36o, entre `func_0809C4E4`
+  et le suivant) : test de bit dynamique sur `self+0` avec un index
+  passé en paramètre (`cmp r1,#13;bhi` puis `1<<(r1&0x1F)` puis test +
+  négation booléenne inversée) -- **ressemble fortement à la classe
+  ouverte documentée dans `DECOMP_ARCHIVE.md`
+  (`func_08050E98`/`func_08050EBC`, masque construit depuis un
+  paramètre d'appel dynamique, jamais résolue)**. À vérifier en
+  priorité si un futur round attaque cette classe : pourrait partager
+  la même root cause.
+- `asm/code_080A3774.s` `.L080AAF9C` (44o+, entre le site d'appel à
+  `func_0803A8A4` et le suivant) : encore plus complexe (utilise
+  `r8`/`sb`, appelle `func_0803A8A4` -- déjà signalé "pression de
+  registres" dans `DECOMP_ARCHIVE.md`) -- pas tenté.
+
+**Reste des 68 gaps** : les ~55 non listés ci-dessus/déjà matchés sont
+soit déjà connus dead-ends (`.L0809E1B4`), soit très probablement du
+padding d'alignement légitime (paires `70 47 00 00` = `bx lr` +
+padding, taille 4-8 octets, marquées "not plausible" par le script) --
+pas revérifiés un par un ce round, prochain sweep pourrait les auditer
+systématiquement pour ne rien laisser filer.
+
+Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map && make`) +
+lien complet avec `franglais_stub.bin` factice confirmés à chaque étape,
+`sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`). `git status
+--short` propre après les 2 commits, `origin` intact, rien poussé,
+aucune PR.
+
+## Round w72 (worktree `parallel-72`) -- 2 des 5 cibles moyennes de w70 attaquées, aucune matchée, 2 near-miss caractérisés
+
+Attaque de 2 des 5 cibles caractérisées mais non tentées par w70 (voir
+round w70 ci-dessus). **Aucun commit ce round** -- discipline "ne jamais
+commiter un match qui ne matche pas" respectée, `git status --short`
+propre en sortie.
+
+**Cible 1 -- `func_0809C4EC` (`asm/code_0809C32C.s`, 36o, entre
+`func_0809C4E4` et `func_0809C510`)** : vérifiée en priorité comme demandé
+(ressemblance avec la classe ouverte `func_08050E98`/`func_08050EBC`,
+masque de bitfield construit depuis un paramètre d'appel). Désassemblage :
+`bool IsFlagClear(void *self, u32 index)` -- si `index > 13`, retourne
+`true` (défaut) ; sinon calcule `mask = 1 << (index & 0x1F)`, teste
+`*(u32*)self & mask` via l'idiome "nonzero-to-bool" (`negs`/`orrs`/`lsrs
+#31`), et retourne l'inverse (bit clair). **La piste "masque = lecture
+d'un autre bitfield côté appelant" ne s'applique PAS ici** : contrairement
+à `08050E98`/`08050EBC` (masque combiné passé en argument), ici le masque
+est un simple `1 << (index & 0x1F)` calculé localement à partir de
+l'index -- pas un masque fourni par l'appelant. Structurellement plus
+simple que son cousin (pas de `bics`, juste un test de bit). Formulation
+`u32 mask=0; if (index<=13) mask=1u<<(index&0x1F); u32 word=*(u32*)self;
+bool set=!!(word&mask); return !set;` reproduit **15 des 17 instructions
+à l'identique**, y compris l'ordre exact et les registres jusqu'à
+`orrs r0,r1` -- seules les 3 dernières instructions (`lsrs`/`movs
+#1`/`eors`) divergent : la cible stocke le booléen final dans `r2` et
+charge la constante `1` dans `r0` (`lsrs r2,r0,#31; movs r0,#1; eors
+r0,r2`), notre version garde le résultat dans `r0` et charge `1` dans
+`r1` (`lsrs r0,r0,#31; movs r1,#1; eors r0,r1`) -- même calcul, mêmes
+registres vivants, rôles inversés. **Confirmé : c'est exactement la même
+classe de near-miss pur d'allocation de registre que `func_08050EBC`**
+(cf. `DECOMP_ARCHIVE.md`), pas un problème de structure. 12 formulations
+testées (`!!`+`!` séparés, `1^set`, `set==0`, `set` typé `u32` au lieu de
+`bool`, variable renommée, inline direct sans variable `set`, `volatile`)
+-- toutes soit reproduisent le near-miss identique (`bool` intermédiaire
+nécessaire pour déclencher l'idiome `negs`/`orrs`/`lsrs`, cf. règle 12-like)
+soit divergent plus largement (`==0`/comparaison directe compile en
+branchement `cmp`/`bne`, pas en forme arithmétique). Non résolu, non
+commité -- candidat pour une future tentative `fable` (stratégie
+d'escalade DECOMP_RULES.md) si un budget dédié est alloué : l'écart est
+maintenant resserré à 3 instructions sur 17, structure entièrement
+comprise.
+
+**Cible 2 -- `.L08037250` (`asm/code_08036DC4.s`, 28o, entre
+`func_08037244` et `func_0803726C`)** : confirme l'hypothèse w70 ("Location
+locale" zéro-initialisée puis copiée en structure complète). Désassemblage :
+alloue 8o sur la pile, écrit 4 `strh` de la constante 0 (aux offsets 0/2/4/6
+depuis DEUX registres différents -- `mov r3,sp` calculé en premier pour les
+offsets 2/4/6, `mov r2,sp` calculé ensuite pour l'offset 0 seul), relit les
+8o comme 2 mots, les écrit à `self+0x34`/`self+0x38`. Tenté comme
+`struct PACKED Loc4 { u16 a,b,c,d; }` local + `asm volatile("":: "r"(&loc)
+:"memory")` (barrière anti-repliement nécessaire : sans elle, agbcp
+constant-propage tout le corps en 2 `str` directs vers `self`, sans passer
+par la pile -- confirmé sur 5 variantes sans barrière, y compris
+`memset(&loc,0,sizeof(loc))` qui appelle une vraie fonction `bl` au lieu
+d'inliner). **Avec `PACKED` + barrière** (`Loc4 loc; loc.a=loc.b=loc.c=
+loc.d=0;`) : reproduit la taille exacte (28o), les 4 `strh` corrects
+(largeur d'accès correcte -- sans `PACKED`, merge en 2 `str` mot ; testé
+et confirmé), l'ordre des lectures/écritures -- mais avec UN SEUL registre
+de base (`mov r1,sp` réutilisé pour les 4 champs) au lieu des DEUX
+registres distincts de la cible. Hypothèse tentée pour expliquer la
+distinction `field a` vs `group b/c/d` (déclarer `a` et un
+sous-struct `{b,c,d}` séparément, ou via 2 pointeurs typés différemment
+`Loc4*`/`u16*` sur le même objet) : soit re-fusionné en 1 seul registre
+par CSE implicite (struct imbriqué), soit fait apparaître un accès
+`Loc4*` en `strb` (bitfield-like, pas le bon type d'accès) au lieu du
+`strh` voulu -- aucune formulation testée (7 variantes) n'a reproduit les
+2 registres distincts SANS casser autre chose. Non résolu, non commité.
+Piste non épuisée : la vraie source a probablement 2 variables locales
+adjacentes distinctes (pas un seul struct de 4 champs) -- à retenter avec
+un contrôle plus fin de l'ordre de déclaration/l'allocateur de pile
+d'agbcp plutôt que la modélisation "un seul struct".
+
+Rebuild : aucun changement appliqué au dépôt (les 2 cibles restent en
+`.byte` brut, non portées) -- pas de `make compare` nécessaire pour ce
+round, `git status --short` confirmé propre avant et après. `origin`
+intact, rien poussé, aucune PR.
+
+## 2026-08-21, worktree `w66`/`parallel-66` -- `func_0804E5AC` (`DrawGlyphAt`
+recolor) round 7 : **MATCHÉE** -- la percée est une variable partagée
+entre blocs avec deux RÔLES différents (`right_tmp` : ancre couleur en
+TR, accumulateur d'adresse en BR)
+
+Contexte : 6 échecs honnêtes documentés (rounds 9/w22, 10/w27, 4/w29,
+5/w31, 6/w34), pause explicitement recommandée par le round 6, seule
+piste jamais tentée : une décompilation Ghidra amont. Mission : angle
+NEUF obligatoire, pas une 7e itération mécanique.
+
+### Piste Ghidra amont (point 4 de la mission) : fermée définitivement
+
+`StanHash/fomt` upstream (GitHub, dernier push 2026-02-08) vérifié via
+`gh api` : AUCUNE référence à `0804E5AC`/`804E5AC`/`DrawGlyph`/`ghidra`
+dans tout le dépôt (code search + arbre `src/` complet -- aucun fichier
+`code_0804E*`). Il n'existe pas de décompilation amont de cette
+fonction. Piste refermée avec certitude, pas par manque d'accès.
+
+### Méthode de ce round (neuve, généralisable)
+
+1. **Reconstruction from scratch en relisant le désassemblage comme un
+   catalogue de variables-copies** (généralisation de la règle 11 du
+   corps plain) plutôt qu'en partant d'un candidat précédent. Premier
+   jet : prologue, `dest`->`sl`, spill de `kind`, frame 0xa0 corrects
+   d'emblée -- les leçons cumulées des 6 rounds tenaient.
+2. **Harnais 1s/itération + balayages SYSTÉMATIQUES scriptés** (16-30
+   variantes par lot, scorées au nombre de lignes de diff normalisé) au
+   lieu d'hypothèses une par une -- ce que le round 6 n'avait jamais
+   fait.
+3. **Dumps RTL du compilateur lui-même** : `agbcp -dl -dg` écrit
+   `gccdump.lreg`/`gccdump.greg` (pseudos, refs, longueurs de vie,
+   ordre trié, assignations). La formule de priorité a été lue dans le
+   `global.c` de `pret/agbcc` (GitHub) :
+   `floor_log2(refs)*refs/live_length`, départage par numéro d'allocno.
+   Ça transforme le "mur d'allocateur" en système d'équations lisible.
+
+### Les formes C qui ont fait tomber la fonction (dans l'ordre des gains)
+
+- **Flags en temporaire-puis-store-unique** (`hr`/`hb`/`rb` puis
+  `has_right = hr;` etc.) -- reproduit le motif movs/cmp/movs/str à un
+  seul `str` par flag.
+- **`row_product`/`delta` = copies fonction-scope de locaux chauds
+  TL** (`rp`/`d`), assignées APRÈS le calcul des bornes de la boucle TL
+  -- leurs assignations SONT `str r3,[sp,#0x9c]` et `mov sb,r6` ; la
+  boucle TL lit les locaux chauds (r3/r6), les blocs suivants lisent
+  les copies (pile/sb). Même idiome "écrit ici, relu ailleurs" que le
+  corps plain.
+- **`rp = tile_y * width_tiles`** -- l'ORDRE DES OPÉRANDES du `muls`
+  (règle 5bis étendue à la multiplication) : `width_tiles` doit être
+  l'opérande déplacé dans le registre de calcul ; c'est ce qui force le
+  produit en scratch r0 + copie vers r3 (le registre mourant de
+  `tile_y`) et aligne `tile_y`/la constante 7 sur r3/r2. Un seul swap
+  d'opérandes = 74 -> 36 lignes de diff.
+- **TR/BR : adresses en réassignations successives d'une même
+  variable** (idiome BR du corps plain), TL/BL en une expression pliée.
+- **TR : copies `start`/`stop` alimentant `src`/`end`** -- les refs
+  supplémentaires du pseudo CSE partagé parquent le pointeur source en
+  r5 au lieu de voler r2.
+- **LA PERCÉE FINALE : `right_tmp`, UNE variable déclarée dans le scope
+  `has_right`, utilisée comme ANCRE COULEUR par la boucle TR puis
+  RÉASSIGNÉE comme ACCUMULATEUR D'ADRESSE par le bloc BR.** Le pseudo
+  fusionné (refs TR + refs BR, fl2 supérieur) gagne la course de
+  priorité pour `r2` qu'aucune variable par-bloc ne pouvait gagner
+  (l'ancre seule : 5 refs/22 insns = 4348 ; perdait contre le pointeur
+  de fin TR à 4706). C'est le jumeau recolor du `right_addr` partagé
+  TR/BR du plain -- mais avec des rôles SÉMANTIQUEMENT DIFFÉRENTS dans
+  chaque bloc, la raison pour laquelle 6 rounds ne l'ont pas imaginé.
+  Diff normalisé : 6 -> 0 lignes d'un coup.
+
+### Vérification (standard officiel `DECOMP_RULES.md`)
+
+- `.text` du `.o` : `0x1f4` == `0x0804E7A0 - 0x0804E5AC` exactement.
+- Rebuild propre complet (`rm -rf build fomt.gba fomt.elf fomt.map`,
+  stub `build/franglais_stub.bin` factice pour le lien) : lien sans
+  erreur, `fomt.map` place `src/code_0804E5AC.o` à `0x0804e5ac`.
+- **Diff OCTET PAR OCTET contre `baserom.gba`** (pas seulement
+  mnémonique) : région `[0x4E5AC, 0x4E7A0)` byte-identique, ET région
+  suivante `[0x4E7A0, 0x4E8F0)` (`func_0804E7A0`/`func_0804E7DC`,
+  déplacées vers `asm/code_0804E7A0.s`) byte-identique aussi -- le
+  split n'a rien décalé. `sha1sum -c fomt.sha1` échoue comme attendu
+  (payload franglais, non-signal documenté).
+- Aucun label `.L0804E5AC` résiduel dans `asm/*.s`.
+
+### Fichiers
+
+- `src/code_0804E5AC.cc` (nouveau) : `DrawGlyphAtRecolor`, alias de
+  compatibilité `func_0804E5AC`, commentaire d'en-tête complet avec les
+  shapes matching-critical.
+- `asm/code_0804E5AC.s` supprimé ; reste du fichier (`func_0804E7A0`,
+  `func_0804E7DC`) -> `asm/code_0804E7A0.s` (règle 14 appliquée au
+  `.align 2,0` de queue).
+- `fomt.lds` : entrée remplacée par les deux nouvelles.
+- `DECOMP_RULES.md` : nouvelle règle 17 (variable partagée entre blocs
+  à rôles différents + technique des dumps `-dl -dg`).
+- `DECOMP_ARCHIVE.md` : entrée "pression de registres" de la cible
+  clôturée, ligne ajoutée à la table des matchs.
+
+### Repo state en fin de round
+
+- 1 commit (voir `git log`), `git status --short` vide après commit.
+- `origin` intact (URL cassée volontairement), rien poussé, pas de PR.
+
+## Round w73 (worktree `parallel-73`) -- suite du sweep w70, 10 fonctions matchées, 1 near-miss à 6 octets, plusieurs cibles caractérisées
+
+Re-scan complet avec `scan_hidden_code_blobs_v2.py` (déjà corrigé
+round w70) : 68 gaps -> **58 gaps** au début de ce round (les 18
+fonctions matchées w70 avaient déjà réduit le compte), **54 gaps**
+après ce round (4 gaps de plus consommés, plusieurs gaps contenaient
+2 à 8 fonctions chacun).
+
+**10 fonctions matchées ce round, 4 commits, toutes vérifiées bit-exact**
+(harnais rapide + comparaison octet-à-octet isolée `.o`/`baserom.gba`
++ `make compare` relink complet) :
+
+- `func_08009790` (`asm/code_08008DE8.s`, devenu `asm/code_080097A4.s`
+  après split) : sibling de `func_0800977C` (déjà connu) mais appelle
+  `CpuFastSet` DIRECTEMENT au lieu de passer par le wrapper validant
+  `func_08008E64` -- copie `0x100` mots (1024 octets, exactement la
+  taille de l'OAM GBA) de `self+4` vers l'OAM réelle (`0x07000000`).
+  Aucun appelant `bl` connu.
+- `func_08009878`/`func_08009898` (2 fonctions dans un gap de 52o) :
+  `func_08009878` reprend le même idiome flush-OAM puis appelle
+  `func_08009834` (encore asm-only) ; `func_08009898` est un simple
+  séquenceur à 2 appels (`func_080097A4` puis `func_08009834`).
+- 8 fonctions accesseurs à `func_080D0C68` (gap de 108o dans
+  `asm/code_080CAD10.s`) : struct brute de 4 octets `{f0,f1,f2,f3}`
+  utilisée comme 2 paires u16 little-endian `(f0,f1)`/`(f2,f3)` --
+  setter/getter/copie/comparaison. **Ce gap est dans le même fichier
+  que l'arbre `Unpack` déjà exclu (`DECOMP_ARCHIVE.md`,
+  ~0x080D102C-0x080D1600) mais N'EN FAIT PAS PARTIE** : fonctions
+  feuilles ordinaires, `r0`-`r3` toujours rechargés, aucune violation
+  d'ABI partagée entre `bl`. Vérifié par lecture complète du
+  désassemblage avant de porter (pas juste la proximité d'adresse).
+- 5 fonctions wrapper à `func_0801DD3C` (gap de 60o dans
+  `asm/code_08012028.s`) : répétition exacte de l'idiome de
+  `func_0801DD30` (déjà connu, juste avant) -- déréférencer `self+4`
+  et transmettre le pointeur à une cible différente à chaque fois
+  (`func_080A6234`/`6278`/`62BC`/`607C`/`6024`).
+
+**Near-miss caractérisé, non résolu -- `func_08050C70`** (gap de 80o
+dans `asm/code_0804E9C8.s`, entre `func_08050C64` et `func_08050CC0`) :
+reproduit le motif "Location locale" déjà documenté (`func_08011ED8`,
+round 9) -- `u8 buf[8]; u8 extra;` locaux, `extra=0;` puis
+`memset(buf, 0, &extra - buf)` (taille calculée par soustraction de
+pointeurs entre 2 variables locales DISTINCTES, pas `sizeof` --
+confirmé nécessaire pour empêcher agbcp de plier la taille en
+immédiat : testé avec un seul tableau `buf[9]` unique, ça foldait en
+`movs r2,#8` alors que la cible calcule via `add`/`subs`), puis
+`buf[2]=1; buf[3]=21; buf[7]=1;` puis copie struct-à-struct
+`*(Loc2*)self = local;` (déclenchant bien le `ldmia`/`stmia` bloc
+2 mots, confirmé avec `Loc2{u8 b[8];}` -- accès en champs nommés
+`u32 a,b` NE déclenche PAS le même codegen, à éviter). Taille obtenue :
+**56 octets sur 62 attendus** (`.text` 0x38 vs gap réel 0x3E) -- écart
+de 6 octets EXACTEMENT localisé aux 3 écritures de champ : la cible
+fait `mov r0,sp; adds r0,#N; strb rX,[r0,#0]` (2 instructions, adresse
+recalculée à chaque champ) alors que TOUTE formulation testée
+(indexation `buf[N]`, arithmétique pointeur `*(buf+N)`, champs nommés
+dans un struct) fait plier agbcp en un seul `strb rX,[r0,#N]` à
+offset immédiat. Tenté sans succès : indexation directe, pointeur
+explicite, champs nommés struct. Root cause non trouvée -- piste non
+essayée : peut-être une fonction `helper` séparée appelée 3 fois avec
+l'offset en paramètre (empêchant tout folding d'offset immédiat côté
+appelant), ou un cast via union pour forcer un type non-tableau.
+Reste une bonne cible pour un prochain round (le reste de la fonction
+est déjà résolu à 100%, seul cet idiome de 3 écritures résiste).
+
+**Cibles caractérisées mais pas attaquées ce round** :
+
+- `asm/code_08037A04.s` `.L08037CDC` (20o, entre `func_08037CC4` --
+  un vrai constructeur `AEntity` posant `vtable_unk_080E7444` à
+  `self+0x14` -- et `func_08037CF0`) : fonction FEUILLE (pas de
+  `push`/`bl`), prend `r0`=dst, `r1`=pointeur vers un objet avec 2
+  champs `s16` à +0xA/+0xE (`ldrsh`), écrit 4 `s16` dans `dst` :
+  `dst[0]=champA; dst[1]=champE+1; dst[2]=champA; dst[3]=champE+1`
+  (rectangle dégénéré "1 tuile", motif façade/collision classique
+  Harvest Moon). Aucun appelant `bl` -- très probablement appelée par
+  dispatch virtuel via `vtable_unk_080E7444` (orpheline en `bl` mais
+  pas en usage réel). Pas attaquée : aucune classe `Location` encore
+  décompilée dans ce dépôt (`include/*.hh` ne contient aucun
+  `class Location`), donc les offsets +0xA/+0xE et le layout exact du
+  destinataire restent des suppositions -- porter maintenant risquerait
+  de figer un mauvais nom/layout. Attendre qu'une classe apparentée
+  soit décompilée ailleurs, ou attaquer directement si un futur round
+  veut assumer le risque (le code lui-même est trivial, feuille, sans
+  ambiguïté de FORME -- seule la SÉMANTIQUE des offsets est incertaine).
+- 4 gaps de taille moyenne/grande non examinés en détail faute de
+  budget, candidats prioritaires pour un prochain round : `.L08069EB4`
+  (96o, `asm/code_08069E98.s`), `.L0804EB64` (288o,
+  `asm/code_0804E9C8.s`), `.L0801D9BC` (392o, `asm/code_08012028.s`),
+  et 2 gaps nettement plus gros `.L08022C60` (1704o) / `.L080238F4`
+  (1724o) dans `asm/code_08022320.s` -- taille suggérant plusieurs
+  fonctions ou une table de données mal classée `.byte` plutôt qu'une
+  simple fonction cachée isolée, mérite un examen dédié avant de
+  s'engager (pas la même classe que les petits gaps "sibling wrapper"
+  traités ce round).
+- `asm/code_08036DC4.s` `.L08036E00`, `asm/code_080756D0.s`
+  `.L08075E00`, `asm/code_0809C32C.s` `.L0809C4EC`,
+  `asm/code_080A3774.s` `.L080AAF9C` : toujours les 4 cibles
+  caractérisées par w70, non reprises ce round (déjà documentées en
+  détail ci-dessus dans le round w70).
+- `func_08008D10` : near-miss w70 (littéral 5 via pool+double-shift),
+  non repris -- aucune idée réellement neuve trouvée ce round.
+
+Rebuild propre + relink complet confirmés à chaque commit (`sha1sum -c
+fomt.sha1` échoue comme attendu depuis `cb06198`, pas une régression).
+`git status --short` propre après les 4 commits, `origin` intact, rien
+poussé, aucune PR.
+
+## Round w74 (worktree `parallel-74`) -- application méthode `-dl -dg`
+(règle 17) aux 2 near-miss "allocation de registre pure" les mieux
+caractérisés (`func_08050EBC`/`func_08050E98`, `func_0809C4EC`) : **1
+mécanisme root-causé avec certitude, 0 match, aucun commit de code**
+
+Mission : appliquer la méthode de diagnostic `agbcp -dl -dg`
+(`gccdump.lreg`/`gccdump.greg`) qui a débloqué `func_0804E5AC` round w66
+aux 2 near-miss les plus resserrés du dépôt (respectivement 10/19 et
+15/17 instructions déjà identiques). **Aucun des deux n'a été débloqué**
+-- mais dans les deux cas le dump a permis de comprendre EXACTEMENT
+pourquoi, avec un niveau de certitude qu'aucun round précédent (w39/w41/
+w49/w69/w72, tous par simple lecture du désassemblage cible) n'avait
+atteint. Détail utile pour évaluer les limites réelles de la règle 17,
+pas seulement ses succès.
+
+### `func_0809C4EC` (`IsFlagClear`) : le dump confirme que le near-miss
+n'est PAS accessible par reformulation C, la faute revient à un
+canonicalisation FAITE AVANT l'allocation de registres
+
+Formulation de référence (round w72, 15/17 instructions identiques) :
+`u32 mask=0; if(index<=13) mask=1u<<(index&0x1F); u32 word=*(u32*)self;
+bool set=!!(word&mask); return !set;` -- recompilée à l'identique
+(confirmé bit pour bit). Dump `gccdump.greg` (`Pass 1 registres`,
+tri par priorité) : le pseudo qui porte le résultat booléen final
+(`negs`/`orrs`/`lsrs #0x1f`, appelé ici pseudo 38) a `refs=4,
+live_length=4` -> priorité `floor_log2(4)*4/4 = 2` ; le pseudo qui porte
+la constante littérale `1` (pseudo 33, mode QI) a `refs=2, live_length=4`
+-> priorité `floor_log2(2)*2/4 = 0.5`. Le pseudo 38 est alloué EN
+PREMIER (priorité plus haute) et prend le registre `r0` déjà "hérité"
+de la chaîne `negs`/`orrs` (source du `lsrs`, mort au même point --
+réutilisation naturelle, pas de coût de copie) ; le pseudo 33, alloué
+ensuite, se rabat sur `r1` (premier registre encore libre). La cible
+veut l'inverse : constante `1` -> `r0`, booléen -> `r2`.
+
+**3 reformulations testées pour essayer de renverser cette priorité**
+(toutes recompilées, `-dl -dg` vérifié à chaque fois) :
+- `return set ^ 1;` (au lieu de `return !set;`) -- RTL et octets
+  **strictement identiques** au premier essai.
+- `u32 one = 1; return one ^ set;` (matérialise la constante dans une
+  variable nommée, déclarée juste avant le `return`, dans l'espoir de
+  changer son ordre de création de pseudo) -- **identique aussi**.
+- `u32 result = 1 ^ (u32)set; return (bool)result;` (force la constante
+  en mode SImode plutôt que QImode, pour égaliser sa classe avec le
+  pseudo 38) -- **identique aussi**.
+
+**Diagnostic tiré du dump, pas d'une supposition** : `agbcp` canonicalise
+un XOR commutatif (et le replie avec la conversion booléenne `!`/`!!`)
+**avant** la passe qui assigne les numéros de pseudo-registre locaux --
+peu importe l'ordre syntaxique des opérandes dans le `.cc`, le RTL
+généré (donc les refs/live_length/priorités calculés ensuite) est
+STRICTEMENT identique pour les 3 formulations testées. Ce n'est pas
+(contrairement au cas `func_08050EBC` ci-dessous) un problème de
+priorité qu'une reformulation plausible peut renverser : le point de
+levier (le refs/live_length du pseudo 33) n'est PAS exposé au niveau
+source pour ce genre d'expression -- toute tentative de le changer est
+absorbée par la canonicalisation en amont. **Conclusion pour la règle
+17** : le dump `-dl -dg` reste un outil de DIAGNOSTIC fiable (il dit
+EXACTEMENT quel pseudo gagne et pourquoi, en une compilation, sans
+deviner), mais il ne garantit pas qu'un levier de reformulation C
+existe -- ici, il n'y en a pas trouvé, ce qui resserre encore la
+conclusion round w72 ("bon candidat pour escalade `fable`") en
+"quasi certainement nécessite un levier hors-C (agent `fable` pour une
+idée de structure totalement différente, ou accepter le near-miss
+comme définitivement fermé pour du C plausible)".
+
+### `func_08050EBC` (setter bitfield, `self+0x550`) : mécanisme EXACT
+du near-miss root-causé -- contrainte 2-opérandes de Thumb `ORRS` +
+priorité d'allocation, mais aucun levier trouvé pour la renverser
+
+Formulation de référence (round w69, meilleure variante avec
+`push {r4,lr}`) : `Pack *pack = (Pack*)(*(u8**)self + 0x550);
+mask |= pack->low; pack->low = mask;` avec
+`struct PACKED Pack { u8 low:6; u8 high:2; };`. Recompilée : confirme
+`push {r4,lr}` présent, mais `orrs r2, r1` là où la cible fait
+`orrs r1, r0` (rôles r0/r2 inversés sur TOUTE la suite de la fonction --
+un swap global, pas un défaut ponctuel).
+
+**Mécanisme exact lu dans `gccdump.lreg`/`gccdump.greg`** : Thumb `ORRS`
+est une instruction 2-opérandes stricte (`Rd = Rd | Rm`, `Rd` DOIT être
+l'un des deux registres source). Le RTL de l'expression
+`mask | pack->low` est `(set reg30 (ior reg23 reg30))` où `reg23` =
+paramètre `mask` (transféré depuis `r1` à l'entrée) et `reg30` = la
+chaîne d'extraction du champ bas (`lsls`/`lsrs`, refs=6, live_length=7,
+priorité `2*6/7≈1.71`). `reg23` (le paramètre `mask`) a une priorité
+minuscule (`refs=2, live_length=11` -> `1*2/11≈0.18`) car son
+`live_length` RTL couvre TOUT le calcul de pointeur (`ldr`+`movs`+
+`lsls`+`adds`) entre son chargement à l'entrée et son unique usage --
+même si `mask` n'est pas touché pendant ce calcul, il compte comme
+"vivant" pendant toute cette fenêtre. `reg30`, alloué en premier
+(priorité 10x supérieure), garde donc SON PROPRE registre (`r2`) comme
+destination in-place du `ior`, ce qui donne `orrs r2, r1` -- et non
+l'inverse voulu.
+
+**Levier tenté, conforme à la règle 17 (agir sur `live_length` plutôt
+que deviner une syntaxe)** : réduire le `live_length` RTL du pseudo
+`mask` en introduisant une copie explicite juste avant usage
+(`u32 m = mask; m |= pack->low; m &= 0x3F; pack->low = m;`), dans
+l'esprit de la règle 11 (variable-copie explicite qui force un nouveau
+pseudo à durée de vie courte). **Résultat contre-productif** : `agbcp`
+a purement et simplement éliminé la copie (`m` coalescé avec `mask`,
+aucun nouveau pseudo créé), ET a par ailleurs complètement changé
+l'allocation de pression de registres de la fonction entière -- retour
+à un schéma sans `push {r4,lr}` (octet brut réutilisé dans `r3` au lieu
+de `r4`), une régression par rapport à la variante de référence, pas un
+progrès. Aucune autre formulation testée n'a réussi à raccourcir
+`live_length(mask)` sans que le compilateur ne coalesce la copie.
+
+**Conclusion pour la règle 17** : contrairement à `func_0804E5AC` (round
+w66) où le dump a permis de PRÉDIRE et appliquer un fix qui a fait
+tomber la fonction, ici le dump a permis de comprendre EXACTEMENT le
+mécanisme (contrainte d'encodage 2-opérandes + formule de priorité) --
+mais le levier théoriquement identifié (raccourcir `live_length(mask)`)
+s'est avéré non actionnable en C plausible dans ce cas précis : `mask`
+est un paramètre de fonction, vivant dès la toute première instruction
+par construction ABI, et toute tentative de raccourcir artificiellement
+sa fenêtre de vie via une copie est absorbée par le compilateur avant
+que l'allocateur de registres ne la voie. Généralise potentiellement à
+toute future cible où le pseudo "à repriorer" est un PARAMÈTRE de
+fonction (par opposition au cas w66 où les deux rôles en conflit
+étaient tous deux des locaux internes à la fonction, sans contrainte
+ABI figeant leur point de naissance) -- signal pratique à ajouter à la
+règle 17 : le dump prédit fiablement le VAINQUEUR de la course de
+priorité, mais renverser ce vainqueur suppose de pouvoir bouger le
+`live_length`/`refs` du PERDANT sans que le compilateur ne l'annule --
+plus difficile, voire structurellement impossible, quand le perdant est
+un paramètre.
+
+### État du dépôt en fin de round
+
+Aucun fichier du dépôt modifié (les 2 cibles restent en `.byte`/asm brut
+non porté) -- seul ce fichier `SESSION_NOTES.md` change. Toutes les
+compilations d'expérimentation ont eu lieu hors du dépôt (`/tmp/w74_scratch`),
+aucun `make compare`/rebuild nécessaire. `git status --short` propre
+avant et après (hors ce commit de documentation). `origin` intact
+(URL cassée volontairement), rien poussé, aucune PR. Ces 2 fonctions
+restent de bons candidats pour une escalade `fable` future (stratégie
+`DECOMP_RULES.md`) -- le budget "reformulation C" semble maintenant
+épuisé pour les deux, avec un diagnostic de blocage précis et vérifié
+plutôt qu'une simple accumulation d'essais.
+
+## Round w75 (worktree `w75`) -- application de la règle 17 (`agbcp -dl -dg`)
+aux 2 near-miss `func_08075334` (w57/w63) et `.L08037250` (w72) : progrès
+mesurable sur la 1re, toujours pas matchée ; rien de neuf sur la 2e,
+RIEN COMMITÉ (aucune des deux n'est bit-exacte)
+
+Mission : appliquer la méthode de diagnostic découverte round w66/règle 17
+(`agbcp -dl -dg` produit `gccdump.lreg`/`gccdump.greg` dans le cwd, qui
+exposent refs/live_length/priorité RÉELS de chaque pseudo-registre au lieu
+de deviner) aux 2 cibles bloquées les plus caractérisées du dépôt.
+
+### Cible 1 -- `func_08075334` (`asm/code_08070A08.s:9622-9779`, 284o),
+5e tentative -- résidu réduit de 26 à 68 octets bit-exacts, casse encore
+sur un choix de slot de pile, PAS commité
+
+Repartant du near-miss w63 (26 premiers octets du CORPS bit-exacts, taille
+`.text` fausse de 16 octets). Deux corrections trouvées ce round, la
+2e directement guidée par les dumps `-dl`/`-dg` :
+
+1. **`QueueItem` ne doit PAS être `PACKED`** -- w63/w72 avaient supposé
+   qu'un struct local nécessitait `PACKED` pour matcher les largeurs
+   d'accès (vrai pour `.L08037250`, FAUX ici) : `QueueItem
+   {u16 f0,pad; u32 f4,f8,fc;}` est déjà naturellement aligné (aucun
+   padding implicite), donc pas besoin de `PACKED`. Avec `PACKED`,
+   agbcp compile `*dst = *src` (l'assignation struct de l'item) en un
+   VRAI appel `bl memcpy` (taille alignement=1 déclenche la version
+   générique) au lieu du motif `ldmia/stmia` inliné à 4 registres que
+   montre la cible. Sans `PACKED` : `ldmia r1!,{r2,r3,r4}; stmia
+   r0!,{r2,r3,r4}; ldr r1,[r1]; str r1,[r0]` reproduit EXACTEMENT les 3
+   sites de copie de la cible (item->write simple, copie de croissance,
+   copie de l'item après croissance). Nouvelle règle générale probable
+   pour `DECOMP_RULES.md` : `PACKED` ne doit être appliqué QUE si le
+   struct a un vrai trou d'alignement à combler -- sinon il bascule
+   agbcp sur la version `memcpy` générique au lieu de l'inlining normal.
+2. **Ordre de calcul `q` (self+0x594) AVANT `item_ptr` (adresse locale),
+   pas l'inverse** -- w57/w63 déclaraient `item_ptr` avant `q` (ordre
+   "naturel" du rôle : on construit d'abord l'item local, puis on va
+   chercher la queue). La cible fait l'inverse : `adds r5,r0,r1` (calcul
+   de `q`) PUIS `mov sb,sp` (cache de `&item`). Corriger cet ordre de
+   déclaration (`Queue *q = ...; QueueItem *item_ptr = &item;`) a fait
+   basculer `q` de `r6` vers **`r5` -- exactement le registre cible**,
+   ce qui était le blocage n°1 documenté par w63 comme "jamais résolu
+   par aucune permutation testée". Généralisation probable : quand DEUX
+   valeurs adjacentes sont candidates au même rôle callee-saved, agbcp
+   semble privilégier la MOINS récemment déclarée pour le registre le
+   plus "bas" du pool disponible -- à vérifier sur d'autres cas.
+
+Avec ces deux corrections + les 3 acquis de w63 (inversion if/else,
+idiome `fallback`/`amount_ptr` pour le ternaire d'adresses, boucle morte
+avec lecture `write` avant `base`), harnais rapide : **68 premiers octets
+du corps bit-exacts** (`cmp -l` contre les octets extraits de
+`baserom.gba` à `0x08075334`, longueur 284), soit plus du double du
+near-miss w63 (26o). Taille `.text` mesurée `0x118`/280 octets contre
+`0x11c`/284 attendus (**écart réduit à 4 octets/2 instructions**, contre
+16 octets pour w63) -- signe qu'il ne reste plus qu'UNE seule
+divergence structurelle, pas plusieurs cumulées.
+
+**Nouveau blocage isolé via les dumps (règle 17 appliquée avec succès
+pour LOCALISER, pas encore pour RÉSOUDRE)** : la divergence restante est
+un swap complet des SLOTS DE PILE entre `append_count` (la constante 1
+utilisée par l'idiome de secours du ternaire) et `old_count` (le nombre
+d'items existants avant croissance). `gccdump.lreg` du candidat identifie
+précisément :
+```
+(insn 118 ... (set (reg:SI 60) (const_int 1)) ...
+    (expr_list:REG_EQUIV (mem/f:SI (plus:SI (reg:SI 7 r7) (const_int 16)) 38) ...))
+;; pseudo 60 = append_count, équivalent mémoire r7+16
+
+(insn 128 ... (set (reg:SI 58) (ashiftrt:SI (reg:SI 56) (const_int 4))) ...)
+(insn 130 ... (set (mem/f:SI (plus:SI (reg:SI 7 r7) (const_int 20)) 38) (reg:SI 58)) ...)
+;; pseudo 58 = old_count, stocké à r7+20
+```
+soit **`append_count` -> offset 16, `old_count` -> offset 20** dans le
+candidat -- alors que le désassemblage cible fait l'inverse
+(`append_count`/growth -> offset 20, `old_count` -> offset 16, confirmé
+par extraction+désassemblage direct des octets de `baserom.gba`, pas une
+supposition). Trois hypothèses testées pour expliquer/inverser ce swap,
+**toutes réfutées empiriquement** (harnais rapide, aucun effet sur les
+offsets observés) :
+- Permuter l'ORDRE DE DÉCLARATION C de `append_count`/`old_count` (avant
+  vs après le calcul de `old_write`/`old_base`) : aucun effet, mêmes
+  offsets 16/20 dans les deux sens.
+- Déclarer `old_count` comme variable vide (non initialisée) AVANT
+  `append_count`, puis l'assigner après coup (dissocier le point de
+  DÉCLARATION du point d'ASSIGNATION) : aucun effet.
+- Inverser la polarité du test (`if (old_count>=1) ... else ...` au lieu
+  de `if (!(old_count>=1))`) sur le choix du pointeur de secours : aucun
+  effet sur les offsets ni sur l'encodage de la comparaison (`cmp r?,#1;
+  bcs` cible vs `cmp r?,#0;bne` candidat -- résidu déjà noté par w63,
+  toujours pas résolu, semble être une canonisation systématique
+  d'agbcp indépendante de la formulation C testée).
+**Conclusion round** : l'attribution du slot de pile (quel offset reçoit
+quelle variable parmi 2 locales adressées après un même point de
+référence commun `item`/`q`) ne dépend PAS de l'ordre textuel de
+déclaration, d'assignation, ni de la polarité du test qui les relie --
+elle dépend d'un facteur non encore isolé (peut-être lié au nombre TOTAL
+de locales adressées ailleurs dans la fonction, ou à un pass d'allocation
+de frame antérieur à la génération RTL que les dumps `-dl`/`-dg` ne
+couvrent pas directement puisqu'ils documentent l'allocation de
+REGISTRES, pas l'allocation de SLOTS DE PILE). Piste non épuisée pour un
+futur round : dumper avec un flag GCC additionnel ciblant le pass
+d'allocation de frame (`-dr`? à vérifier dans `tools/agbcc/` si le
+source est un jour rapatrié dans un worktree), ou tester des variantes
+avec un NOMBRE différent de locales adressées ailleurs dans la fonction
+pour voir si ça fait bouger l'affectation des offsets 16/20.
+Non commité (candidat toujours pas bit-exact au-delà de l'octet 68).
+Testé uniquement dans `/tmp/w75scratch/` (hors dépôt).
+
+### Cible 2 -- `.L08037250` (`asm/code_08036DC4.s`, 28o, entre
+`func_08037244`/`func_0803726C`), 2e tentative dédiée -- confirmation
+supplémentaire du modèle, toujours pas de 2e registre de base, PAS commité
+
+Repartant du near-miss w72 (struct `PACKED Loc4{u16 a,b,c,d;}` +
+barrière -> taille/strh/ordre corrects mais UN SEUL registre de base
+réutilisé pour les 4 champs, alors que la cible en utilise DEUX : `r3`
+pour les offsets 2/4/6, `r2` pour l'offset 0 seul -- confirmé par
+extraction+désassemblage direct des octets de `baserom.gba` à
+`0x08037250`, longueur 28).
+
+**Piste testée cette fois : deux locales SÉPARÉES au lieu d'un seul
+struct à 4 champs**, comme suggéré par w72. Résultat : **la piste "deux
+variables locales top-level distinctes" est ÉCARTÉE** -- toute
+combinaison testée (`u16 a` + `struct{u16 b,c,d;}` séparés, avec ou sans
+`PACKED` sur le second, quel que soit l'ordre de déclaration/assignation)
+fait que le second local (peu importe lequel) récupère un slot de pile
+ARRONDI À 4 OCTETS (padding), donnant une taille de trame totale de 12
+octets au lieu des 8 exacts de la cible -- **chaque local top-level
+semble toujours arrondi à un multiple de 4 octets dans son propre slot,
+indépendamment de `PACKED`** (qui ne contrôle que le padding INTERNE d'un
+struct, pas l'arrondi de son slot de pile global). Nouvelle règle
+probable pour `DECOMP_RULES.md` : pour obtenir une trame de pile SANS
+aucun octet de padding entre deux locales adjacentes, elles doivent être
+des CHAMPS d'un seul et même objet adressable (pas deux locales
+top-level séparées, même packées individuellement).
+
+**Piste struct imbriqué (`struct Loc4{u16 a; struct PACKED{u16 b,c,d;}
+grp;}`)** : reproduit la taille exacte (8o), les 4 `strh` aux bons
+offsets (0/2/4/6), les 2 relectures de mots finales -- **mais un seul
+registre de base** (`r1`), comme le struct plat testé par w72. Deux
+variantes pour forcer un second registre, toutes deux ÉCARTÉES :
+- Référencer `&loc.grp` en plus de `&loc` dans la barrière
+  `asm volatile` SANS variable pointeur intermédiaire : agbcp reconnaît
+  la même base par CSE et n'ajoute qu'un calcul mort (`mov r2,sp; adds
+  r1,#2`, jamais utilisé pour une vraie écriture) -- **4 octets de PLUS**
+  que la cible, toujours un seul registre pour le travail réel.
+- Passer par un pointeur explicite `Sub3 *grp_ptr = &loc.grp;` puis
+  écrire `grp_ptr->b = 0;` etc. : déclenche exactement le piège déjà
+  documenté par w72 -- les écritures deviennent des `strb` (store byte)
+  au lieu de `strh`, parce qu'écrire à travers un pointeur générique vers
+  un struct `PACKED` perd l'information de largeur naturelle des champs
+  que la compilation directe (`loc.grp.b = 0`) conserve. Écarté
+  immédiatement (mauvaise largeur d'accès, pas seulement mauvais
+  registre).
+**Conclusion round** : le modèle structurel (2 locales avec une adjacence
+mémoire exacte) est correct pour la TAILLE et les ACCÈS, mais la cause du
+second registre de base reste non identifiée -- ni la séparation
+top-level (bloquée par l'arrondi à 4 octets), ni le nesting avec référence
+supplémentaire (bloqué par CSE ou par la dégradation en `strb`) ne la
+reproduisent. Piste non tentée : un vrai DEUXIÈME OBJET adressable
+distinct mais placé par un mécanisme qui évite l'arrondi à 4 octets --
+peut-être un tableau `u16 buf[4]` unique avec DEUX pointeurs typés
+différemment dessus (`u16*` vs un struct 3-champs) calculés à des
+moments différents du programme plutôt que par une seconde variable
+déclarée. Non exploré faute de temps ce round.
+Non commité (candidat structurellement correct mais 1 seul registre de
+base au lieu de 2). Testé uniquement dans `/tmp/w75scratch/` (hors
+dépôt).
+
+### Bilan méthode règle 17 (`-dl`/`-dg`) sur ce round
+
+Utilisée avec succès pour LOCALISER précisément la cause du résidu de
+`func_08075334` (identification certaine des pseudo-registres 60/58 et
+de leurs slots mémoire réels via les annotations `REG_EQUIV`, au lieu de
+déduire uniquement du désassemblage final) -- mais PAS suffisante pour
+la RÉSOUDRE cette fois : les dumps `-dl`/`-dg` documentent l'allocation
+de REGISTRES (pass RTL local/global), pas l'allocation des SLOTS DE PILE
+eux-mêmes, qui semble décidée par un pass antérieur non visible dans ces
+deux dumps. Pour la cible 2, la méthode n'a pas été le facteur limitant
+(le blocage est un choix qualitatif -- combien de registres de base
+distincts agbcp choisit d'allouer pour des locales adjacentes -- pas un
+ordre de priorité lisible dans un dump de registres candidats, puisque
+dans les deux variantes testées agbcp n'a JAMAIS mis en concurrence deux
+pseudo-registres pour ce rôle : soit CSE les fusionne avant même
+l'allocation, soit un seul est proposé).
+
+Repo state en fin de round : `git status --short` propre (rien commité,
+aucun fichier `asm/*.s`/`fomt.lds` touché), tous les candidats testés
+dans `/tmp/w75scratch/` (hors dépôt). `origin` intact, rien poussé,
+aucune PR.

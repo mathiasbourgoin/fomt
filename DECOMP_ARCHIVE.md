@@ -22,6 +22,7 @@ gardée ici.
 | `func_0805E6CC` | `DefinedSprite`, constructeur d'archive | 1 | `648d15f` |
 | `DrawString` (`func_0804E8F0`) | boucle DrawString, police normale | 3, renommé 5 | `ecef66e`, `48ebfa3` + round 5 |
 | `DrawStringRecolor` (`func_0804E958`) | boucle DrawString, recolorée | 3, renommé 5 | `3b2a40d`, `48ebfa3` + round 5 |
+| `DrawGlyphAtRecolor` (`func_0804E5AC`) | blitter par glyphe, variante recoloration | w66 (7e tentative) | (voir `git log`) |
 | `func_08004C54` | destructeur dérivé, enregistrement #12 de la table de scène | 4 | `8ecf106` |
 | `func_080E09B0` | destructeur dérivé "vide" (pas de vtable propre, tail-forward pur vers `func_080007EC`) | 5 | (voir `git log`) |
 | `func_08010158` | destructeur dérivé, classe construite par `func_080D3EF4` (0x554 octets, membre `ScriptEngine` à +8) -- variante SIMPLE (appels directs, pas de dispatch virtuel) de la famille "riche" | 6 | `a85f4b1` |
@@ -121,31 +122,24 @@ même pic de pression de registres.
   la source, pas un artefact. Vérifié bit-exact (harnais rapide 256/256,
   seul le padding final de 2 octets diffère -- zéro-rempli par
   `align_sections.sh` dans le vrai build). Mergé dans `main` (`247e6f3`).
-  **`func_0804E5AC` (variante recoloration) : 4 tentatives, toujours pas
-  matchée, mais progrès net et mesuré à chaque round** -- round 9,
-  généralisation directe échouée (8 octets courts, `dest` swappé en `r9`
-  au lieu de `sl`, mauvaise paire de registres par rapport au corps
-  plain) ; round 10/w22, piste identifiée pas résolue ; round 10/w27,
-  piste `anchor`/`delta` résolue (`anchor` doit être RECALCULÉ dans
-  chaque bloc TL/BL/TR/BR, pas partagé comme `delta` qui lui est un vrai
-  temporaire de portée fonction) mais nouveau résidu de 44 octets trouvé
-  (forme verbeuse `mov r0,sl`+`adds` 3-opérandes non reproduite,
-  s'effondre en 1 instruction compacte) ; round 4/w29, résidu réduit de
-  44 à 24 octets (bloc TL correctement reproduit), cause isolée à une
-  collision de registre entre `anchor` (alloué en `r2`) et le pointeur
-  de fin de boucle `end` (que l'original garde en `r2`, libre) ; round
-  5/w31, résidu réduit à 4 octets, blocage localisé à un seul point
-  (pointeur de fin de boucle du bloc TL en registre haut `ip` au lieu
-  d'un registre bas) ; round 6/w34, **6e échec** -- 2 améliorations
-  mesurées (résidu 24->16->12 octets) mais chaque correction fait
-  RESSURGIR le résidu ailleurs (`dest` réalloué en `r9` au lieu de
-  `sl`), preuve que la pression de registres est pire que prévu, pas
-  juste un idiome manquant. **PAUSE recommandée par round 6 lui-même** :
-  ne pas retenter par itération de forme C -- la seule piste non
-  essayée est une comparaison avec une décompilation Ghidra amont de
-  `StanHash/fomt` pour cette adresse si elle existe. Voir
-  `SESSION_NOTES.md` rounds 9/w22, 10/w27, 4/w29, 5/w31, 6/w34 pour le
-  détail complet de chaque itération.
+  ~~`func_0804E5AC` (variante recoloration)~~ -- **matchée round w66**
+  (7e tentative, apres 6 échecs honnêtes rounds 9/w22, 10/w27, 4/w29,
+  5/w31, 6/w34). La percée finale : `right_tmp`, UNE variable partagée
+  entre le bloc TR (où elle sert d'ANCRE COULEUR de la boucle de
+  recoloration) et le bloc BR (où elle sert d'ACCUMULATEUR D'ADRESSE)
+  -- le jumeau recolor du `right_addr` partagé TR/BR du corps plain,
+  mais avec des RÔLES différents dans chaque bloc, ce qu'aucun des 6
+  rounds n'avait imaginé. Le pseudo fusionné gagne la course
+  d'allocation de `r2` contre le pointeur de fin de boucle TR (priorité
+  globale = floor_log2(refs)*refs/longueur_de_vie, formule vérifiée
+  dans `global.c` de pret/agbcc et par les dumps `-dg`). Autres formes
+  nécessaires : copies `start`/`stop` alimentant src/end du bloc TR ;
+  copies fonction-scope `row_product`/`delta` assignées APRÈS le calcul
+  des bornes TL (leurs assignations SONT le `str [sp,#0x9c]`/`mov
+  sb,r6`) ; `rp = tile_y * width_tiles` (ordre des opérandes du muls,
+  règle 5bis étendue) ; flags calculés en temporaire puis stockés une
+  fois. Voir `SESSION_NOTES.md` round w66 pour la méthode complète
+  (dumps RTL du compilateur + balayages systématiques de variantes).
 - ~~`func_08008980`~~ -- **matchée round w61** (`5a894ec`), bit-exact au
   premier essai malgré la classe "pression de registres" confirmée round
   9/w21 (`r4-r7` + `r8`/`sb`/`ip` vivants simultanément sur tout le
@@ -615,6 +609,24 @@ jamais utilisée dans ce dépôt).
   cible est maintenant un candidat solide (near-miss resserré à un pur
   problème de register allocation, pas de structure), contrairement à
   avant round w69 où la structure elle-même divergeait totalement.
+  **Round w74 (`gccdump.lreg`/`gccdump.greg`, `-dl -dg`) : mécanisme
+  EXACT root-causé, toujours PAS résolu.** Thumb `ORRS` est 2-opérandes
+  stricte (`Rd = Rd | Rm`, `Rd` doit être un des 2 registres source) ;
+  le pseudo `mask` (paramètre, transféré `r1`) a une priorité minuscule
+  (`refs=2, live_length=11` -> `~0.18`) car son `live_length` RTL couvre
+  tout le calcul de pointeur qui précède son unique usage, alors que le
+  pseudo "champ bas extrait" a `refs=6, live_length=7` -> `~1.71` et gagne
+  la course, gardant SON registre (`r2`) comme destination in-place du
+  `ior` (`orrs r2,r1`) au lieu du registre de `mask` (`orrs r1,r0` voulu).
+  Levier tenté (raccourcir `live_length(mask)` via une copie explicite
+  `u32 m = mask;` juste avant usage, esprit règle 11) : **contre-productif**
+  -- `agbcp` coalesce la copie (aucun nouveau pseudo créé) ET change toute
+  la pression de registres de la fonction, perdant même le `push {r4,lr}`
+  de référence. Aucun autre levier trouvé pour repriorer un pseudo qui
+  est un PARAMÈTRE de fonction (vivant dès l'entrée par construction ABI,
+  contrairement au cas w66/`func_0804E5AC` où les 2 rôles en conflit
+  étaient deux locaux internes). Voir `SESSION_NOTES.md` round w74 pour
+  le détail complet (dumps, 4 variantes testées).
 - Blob `.byte` caché massif, `.L08050EE4` dans `asm/code_08050E98.s`
   (**1084 octets** à l'origine, entre `func_08050EBC` et `func_08051320`) --
   découvert round w39 (**angle mort du scanner automatique**,
@@ -673,6 +685,79 @@ jamais utilisée dans ce dépôt).
   reconfirmé que ces fragments sont les SEULS candidats "medium" restants
   dans tout `asm/*.s` avec `.L0809E1B4` ci-dessous -- aucun nouveau blob
   caché de taille intermédiaire/plus grande ailleurs dans le dépôt.
+  **CORRECTIF round w70 : ce constat était faux, à cause d'un vrai bug
+  dans `scan_hidden_code_blobs_v2.py` lui-même** (`block_pure_bytes()`
+  abandonnait silencieusement tout un run dès qu'un bloc `.byte` était
+  collé sans ligne vide à un `thumb_func_start` suivant -- cf.
+  `SESSION_NOTES.md` round w68 pour la découverte du symptôme sur
+  `hardware.s`, jamais corrigé dans le script avant w70). Une fois
+  corrigé, un re-scan complet est passé de 1 à **68 gaps détectés**.
+  18 fonctions déjà matchées ce round (voir `SESSION_NOTES.md` round
+  w70) ; 5 cibles moyennes restent caractérisées mais non portées :
+  - `asm/code_08036DC4.s` `.L08037250` (28o) -- pattern "Location
+    locale zéro-initialisée puis copiée" (motif `func_08011ED8`).
+    **Round w72 : tentée, PAS résolue, near-miss caractérisé.**
+    `struct PACKED Loc4 {u16 a,b,c,d;}` local + barrière
+    `asm volatile("":: "r"(&loc):"memory")` (nécessaire -- sans elle
+    agbcp constant-propage tout en 2 `str` directs vers `self`, aucune
+    pile utilisée) reproduit la taille exacte (28o) et les 4 `strh`
+    corrects (largeur d'accès, `PACKED` nécessaire aussi pour ça --
+    sans lui, merge en 2 `str` mot), mais avec UN SEUL registre de base
+    (`mov r1,sp` réutilisé 4x) alors que la cible en utilise DEUX
+    (`mov r3,sp` calculé en premier pour les offsets 2/4/6, `mov r2,sp`
+    calculé ensuite pour l'offset 0 seul) -- suggère que la vraie
+    source a 2 variables locales adjacentes distinctes (pas 1 seul
+    struct de 4 champs), piste non épuisée (7 variantes tentées :
+    sous-struct imbriqué refusionné par CSE implicite, 2 locals
+    séparés jamais adjacents en pile, pointeurs `Loc4*`/`u16*` typés
+    différemment produisant un mauvais `strb` au lieu de `strh`). Voir
+    `SESSION_NOTES.md` round w72 pour le détail complet.
+  - `asm/code_08036DC4.s` `.L08036E00` (44o) -- vrai ctor C++
+    (`__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi`) + stamp vtable,
+    nécessite le layout de classe complet.
+  - `asm/code_080756D0.s` `.L08075E00` (36o) -- 2 appels conditionnels
+    à `func_08008E64` (non porté), complexité moyenne.
+  - `asm/code_actor_0809BFE8.s` `.L0809C4EC` (36o) -- test de bit
+    dynamique sur un paramètre d'appel (masque pas connu à la lecture
+    du désassemblage). **Round w72 : vérifiée en priorité comme prévu,
+    hypothèse "masque = lecture d'un autre bitfield côté appelant"
+    ÉCARTÉE pour cette fonction précise** -- contrairement à
+    `func_08050E98`/`func_08050EBC` (masque combiné fourni en argument
+    par l'appelant), ici le masque est un simple `1 << (index & 0x1F)`
+    calculé localement à partir du paramètre `index`, pas un masque
+    externe. Structure entièrement comprise (`bool IsFlagClear(void
+    *self, u32 index)`, retourne `true` si `index>13` ou si le bit
+    `index` de `*(u32*)self` est clair), 15/17 instructions reproduites
+    à l'identique, **mais confirme partager EXACTEMENT la même classe
+    de near-miss pur d'allocation de registre que `func_08050EBC`** sur
+    les 3 dernières instructions (le booléen final et la constante `1`
+    échangent de registre entre notre version et la cible). 12
+    formulations testées sans fermer l'écart -- voir `SESSION_NOTES.md`
+    round w72. Bon candidat pour une escalade `fable` future (stratégie
+    DECOMP_RULES.md), commun aux deux fonctions de cette classe.
+    **Round w74 (`gccdump.lreg`/`gccdump.greg`, `-dl -dg`) : diagnostic
+    confirmé, toujours PAS résolu.** Le pseudo qui porte le résultat
+    booléen final (`negs`/`orrs`/`lsrs #0x1f`) a `refs=4, live_length=4`
+    -> priorité `2` ; le pseudo qui porte la constante `1` a `refs=2,
+    live_length=4` -> priorité `0.5` ; le premier est alloué en premier et
+    hérite `r0` de la chaîne `negs`/`orrs`, le second se rabat sur `r1`.
+    3 reformulations testées pour renverser cet ordre (`set^1` au lieu de
+    `!set`, `one^set` avec constante nommée, constante forcée en SImode) :
+    **RTL et octets strictement identiques dans les 3 cas** -- `agbcp`
+    canonicalise le XOR/la négation booléenne AVANT la passe qui calcule
+    refs/live_length, donc l'ordre syntaxique des opérandes en C n'a
+    aucune prise sur le résultat ici (contrairement à `func_08050EBC` où
+    le levier existe en théorie mais est absorbé différemment). Voir
+    `SESSION_NOTES.md` round w74. Conclusion resserrée : ce near-miss
+    précis nécessite très probablement un levier hors-C (idée structurelle
+    `fable`), pas une nouvelle formulation C.
+  - `asm/code_080A3774.s` `.L080AAF9C` (44o+) -- appelle
+    `func_0803A8A4`, déjà signalé "pression de registres" plus haut.
+  Egalement : `func_08008D10` (`asm/code_08008D10.s`) porté comme
+  fonction nommée mais PAS traduit en C -- nouvelle classe de near-miss
+  (littéral entier compilé via pool+double-shift plutôt qu'un `movs`
+  direct, root-cause non trouvée malgré ~6 formulations testées, cf.
+  `SESSION_NOTES.md` round w70).
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
