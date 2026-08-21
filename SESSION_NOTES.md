@@ -10392,3 +10392,185 @@ depuis `cb06198`, non-signal documenté) PUIS diff octet-à-octet direct
 portées + voisinage immédiat non touché, pour détecter tout décalage
 résiduel). `git status --short` propre après chacun des 7 commits.
 `origin` intact (URL cassée volontairement), rien poussé, aucune PR.
+
+## Round w78 (worktree `parallel-78`) -- attaque des 3 gaps moyens
+laissés en suspens par w73 : 1 match, 1 near-miss serré caractérisé,
+1 cible complexe cartographiée mais non attaquée faute de budget
+
+Mission : `.L08069EB4` (96o), `.L0804EB64` (288o), `.L0801D9BC` (392o),
+dans cet ordre. `grep -rl -- ".LADRESSE" asm/*.s` vérifié pour les 3
+avant tout travail (piège du doublon silencieux) -- chacun n'apparaît
+que dans son propre fichier `asm/*.s`, pas de doublon.
+
+### `.L08069EB4` (96o) -- MATCH, commité
+
+3 copies du même idiome "wrapper" déjà connu (famille `func_0801DD3C`,
+round w73) : déréférencer un pointeur à `self+0x120` pour atteindre un
+conteneur externe non modélisé, décaler le résultat vers un sous-objet
+`Barn`/`Coop` embarqué, appeler une de ses méthodes `Count*` déjà
+décompilées (`Barn::CountSheeps`, `Barn::CountCows`, `Coop::CountChickens`
+-- résolues via les symboles mangled `C4Barn`/`C4Coop` de `fomt.map`) et
+booléaniser le résultat `u32` (idiome `negs`/`orrs`/`lsrs #31` standard).
+Aucun appelant `bl` connu. Layout du conteneur externe à `+0x120` non
+modélisé (classe inconnue) -- seule l'arithmétique de pointeur brute
+nécessaire pour atteindre les sous-objets `Barn`/`Coop` est assertée,
+cohérent avec la famille `func_0801DD3C` déjà acceptée dans ce dépôt.
+
+Découpage de fichier : `asm/code_08069E98.s` tronqué juste après
+`func_08069E98`, reste déplacé vers `asm/code_08069F14.s` (nouveau,
+convention de nommage respectée), gap remplacé par
+`src/code_08069EB4.cc`. `fomt.lds` mis à jour pour préserver l'ordre de
+lien. Bit-exact : taille `.text` isolée 0x60 == taille du gap, diff
+octet à octet direct de `fomt.gba` contre `baserom.gba` à
+`0x08069EB4..+0x60` identique après `make compare` (relink complet, le
+check `sha1sum` global échoue comme attendu depuis `cb06198`).
+
+### `.L0804EB64` (288o) -- near-miss serré, root-causé en grande partie,
+PAS commité (fermé proprement, working tree nettoyé)
+
+Fonction unique (pas un groupe de wrappers, contrairement à l'hypothèse
+initiale de taille) : formate un entier signé en glyphes 2 octets
+(système de police à chasse variable de ce jeu, cf. `DrawGlyphAt` dans
+`src/code_0804E4AC.cc`) -- soit en forme "largeur de champ" (justifié à
+droite, espaces de remplissage, signe `-` optionnel) si `width != 0`,
+soit en forme brute signe-puis-chiffres via l'helper itoa non signé déjà
+connu `func_080E0EFC` (`asm/code_linkonce.s`) sinon. Le résultat ASCII
+est ensuite traduit caractère par caractère en codes-glyphe 2 octets via
+3 petites régions de correspondance situées dans l'énorme blob rodata
+encore non découpé `asm/data/data_080F9EB8.o` (0x40D08 octets !) --
+table indexée par `ascii*3` pour les chiffres (vérifié octet à octet :
+`base+0x90` = `82 4F 00` pour `'0'`, stride 0x100 par chiffre jusqu'à
+`base+0xAB` pour `'9'`), entrée fixe à `base+0xB0` pour l'espace,
+`base+0xB4` pour `'-'`, avec `base = 0x080F9E78`. Adressées ici comme
+littéraux hex bruts (aucun symbole existant sans découper ce blob, très
+hors scope pour ce gap -- cohérent avec la règle 10).
+
+Algorithme entièrement reconstruit et vérifié section par section :
+- Conversion en chiffres décimaux via `__modsi3`/`__divsi3` (division
+  SIGNÉE, cohérent avec une valeur déjà rendue positive), buffer
+  temporaire à `sp+12` (16o), buffer de sortie final à `sp+0` (12o) --
+  layout de frame `sub sp,#28` exactement expliqué par deux tableaux
+  locaux `char out_buf[12]; char digit_buf[16];` déclarés dans cet
+  ordre.
+- Idiome de garde redondante confirmé (règle 2) : `if (i < width)`
+  entoure toute la boucle de conversion alors que `i=0` et `width!=0`
+  sont déjà garantis à ce point -- la source originale semble partager
+  ce squelette avec un autre appelant où ce n'est pas garanti.
+- `out_buf[10] = width;` dans la branche `width==0` (offset FIXE 10, pas
+  une adresse calculée `out_buf[width]` comme dans l'autre branche) --
+  reproduit littéralement (le paramètre `width`, encore à 0 dans cette
+  branche, est réutilisé tel quel plutôt qu'un littéral `0` frais).
+- Table des 3 régions de glyphe : DOIT être déclarée comme 3 pointeurs
+  locaux nommés chargés UNE SEULE FOIS avant la boucle
+  (`u8 const *digit_table = ...; space_entry; minus_entry;`), pas
+  inline dans chaque branche -- sinon agbcp recharge chaque littéral à
+  CHAQUE itération au lieu de les hoister (agbcp ne fait pas de LICM,
+  donc le hoisting doit être fait à la main dans le C source). Confirmé
+  en isolant ce changement seul (taille passe de 0x110 à 0x120 = taille
+  cible exacte, avant tout autre fix).
+- `int v = value;` **copie explicite** nécessaire dans la branche
+  `width==0` avant la négation (`if (v<0) {...v=-v;}`) : l'original ne
+  mute PAS le paramètre `value` lui-même dans cette branche (il reste
+  vivant, intact, dans son registre d'origine) -- confirmé par le
+  désassemblage cible qui fait `adds r2,r6,#0` (copie) AVANT `mov r1,sp`,
+  puis `negs r2,r2` (mutation de la COPIE), jamais de `negs r6,r6`.
+  Écrire `v` dans le MÊME ORDRE que le désassemblage (`int v=value;`
+  avant `char *p=out_buf;`, pas après) était nécessaire pour que
+  l'ordre des 2 premières instructions du bloc corresponde (règle 5).
+
+**Résidu non résolu (2 classes distinctes, ~4-8 octets sur 288, budget
+insuffisant pour pousser plus loin)** :
+1. **Swap de registre `value`/`i`** : la cible alloue `value` dans `r6`
+   et l'index de boucle `i` dans `r5` ; toute formulation testée (ordre
+   de déclaration, réordonnancement des affectations, type `bool` vs
+   `u32` pour le drapeau de signe) donne l'inverse (`value`→r5, `i`→r6).
+   Cascade ensuite sur TOUS les registres du bloc glyphe en aval (`r2`
+   attendu vs `r3` obtenu pour le pointeur de scan, etc. -- décalage
+   constant d'un registre). Signature typique de la classe "course de
+   priorité" (règle 17, `floor_log2(refs)*refs/longueur_de_vie`) déjà
+   documentée comme non renversable par reformulation C dans 2 cas sur 2
+   testés au round w74 (`func_08050EBC`, `func_0809C4EC`) -- dump
+   `-dl -dg` confirmé disponible et exploité (`gccdump.greg` montre bien
+   ~21 pseudos réels à allouer avec refs/longueurs de vie variés) mais
+   sans mapping pseudo→registre final explicite dans le dump pour
+   trancher laquelle des 2 variables gagne sans deviner davantage.
+2. **Copie fantôme `adds r2,r1,#0`** juste après le chargement du
+   caractère courant dans la boucle glyphe, absente de la cible : liée à
+   la présence d'un 3e test explicite (`c=='-'`) après le test digit et
+   le test espace dans une chaîne `if/else if/else if/else`. Un
+   if-imbriqué équivalent (`if (c!=' ') { if(c!='-') break; ... } else
+   {...}`) supprime la copie ET tombe pile sur la bonne TAILLE (0x120)
+   mais restructure la forme du bloc final (les 2 tests espace/moins
+   compilent avec `beq` vers des blocs séparés au lieu du `bne`+chute
+   directe de la cible) -- donc toujours pas byte-exact, juste une
+   coïncidence de taille. Correspond assez bien à la classe "pression de
+   registres" déjà documentée dans `DECOMP_ARCHIVE.md` (`DrawGlyphAt`,
+   fermée après 4 tentatives avec un écart irréductible de 2 octets) --
+   **ne pas se réengager sans budget dédié et une idée réellement
+   neuve** (le dump `-dl -dg` n'a pas trouvé de levier cette fois, voir
+   limite documentée round w74).
+
+Toute tentative annulée proprement (`git status --short` propre avant
+et après, aucun fichier créé/modifié laissé dans le dépôt -- le brouillon
+`src/code_0804EB64.cc` a été supprimé après le dernier test).
+
+### `.L0801D9BC` (392o) -- cartographiée en détail, PAS attaquée
+(budget de round épuisé après les 2 cibles précédentes)
+
+Fonction bien plus grosse et complexe que les 2 précédentes : un
+dispatcheur d'état avec table de saut (`switch` à 44 cas, `mov pc, r0`
+après indexation `table[idx*4]`), pas un groupe de petites fonctions
+accolées. Reconstruction complète de la logique de routage (sans porter
+le C) :
+
+```
+handle = *(self + 0x1038);              // ldr via pool littéral =0x1038
+sub = handle + 8;                        // r6, réutilisé dans les cas
+status = *(handle + 8);
+if (status == 1) return 10;
+if ((u32)(status - 3) <= 1) return 11;   // status == 3 ou 4
+record_player = FarmHouse::GetRecordPlayer(handle + 0x1F4);  // 0xfa*2
+vtbl_fn = (*(self))->slot[0x14];         // via _call_via_r1 (0x080D3910)
+kind = vtbl_fn(self);                    // appel virtuel, offset +0x14
+idx = kind;
+if ((u32)(kind - 0x34) <= 0x1FF)
+    idx = 2;                             // large plage de kinds -> case générique 2
+if (idx > 43) goto default_case;         // sinon -> case 14 (voir table)
+switch (idx) { /* 44 cas, table décodée ci-dessous */ }
+```
+
+Table de saut décodée intégralement (44 entrées `.4byte`, base
+`0x0801DA1C`, `idx*4`) via extraction Python directe des octets bruts
+(objdump désassemble le bloc `.byte` de façon linéaire et interprète à
+tort la table comme du code -- ne JAMAIS lire la table depuis la sortie
+`objdump -D` sans réajuster, seulement depuis les octets bruts) : la
+plupart des entrées retombent sur seulement 3 blocs de cas
+(`0x0801DAD0`, `0x0801DB22`, `0x0801DB26`), chacun un petit calcul
+utilisant `RecordPlayer::HasAlbum`/`RecordPlayer::GetUnknown`
+(`func_0800BB74`/`func_0800BB7C` dans `fomt.map`) et `func_0800E324`
+pour retourner une des constantes 1-14 (probablement un enum "état de
+dialogue radio" pour un NPC/objet interactif dans la maison de ferme).
+Callés identifiés via `fomt.map` : `GetRecordPlayer__9FarmHouse`
+(`0x0800C07C`), `HasAlbum__C12RecordPlayer` (`0x0800BB74`),
+`GetUnknown__C12RecordPlayer` (`0x0800BB7C`), `func_0800E324`,
+`func_08012B24` (utilisé par le voisin déjà porté `func_0801D9A8`, pas
+directement par cette cible), `_call_via_r1` (`0x080D3910`, trampoline
+d'appel virtuel standard CFront, pas une vraie cible `bl` nommée).
+
+Pas attaqué en C++ : le volume (392o, table de saut byte-exacte à
+reproduire via un vrai `switch` C, 3+ appels externes non triviaux dont
+1 virtuel) dépasse largement le budget restant de ce round après les 2
+cibles précédentes. Bonne cible dédiée pour un round futur avec budget
+complet -- tout le travail de reverse (layout, table, callés) documenté
+ci-dessus pour éviter de le refaire.
+
+`git status --short` propre en fin de round (seul le commit du match
+`.L08069EB4` reste, rien d'autre modifié/laissé). `origin` intact, rien
+poussé, aucune PR.
+
+**Note post-merge** : le match de `.L08069EB4` a été trouvé indépendamment
+en double par le round w76 (`func_08069EB4`/`08069ED4`/`08069EF4`, déjà
+mergé) -- ce round l'a redécouvert de son côté avant que w76 ne soit
+visible. Version w76 conservée au merge (`git checkout --ours`), version
+w78 écartée (contenu identique de toute façon). Les 2 near-miss
+caractérisés (`.L0804EB64`, `.L0801D9BC`) restent valables et ouverts.
