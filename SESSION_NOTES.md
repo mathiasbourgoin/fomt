@@ -9418,3 +9418,105 @@ compare`), `sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`), diff
 borné byte-à-byte confirmé sur toute la zone reconstituée. `git status
 --short` propre en fin de round, `origin` intact, rien poussé, aucune
 PR.
+
+## Round w70 (worktree `parallel-70`) -- bug de scanner corrigé pour de bon, 18 fonctions matchées, 5 pistes moyennes caractérisées
+
+**Bug de `scan_hidden_code_blobs_v2.py` corrigé** (signalé mais pas
+corrigé round w68) : `block_pure_bytes()` retournait `None` dès qu'un
+bloc pur-`.byte` était immédiatement suivi (sans ligne vide) d'un
+`thumb_func_start` -- cette ligne de directive "fuit" dans les `lines`
+du bloc PRÉCÉDENT via le parseur ligne-par-ligne naïf, `BYTE_LINE_RE` ne
+la matche pas, `block_pure_bytes` abandonne tout le run silencieusement.
+Fix : si la ligne ne matche pas `BYTE_LINE_RE` mais matche
+`THUMB_FUNC_START_RE`, on arrête simplement la collecte des octets
+(cette ligne appartient au bloc suivant), au lieu de retourner `None`.
+
+**Impact du fix** : re-scan complet de `asm/*.s` (aucune limite de
+taille, script v2) est passé de **1 gap détecté** (le dead-end connu
+`.L0809E1B4`) à **68 gaps détectés**. Tous les gaps sont de petite/
+moyenne taille (4 à 1724 octets) ; 26 marqués "PLAUSIBLE CODE" par
+l'heuristique du script.
+
+**18 fonctions matchées ce round**, toutes vérifiées bit-exact (harnais
+rapide + `cmp` binaire brut contre `baserom.gba` sur la plage
+d'adresses complète) :
+
+- `asm/code_08008AE0.s` (13 fonctions, 1 seule caractérisée mais non
+  portée) : toute une famille "API son" jamais repérée jusqu'ici,
+  voisine de fonctions déjà connues (mais toujours non portées)
+  `func_08008AE0`..`func_08008DA8`. Détail complet dans le message du
+  commit correspondant (`func_08008AE8`/dup, `func_08008BEC`/
+  `func_08008C08`/`func_08008C18` wrappers m4aMPlay*, `func_08008CDC`/
+  `CE4`/`CEC`/`CF4`/`CFC` accesseurs + lookup gMusicPlayerTable,
+  `func_08008D2C`/`func_08008D34` += /-= 0x40, `func_08008D5C`/
+  `func_08008D70` lecture gSongTable). **`func_08008D10` reste non
+  porté** (voir ci-dessous, nouvelle classe de near-miss).
+- 5 fonctions isolées dans 5 fichiers différents : `func_080948F8`
+  (doublon), `func_080E10F0`/`func_080E10F4` (2 stubs `return 0`),
+  `func_0801DE30` (sibling wrapper), `func_080CAD08` (setter 3 champs),
+  `func_0809C318` (sibling avec offset +6, near-miss d'ordre
+  d'instructions résolu en réordonnant les 2 statements C -- calculer
+  le résultat de l'appel opaque AVANT de matérialiser `self+6`,
+  cf. commentaire dans `src/code_0809C318.cc`).
+
+**Nouvelle classe de near-miss identifiée, non résolue -- `func_08008D10`** :
+la fonction calcule un "index" constant (valeur 5) en passant par un
+**chargement pleine-largeur depuis le pool littéral suivi d'un
+double-shift `lsls #24`/`lsrs #24`** (`ldr r1,[pc,#N]; lsls r1,r1,#24;
+lsrs r1,r1,#24`), au lieu du `movs r1, #5` trivial qu'on obtiendrait
+pour n'importe quel litéral entier de cette taille -- confirmé sur son
+propre sibling `func_08008CFC` (index 0) qui LUI compile bien en
+`movs r1, #0` direct. Formulations testées sans succès : littéral
+entier direct, `1+4`, énumérateur C++ (`enum {KIND_F=5}`), variable
+locale `u32` explicite avec cast `(u8)(idx<<24>>24)`, `static const
+u32`, `sizeof(struct Five)` (5 octets), `volatile u32` (produit bien le
+double-shift mais via un load PILE, pas pool littéral, et avec 2
+instructions de plus). Root-cause non trouvée -- porté comme fonction
+asm nommée mais toujours non traduite en C plutôt que laissé en blob
+anonyme (voir `asm/code_08008D10.s`).
+
+**5 cibles caractérisées mais pas attaquées ce round** (complexité
+supérieure, budget de round épuisé) -- candidates pour un futur round :
+
+- `asm/code_08036DC4.s` `.L08037250` (28o, entre `func_08037244` et le
+  suivant) : local 8 octets zéro-initialisé (4x `strh` du littéral 0)
+  puis recopié en 2 mots vers `self+0x34`/`self+0x38` -- pattern
+  "Location locale" (motif `func_08011ED8` déjà documenté) plutôt
+  qu'une simple paire d'affectations directes. Piste : struct locale à
+  4 champs `u16` zéro-initialisée, puis affectation de structure
+  complète vers les 2 champs cible.
+- `asm/code_08036DC4.s` `.L08036E00` (44o, entre le `.L08036DFC`/pool et
+  le suivant) : appelle un vrai constructeur C++
+  (`__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi`, déjà visible dans le
+  fichier juste avant), stampe une vtable -- nécessite de comprendre le
+  layout complet de la classe avant de porter, plus gros effort.
+- `asm/code_080756D0.s` `.L08075E00` (36o, entre `func_08075DEC` et le
+  suivant) : 2 appels conditionnels à `func_08008E64` (encore non
+  porté), lisant 5 champs de `self` (offsets 0xC/0x10/0x14/0x18/0x1C/
+  0x20) -- moyenne complexité, faisable mais pas tenté.
+- `asm/code_actor_0809BFE8.s` `.L0809C4EC` (36o, entre `func_0809C4E4`
+  et le suivant) : test de bit dynamique sur `self+0` avec un index
+  passé en paramètre (`cmp r1,#13;bhi` puis `1<<(r1&0x1F)` puis test +
+  négation booléenne inversée) -- **ressemble fortement à la classe
+  ouverte documentée dans `DECOMP_ARCHIVE.md`
+  (`func_08050E98`/`func_08050EBC`, masque construit depuis un
+  paramètre d'appel dynamique, jamais résolue)**. À vérifier en
+  priorité si un futur round attaque cette classe : pourrait partager
+  la même root cause.
+- `asm/code_080A3774.s` `.L080AAF9C` (44o+, entre le site d'appel à
+  `func_0803A8A4` et le suivant) : encore plus complexe (utilise
+  `r8`/`sb`, appelle `func_0803A8A4` -- déjà signalé "pression de
+  registres" dans `DECOMP_ARCHIVE.md`) -- pas tenté.
+
+**Reste des 68 gaps** : les ~55 non listés ci-dessus/déjà matchés sont
+soit déjà connus dead-ends (`.L0809E1B4`), soit très probablement du
+padding d'alignement légitime (paires `70 47 00 00` = `bx lr` +
+padding, taille 4-8 octets, marquées "not plausible" par le script) --
+pas revérifiés un par un ce round, prochain sweep pourrait les auditer
+systématiquement pour ne rien laisser filer.
+
+Rebuild propre (`rm -rf build fomt.gba fomt.elf fomt.map && make`) +
+lien complet avec `franglais_stub.bin` factice confirmés à chaque étape,
+`sha1sum -c fomt.sha1` échoue comme attendu (`cb06198`). `git status
+--short` propre après les 2 commits, `origin` intact, rien poussé,
+aucune PR.

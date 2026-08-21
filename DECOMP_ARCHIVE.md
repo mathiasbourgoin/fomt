@@ -619,6 +619,35 @@ jamais utilisée dans ce dépôt).
   reconfirmé que ces fragments sont les SEULS candidats "medium" restants
   dans tout `asm/*.s` avec `.L0809E1B4` ci-dessous -- aucun nouveau blob
   caché de taille intermédiaire/plus grande ailleurs dans le dépôt.
+  **CORRECTIF round w70 : ce constat était faux, à cause d'un vrai bug
+  dans `scan_hidden_code_blobs_v2.py` lui-même** (`block_pure_bytes()`
+  abandonnait silencieusement tout un run dès qu'un bloc `.byte` était
+  collé sans ligne vide à un `thumb_func_start` suivant -- cf.
+  `SESSION_NOTES.md` round w68 pour la découverte du symptôme sur
+  `hardware.s`, jamais corrigé dans le script avant w70). Une fois
+  corrigé, un re-scan complet est passé de 1 à **68 gaps détectés**.
+  18 fonctions déjà matchées ce round (voir `SESSION_NOTES.md` round
+  w70) ; 5 cibles moyennes restent caractérisées mais non portées :
+  - `asm/code_08036DC4.s` `.L08037250` (28o) -- pattern "Location
+    locale zéro-initialisée puis copiée" (motif `func_08011ED8`).
+  - `asm/code_08036DC4.s` `.L08036E00` (44o) -- vrai ctor C++
+    (`__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi`) + stamp vtable,
+    nécessite le layout de classe complet.
+  - `asm/code_080756D0.s` `.L08075E00` (36o) -- 2 appels conditionnels
+    à `func_08008E64` (non porté), complexité moyenne.
+  - `asm/code_actor_0809BFE8.s` `.L0809C4EC` (36o) -- test de bit
+    dynamique sur un paramètre d'appel (masque pas connu à la lecture
+    du désassemblage) : **ressemble fortement à la classe non résolue
+    `func_08050E98`/`func_08050EBC` ci-dessus** (masque construit
+    depuis un paramètre dynamique), à vérifier en priorité si cette
+    classe est un jour reprise.
+  - `asm/code_080A3774.s` `.L080AAF9C` (44o+) -- appelle
+    `func_0803A8A4`, déjà signalé "pression de registres" plus haut.
+  Egalement : `func_08008D10` (`asm/code_08008D10.s`) porté comme
+  fonction nommée mais PAS traduit en C -- nouvelle classe de near-miss
+  (littéral entier compilé via pool+double-shift plutôt qu'un `movs`
+  direct, root-cause non trouvée malgré ~6 formulations testées, cf.
+  `SESSION_NOTES.md` round w70).
 - Docs de référence côté dépôt patch pour choisir de futures cibles :
   `docs/DIALOGUE.md`, `docs/BACKGROUNDS_INVENTORY.md`,
   `docs/CLAIRE_SPRITE_PORTABILITY.md`, `docs/MFOMT_ADDITIONS.md`.
