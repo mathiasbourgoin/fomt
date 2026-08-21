@@ -6,6 +6,127 @@ worked on strictly offline: `origin`'s push URL is deliberately broken
 restored. Never `git push`, never open a PR, never touch `origin`. Commit
 locally only.
 
+## Round (worktree `w59`, branche `parallel-59`) -- 8e/9e hypothèses testées
+sur `func_080070D4`/`func_08005A00`/`func_0806EA30` ("SmartPtr field
+assignment"), toujours négatives -- mais root-cause précis du mécanisme
+d'élimination trouvé, plus net que la généralisation de round 9
+
+### Mission
+
+Reprendre la piste explicitement laissée par round 9/w21 comme "next
+thing to try" (`DECOMP_ARCHIVE.md`) : combiner (1) construction de `tmp`
+via la convention "hidden-return-value"/out-param SANS pré-zéro (au lieu
+du défaut `SmartPtr<T> tmp;` qui zéro-initialise), ET (2) typer `field`
+comme `void**`/`T**` BRUT plutôt que `SmartPtr<T>*`, pour empêcher toute
+sélection d'`operator=`. Traiter les 3 callés opaques (`func_08005B68`,
+`func_080050F8`, `func_0806DB38`) en boîte noire, prototype `extern "C"`.
+
+### Ce qui a été effectivement testé (harnais rapide, `func_08005A00`
+comme représentant des 3 sites -- forme byte-pour-byte identique)
+
+D'abord, confirmation par lecture du corps compilé de `func_080050F8`
+(déjà présent, non porté, dans `asm/code_08004C68.s`) : il suit
+exactement le motif "constructeur de placement" déjà établi ailleurs
+dans ce dépôt (`self` en r0, écrit `self[0]=0` puis d'autres champs,
+`return self` -- càd le "return self" de la règle 16bis, PAS une
+convention hidden-return-value ARM/CFront). Donc le vrai prototype du
+callé est `void func_080050F8(WidgetPtr *out, void *arg)` (convention
+out-param déjà identifiée round 9, confirmée ici par lecture directe du
+corps plutôt que déduite).
+
+1. **Essai littéral de l'énoncé de la piste** :
+   `SmartPtr<Widget> tmp = func_08005B68(arg);` où le callé est déclaré
+   comme retournant `SmartPtr<Widget>` PAR VALEUR (vraie convention
+   hidden-return-value ABI). **Ne compile pas** -- ré-confirme
+   EXACTEMENT l'échec déjà documenté round 9 test 1 (`SmartPtr::SmartPtr
+   (SmartPtr&)` privé, invoqué même pour une init par copie d'un prvalue
+   de même type -- ce compilateur ne fait pas l'élision de copie
+   obligatoire ici, même en syntaxe `=`). Referme cette lecture littérale
+   de "hidden-return-value" pour de bon : aucune syntaxe de déclaration
+   locale nommée `SmartPtr<T> tmp = /(...)` initialisée depuis un
+   *prvalue* du MÊME type `SmartPtr<T>` ne peut compiler tant que le
+   copy-ctor reste privé -- ce n'est pas un problème de syntaxe `=` vs
+   `()` (round 9) ni de linkage `extern "C"` (re-testé ici, même échec).
+
+2. **8e hypothèse (nouvelle) : convention out-param + tag
+   `NoInit` ajouté à `SmartPtr<T>`** -- pour éviter le pré-zéro du
+   défaut `SmartPtr(T*ptr=nullptr)` sans casser le vrai constructeur
+   copie privé, ajout local (fichier de test, PAS committé dans
+   `include/smart_ptr.hh`) d'un ctor `SmartPtr(NoInit)` no-op qui laisse
+   `inner` non initialisé, puis :
+   ```cc
+   WidgetPtr::NoInit no_init_tag;
+   WidgetPtr tmp(no_init_tag);       // construction directe, PAS de copy-ctor
+   func_080050F8(&tmp, sub);          // &tmp s'échappe vers l'appel opaque
+   void **tmp_alias = (void **)&tmp;  // extraction via alias void** (anti
+   void *saved = *tmp_alias;          // type-based-alias, cf. ci-dessous)
+   *tmp_alias = 0;
+   *field = saved;                     // écriture BRUTE, pas d'operator=
+   ```
+   **Compile, taille de pile correcte au niveau du pré-zéro (aucun
+   `movs r0,#0; str r0,[sp]` avant l'appel -- exactement comme la
+   cible), MAIS le check-and-delete mort de fin de fonction disparaît
+   ENTIÈREMENT** (16 instructions produites contre 33 attendues, aucune
+   trace de `cmp`/`beq`/`_call_via_r2`) -- agbcp propage la valeur 0
+   écrite dans `*tmp_alias` jusqu'au point de vérification final MALGRÉ
+   l'alias `void**` de type différent (aucune analyse d'aliasing basée
+   sur les types n'empêche ce suivi -- agbcp raisonne apparemment sur
+   l'EMPLACEMENT MÉMOIRE physique `[sp+0]`, pas sur le type statique du
+   pointeur utilisé pour y accéder).
+
+3. **9e hypothèse (contrôle) : même chose mais avec le VRAI défaut
+   `SmartPtr<T> tmp;` (pré-zéro réintroduit)** -- pour vérifier si le
+   store réel du ctor par défaut (contrairement au tag `NoInit`, un
+   no-op complet) "ancre" suffisamment `tmp` pour empêcher le
+   repliement du check final, indépendamment de la question du
+   pré-zéro. **Même résultat : le check final disparaît ENTIÈREMENT
+   aussi**, seul le pré-zéro (1 store) réapparaît comme prévu. Ceci
+   **infirme la lecture optimiste de la généralisation round 9**
+   ("l'échappement d'adresse vers l'appel opaque est ce qui empêche le
+   repliement") : ici `&tmp` s'échappe bel et bien vers l'appel opaque
+   `func_080050F8` dans LES DEUX variantes 2 et 3, et le repliement a
+   quand même lieu intégralement. L'échappement seul n'est donc PAS un
+   verrou suffisant contre ce peephole -- ce qui semble réellement
+   compter, empiriquement, c'est si la dernière écriture connue de
+   `[sp+0]` (ici, toujours notre propre `0` explicite, posé APRÈS le
+   retour de l'appel opaque) reste **entièrement dans la portée de
+   raisonnement local du compilateur jusqu'au point de vérification**,
+   sans qu'aucun autre appel opaque ne s'intercale ENTRE cette dernière
+   écriture et la lecture de vérification -- ici, seul un `str r2,[r4]`
+   (écriture de `field`, pas un appel) sépare les deux, ce qui n'est pas
+   suffisant pour "faire perdre la trace" à agbcp.
+
+### Verdict et piste pour la suite
+
+**8e et 9e hypothèses : négatives, mais concluent proprement la piste
+"escape-to-opaque-call" comme suffisante en soi.** Le point de blocage
+réel est désormais mieux cerné : il faudrait qu'un DEUXIÈME appel
+opaque (ou un effet de bord dont agbcp ne peut PAS prouver l'innocuité)
+s'intercale entre le `tmp.inner = 0` et la relecture de vérification --
+or dans les 3 sites cibles, il n'y a structurellement qu'UNE seule
+instruction (`str r2,[r4]`, l'écriture de `field`) entre les deux, ce
+qui exclut toute forme candidate insérant un second `bl` à cet endroit
+précis (ça ajouterait une instruction absente de la cible). Piste non
+essayée à ce stade, à faible confiance mais pas totalement épuisée :
+un `Move()`/dtor NON défini dans l'en-tête (compilé séparément, hors
+ligne, pour forcer un vrai `bl` non inlinable) -- nécessiterait de
+modifier `include/smart_ptr.hh` de façon plus invasive (séparer
+déclaration/définition), risque de régression sur les usages déjà
+matchés de `SmartPtr<T>` ailleurs dans le dépôt, à valider avec
+`make compare` complet avant tout commit si tentée.
+
+### État du dépôt en fin de round
+
+Aucune modification committée : `include/smart_ptr.hh` n'a PAS été
+touché (le tag `NoInit` n'existe que dans un fichier de test hors du
+dépôt suivi, `/tmp/w59scratch/`). `git status --short` confirmé propre
+avant et après ce round. `make compare`/`sha1sum -c fomt.sha1` non
+ré-exécutés (aucun changement de `src/`/`asm/`/`fomt.lds` à vérifier) --
+seul le harnais rapide (compilateur+assembleur, sans lien) a servi tout
+au long de ce round, conformément à la discipline "ne jamais laisser un
+candidat non convergé appliqué au dépôt". `origin` intact, rien poussé,
+aucune PR. Travaillé seul dans `w59`/`parallel-59`.
+
 ## Round (worktree `w48`, branche `parallel-48`) -- `func_0803A798` matché
 bit-exact (1 commit), incertitude d'héritage multiple de w47 levée,
 + découverte méthodologique : ce worktree a un décalage global constant

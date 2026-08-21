@@ -439,17 +439,38 @@ une fois. Round 9/w21 a matché `func_08008A68` et re-classé
   opaque** -- le seul cas testé qui n'a PAS été replié est celui où
   `&tmp` s'échappe vers l'appel opaque `func_08005B68` (convention
   out-param), mais cette forme ne matche pas la cible pour une autre
-  raison (compare sur l'ancienne valeur de `field`). **Piste concrète non
-  encore testée** (à essayer en priorité) : combiner LES DEUX ingrédients
-  qui marchent séparément -- construire `tmp` via la convention
-  hidden-return-value (`SmartPtr<Widget> tmp = func_08005B68(arg);`,
-  seule forme de construction qui compile ET ne pré-zéro pas) **ET**
-  typer `field` comme `T**`/`void**` BRUT (jamais `SmartPtr<T>*`), pour
-  qu'aucune surcharge `operator=` ne puisse jamais être sélectionnée
-  quelle que soit la forme de l'assignation. Round 9/w21 a retenté 3
-  variantes supplémentaires (syntaxe `=`/out-param/alias manuel, détail
-  ci-dessus) mais PAS cette combinaison précise -- reste la piste
-  prioritaire pour un round 10.
+  raison (compare sur l'ancienne valeur de `field`).
+  **Round w59 a testé la combinaison "hidden-return-value + field brut"
+  décrite ici -- 8e et 9e hypothèses, toujours NÉGATIVES** (détail complet
+  `SESSION_NOTES.md` round w59) : (a) la lecture littérale
+  `SmartPtr<Widget> tmp = func_08005B68(arg);` avec le callé déclaré
+  retournant `SmartPtr<Widget>` PAR VALEUR **ne compile toujours pas**
+  (même mur de copy-ctor privé que round 9 test 1 -- referme cette lecture
+  pour de bon, `extern "C"` ou pas, aucune forme de déclaration locale
+  nommée initialisée depuis un prvalue du même type `SmartPtr<T>` ne peut
+  compiler tant que le copy-ctor reste privé) ; (b) en ajoutant un tag
+  `NoInit` local à `SmartPtr<T>` (non committé) pour construire `tmp` via
+  la convention out-param SANS pré-zéro, `&tmp` s'échappe bien vers
+  l'appel opaque MAIS agbcp propage quand même la valeur `0` jusqu'au
+  check final et **élimine intégralement** le check-and-delete mort (16
+  instructions au lieu de 33) -- MÊME résultat avec le vrai défaut
+  `SmartPtr<T> tmp;` (pré-zéro réel, testé en contrôle). **Ceci infirme la
+  généralisation round 9** ("échapper à un appel opaque suffit à empêcher
+  le repliement") : dans ces 2 variantes `&tmp` s'échappe bel et bien vers
+  l'appel opaque et le repliement a quand même lieu intégralement.
+  **Mécanisme affiné** : agbcp semble suivre la dernière valeur connue
+  d'un emplacement mémoire (`[sp+N]`) à travers TOUTE la fonction tant
+  qu'aucun AUTRE appel opaque ne s'intercale entre la dernière écriture et
+  la lecture de vérification -- ici une seule instruction non-appelante
+  (`str r2,[r4]`, l'écriture de `field`) sépare les deux, insuffisant pour
+  perdre la trace. Aucune forme candidate testée à ce jour n'insère un
+  second appel opaque à cet endroit précis sans ajouter une instruction
+  absente de la cible. Piste résiduelle, non essayée, faible confiance :
+  sortir `Move()`/le destructeur de `SmartPtr<T>` de l'en-tête (définition
+  hors ligne, non inlinable) pour forcer un vrai `bl` -- nécessiterait de
+  modifier `include/smart_ptr.hh` plus profondément, risque de régression
+  sur les usages déjà matchés ailleurs, à valider par un `make compare`
+  complet avant tout commit si tentée.
 - `func_08008980` -- voir section "pression de registres" ci-dessus,
   caractérisée round 9/w21, pas attaquée.
 - ~~`func_08008A68`~~ -- **matchée round 9/w21** (`2bab4c4`) : utilise
