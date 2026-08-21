@@ -489,11 +489,21 @@ jamais utilisée dans ce dépôt).
 - `asm/code_08010F54.s` (272 octets) : écartée par consigne explicite
   (round w36) -- chevauche possiblement `franglais_boot_fsm_run`, classe
   "pression de registres" ; ne s'engager que sur idée neuve.
-- `func_08075334` (`asm/code_08070A08.s`) : nouvelle cible identifiée
-  round w36 -- vrai helper de push de file/tableau dynamique (`malloc`,
-  ring buffer à `self+0x594`), 8 sites d'appel symboliques déjà dans le
-  dépôt (contexte d'appel abondant, contrairement à `.L0809E1B4`) ;
-  candidat sérieux pour un futur round dédié, non trivial.
+- `func_08075334` (`asm/code_08070A08.s`) : vrai helper de push de
+  file/tableau dynamique (`malloc`, ring buffer à `self+0x594`), 8 sites
+  d'appel symboliques déjà dans le dépôt (contexte d'appel abondant,
+  contrairement à `.L0809E1B4`). Identifiée round w36, évaluée-mais-pas-
+  engagée round w37 ("pression de registres" confirmée à la lecture).
+  **Round w57 dédié : near-miss caractérisé précisément, PAS commité** --
+  les 12 premiers octets du corps (au-delà du prologue) sont bit-exacts
+  une fois l'ordre d'assignation des champs de l'item local corrigé
+  (`f4=a1` avant `f0=(u16)a2`, ordre du désassemblage, pas celui du
+  struct), mais 3 variantes testées au-delà divergent toutes sur
+  l'allocation des 4 registres callee-saved (`r5`/`r8`/`r9`/`sl`) qui
+  doivent simultanément survivre à 2 appels opaques (`malloc`, `free`) --
+  piste concrète laissée pour la suite (permutation de l'ordre de
+  première-utilisation des 4 valeurs en jeu) : voir `SESSION_NOTES.md`
+  round w57 pour le détail exact des 3 variantes déjà écartées.
 - `func_08050E98`/`func_08050EBC` (setters de bitfield 6 bits sur le
   même champ `self+0x550`, voisins de `TransitionCtlQuery`) : near-miss
   round w39, PAS committé -- extraction du champ bas (double-shift)
