@@ -151,6 +151,8 @@ SECTIONS
         src/code_08011ED8.o(.text);
         src/code_08011FE8.o(.text);
         asm/code_08012028.o(.text);
+src/code_0801DD3C.o(.text);
+asm/code_0801DD78.o(.text);
         src/code_0801DE30.o(.text);
         asm/code_0801DE3C.o(.text);
         src/entity.o(.text);
