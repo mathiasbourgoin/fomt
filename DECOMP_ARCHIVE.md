@@ -628,6 +628,25 @@ jamais utilisée dans ce dépôt).
   callees `func_08037008`+`func_08037244`, PLUS un near-miss
   masque-par-négation déjà connu sur `self+0x44 & ~3`) -- pas testés,
   probablement affectés par les deux classes à la fois.
+  **Round w62 : mécanisme root-causé empiriquement (4 nouvelles variantes
+  + 1 struct POD, 10 au total, toujours PAS reproduit) -- dépendance de
+  données 4e<-5e écartée par le calcul (pas de relation arithmétique entre
+  les 2 paires de constantes connues) ; struct-by-value scindée
+  registre+pile écartée (agbcp la matérialise toujours en mémoire locale
+  d'abord, taille/registres totalement différents). Modèle confirmé sur
+  8 variantes : les 3 arguments triviaux (`obj`,`a`,`b`, copies de valeurs
+  déjà dans un registre callee-saved AVANT `__builtin_new`) sont TOUJOURS
+  différés juste avant le `bl`, quelle que soit la formulation ; entre
+  `r3` et `pile`, celui déclaré/écrit EN PREMIER dans le C source est
+  TOUJOURS calculé en premier -- mais la cible exige un ordre hybride
+  (`pile` d'abord, PUIS le groupe trivial, PUIS `r3` en tout dernier)
+  qu'aucun réordonnancement textuel ne produit, parce que `r3` ne peut
+  rejoindre le groupe "différé" (réservé aux valeurs déjà vivantes dans
+  `r4`/`r5`/`r6`, les 3 seuls callee-saved du prologue -- pas de 4e
+  registre disponible pour `r3`). Détail complet des 10 variantes et
+  piste de suite (structure d'argument différente pour `func_08037008`,
+  4e paramètre non-scalaire) dans `SESSION_NOTES.md` round w62. Rien
+  commité.
 - **2 nouvelles fonctions "pression de registres" (round w43)** :
   `func_0803BDFC` (`asm/code_0803A8A4.s`) et `func_08083A7C`
   (`asm/code_08082184.s`) -- `r8`/`sb`(/`sl`) vivants à travers 2 `bl`

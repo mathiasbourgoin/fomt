@@ -8700,3 +8700,141 @@ seulement de contenu) des 4 candidats callee-saved (`q`, `&item`,
   caractérisation vague "pression de registres" laissée par w37 -- cf.
   section ci-dessus pour le détail exact des 3 variantes déjà écartées, à ne
   pas retenter telles quelles.
+
+## Round w62 (worktree `parallel-62`) -- `func_08037B48`/`func_08037B80`,
+classe "ordre d'évaluation des arguments d'appel" (round w43), 4 nouvelles
+variantes testées, mécanisme root-causé mais TOUJOURS PAS reproduit, rien
+commité
+
+Cible : `func_08037B48`/`func_08037B80` (`asm/code_08037A04.s`), le near-miss
+"ordre d'évaluation" documenté round w43 (`DECOMP_ARCHIVE.md`) et jamais
+résolu depuis (6 variantes déjà closes à l'époque). Piste demandée pour ce
+round : (1) vérifier si le "littéral" `r3` (4e argument) dépend en fait
+d'une valeur calculée par le 5e argument (pile) -- dépendance de données
+forçant l'ordre ; (2) sinon, essayer la généralisation "ordre d'assignation
+suit l'ordre du désassemblage" trouvée round w57 sur des champs de struct
+locale.
+
+### Rappel de la cible exacte (`func_08037B48`, `asm/code_08037A04.s:170-196`)
+
+```
+push {r4,r5,r6,lr}; sub sp,#4
+adds r5,r0,#0                  @ a
+adds r6,r1,#0                  @ b
+movs r0,#0x44; bl __builtin_new
+adds r4,r0,#0                  @ obj
+movs r0,#0xc                   @ arg5 (pile) -- calculé
+str r0,[sp]                    @ arg5 (pile) -- stocké IMMÉDIATEMENT (2 instrs adjacentes)
+adds r0,r4,#0                  @ arg1 = obj
+adds r1,r5,#0                  @ arg2 = a
+adds r2,r6,#0                  @ arg3 = b
+ldr r3,=0x379                  @ arg4 (r3) -- chargé EN DERNIER, juste avant bl
+bl func_08037008
+ldr r0,=vtable_unk_080E725C; str r0,[r4,#0x14]; adds r0,r4,#0
+add sp,#4; pop {r4,r5,r6}; pop {r1}; bx r1
+```
+
+### Piste 1 (dépendance de données 4e<-5e argument) : ÉCARTÉE par le calcul
+
+`func_08037B48` : pile=0xc (12), r3=0x379 (889). `func_08037B80` : pile=0xa
+(10), r3=0x207 (519). Aucune relation arithmétique simple entre les deux
+paires (889-12=877, 519-10=509 -- pas de delta constant, pas de multiple,
+pas de relation bit à bit évidente sur les 2 exemples disponibles). Piste
+non poursuivie plus loin faute de signal.
+
+### Piste 2 (struct POD local, champs assignés dans l'ordre du
+désassemblage comme round w57) : ÉCARTÉE, mauvaise mécanique ABI
+
+Testé un `struct Arg4 { u32 r3val; u32 pileval; };` passé PAR VALEUR comme
+unique 4e argument (8 octets, `r3val`->r3 + `pileval`->pile en théorie),
+avec assignation `arg.pileval = 0xc; arg.r3val = 0x379;` (ordre du
+désassemblage, à la w57). Résultat harnais rapide : agbcp ne SPLIT PAS la
+struct entre registre et pile comme espéré -- il construit la struct
+ENTIÈREMENT sur une pile temporaire locale (+`sub sp,#0xc` au lieu de
+`#4`), la recopie ensuite octet par octet vers l'emplacement d'appel, et
+utilise `r8` (poussé/restauré en plus) pour porter `b` pendant ce temps --
+taille et registres totalement différents de la cible, écart de ~24 octets.
+**Cette classe de near-miss n'est donc PAS une struct-by-value scindée
+registre+pile** (au moins pas sous cette forme -- l'ABI de cet agbcp
+semble ne jamais scinder un struct >4 octets entre r3 et la pile, il le
+matérialise toujours en mémoire locale d'abord). Abandonné après 1 essai,
+signal négatif clair (taille + registres, pas la peine d'itérer sur les
+variantes de ce sous-angle).
+
+### Piste 3 (mécanique réelle isolée empiriquement, 8 variantes du harnais
+rapide, AUCUNE bit-exacte)
+
+Modèle déduit après 8 variantes de reformulation C (littéral inline pour
+les deux ; l'un nommé l'autre inline, dans les deux sens ; les deux nommés,
+dans les deux ordres de déclaration ; déclaration combinée `unsigned int
+pile = 0xc, r3 = 0x379;` ; passage par référence `const&` sur l'argument
+pile ; extraction des 3 arguments triviaux (`obj`,`a`,`b`) en variables
+locales explicites nommées AVANT l'appel, pour tester si ça change leur
+ordre de matérialisation) :
+
+- **Les 3 arguments triviaux (`obj`,`a`,`b` -- de simples copies de
+  valeurs déjà vivantes dans `r4`/`r5`/`r6`) sont TOUJOURS différés au tout
+  dernier moment, juste avant le `bl`, QUELLE QUE SOIT la formulation C**
+  (même en les extrayant en variables locales explicites nommées juste
+  avant l'appel -- agbcp les alias silencieusement à leur registre source
+  sans émettre de copie séparée à l'endroit où elles sont "déclarées").
+  Confirmé robuste sur 8/8 variantes, jamais contredit.
+- **Entre les 2 arguments non-triviaux (`r3` littéral pool-load, `pile`
+  littéral immédiat+store), celui qui apparaît EN PREMIER dans l'ordre
+  textuel/de déclaration source est TOUJOURS calculé en premier** -- vrai
+  qu'il soit écrit en ligne dans l'appel ou pré-déclaré en variable nommée
+  juste avant, dans les 2 ordres testés. Si `pile` est premier : son
+  calcul (`movs r0,#0xc`) sort immédiatement à l'endroit voulu, MAIS son
+  `str` (le stockage réel vers la pile d'appel) est décalé d'un cran,
+  après le calcul de `r3` (`ldr r3,=lit`) qui s'intercale -- **jamais
+  adjacent au `movs` comme l'exige la cible**. Si `r3` est premier :
+  chargé immédiatement, puis `pile` (calcul+store, cette fois adjacents)
+  suit -- toujours avant le bloc des 3 triviaux, jamais après.
+- **Aucune des 2 combinaisons (r3 avant pile / pile avant r3) ne
+  reproduit la cible**, qui exige un ordre "hybride" impossible à obtenir
+  par simple réordonnancement textuel : `pile` (calcul+store adjacents)
+  EN PREMIER, PUIS les 3 triviaux (`obj`,`a`,`b`), PUIS `r3` EN DERNIER,
+  juste avant le `bl` -- c'est-à-dire que `r3` devrait rejoindre le groupe
+  des arguments "différés au dernier moment" comme `obj`/`a`/`b`, ce
+  qu'aucune variante testée n'obtient (il se comporte toujours comme un
+  calcul "non-trivial" évalué tôt, jamais différé).
+- **Hypothèse pourquoi `r3` ne peut PAS rejoindre le groupe différé** :
+  le groupe différé (`obj`,`a`,`b`) ne fonctionne que pour des valeurs
+  déjà vivantes dans un registre callee-saved AVANT l'appel à
+  `__builtin_new` (`r4`/`r5`/`r6`, exactement les 3 seuls registres
+  callee-saved utilisés par le prologue `push {r4,r5,r6,lr}`) -- agbcp
+  semble différer UNIQUEMENT les copies identité de valeurs déjà logées
+  dans un registre persistant, jamais le calcul d'un littéral frais. Pour
+  que `r3=0x379` rejoigne ce groupe, il faudrait un 4e registre
+  callee-saved vivant à travers le `bl __builtin_new`, ce que la cible
+  N'A PAS (seulement 3 poussés) -- donc cette voie est mécaniquement
+  fermée sauf à me tromper sur le rôle de `r4`/`r5`/`r6`.
+
+### Conclusion : caractérisation affinée, toujours pas résolu, rien commité
+
+Le mécanisme exact de agbcp pour ce cas précis (littéral pool-load `r3`
+différé APRÈS un groupe d'arguments triviaux, alors que tout littéral
+"non-trivial" testé dans ce round se comporte comme un calcul précoce)
+reste non reproduit après 10 variantes cumulées (6 de w43 + 4 nouvelles ce
+round, sans compter la struct POD testée séparément). Aucun fichier
+modifié dans `asm/`/`src/`/`fomt.lds` -- tout le tâtonnement est resté
+dans `/tmp/w62scratch/` (hors dépôt), jamais appliqué. `git status --short`
+vide en fin de round, `make compare` propre non re-testé (rien à
+comparer), `origin` intact, rien poussé, aucune PR.
+
+**Piste concrète pour un futur round**, non testée faute de budget : si
+`r3` doit vraiment se comporter comme un argument "différé", peut-être
+que la vraie signature de `func_08037008` a RÉELLEMENT une structure
+différente au niveau du 4e paramètre -- par exemple un type énuméré
+`enum` avec une valeur nommée plutôt qu'un `unsigned int` littéral brut
+(pourrait changer la classe de "complexité" perçue par agbcp lors du
+scheduling des arguments), ou alors le vrai découpage argument est
+`(self,a1,a2,a3)` avec `a3` un petit struct/union de 8 octets scindé
+`{u32 lo; u32 hi;}` mais construit champ par champ SUR LA PILE D'APPEL
+ELLE-MÊME (pas une struct locale séparée comme testé ici, cf. piste 2)
+-- distinction fine entre "struct locale copiée vers l'appel" (testé,
+échoue) et "struct construite directement dans l'aire d'appel sortante"
+(pas testé, demanderait de forcer via `&arg` un alias direct sur `[sp]`
+en C, techniquement difficile à exprimer proprement en C portable). À
+tenter avec un budget dédié avant d'abandonner définitivement cette
+classe.
