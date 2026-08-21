@@ -8467,3 +8467,115 @@ référence croisée vers `FRANGLAIS_TRAMPOLINE`.
   "trampoline-partout") peut être mise à jour pour refléter que le
   résidu de décalage documenté (+8, puis -32 selon les rounds) n'existe
   plus, une fois ce round mergé sur `main`.
+
+## Round w57 (worktree `parallel-57`) -- `func_08075334` round dédié, near-miss caractérisé précisément, PAS commité
+
+Cible assignée : `func_08075334` (`asm/code_08070A08.s:9622-9779`, 284 octets,
+`0x08075334`-`0x08075450`), le vrai helper de push identifié round w36 (voir
+plus haut) et évalué round w37 (classe "pression de registres" confirmée,
+pas engagé faute d'idée neuve). Ce round dispose du budget dédié demandé par
+`DECOMP_RULES.md`/`DECOMP_ARCHIVE.md` -- tentative réelle menée jusqu'au bout
+du harnais rapide (pas de `make compare` puisque rien n'est commité).
+
+### Compréhension du rôle (confirmée, réutilisable telle quelle)
+
+Vrai tableau/queue dynamique ancré à `self+0x594` :
+`struct Queue { QueueItem *base/*+0*/, *write/*+4*/; void *unk8/*+8*/;
+QueueItem *cap_end/*+0xc*/; };` avec `QueueItem` = 16 octets
+`{u16 f0; u16 pad; u32 f4; u32 f8; u32 fc;}`. `func_08075334(self, a1, a2,
+a3, a4)` construit un `QueueItem` local (`f4=a1, f0=(u16)a2, f8=a3, f4=a4`
+-- **ordre d'assignation f4 PUIS f0 PUIS f8 PUIS fc, pas l'ordre des champs
+du struct** -- règle #5 de `DECOMP_RULES.md`, confirmé bit-exact sur les 12
+premiers octets du corps une fois cet ordre respecté, alors que l'ordre
+"naturel" `f0,f4,f8,fc` produit un registre scratch supplémentaire dès la
+2e instruction). Si `write==cap_end` (plein) : calcule `old_count =
+(write-base)>>4`, `growth = old_count>=1 ? old_count : 1` (doublement de
+capacité, ou 1 si vide), `new_count = old_count+growth`, `malloc` (panic via
+`func_080D3BC0(size)` si échec, jamais porté, juste `extern "C"` déclaré),
+copie les `old_count` items existants dans le nouveau buffer, copie le
+nouvel item à la suite, un no-op de recherche de pointeur (boucle qui avance
+un curseur de `base` à `write` par pas de 16 SANS AUCUN EFFET utilisé
+ensuite, cf. plus bas), `free(base)` (ancien), puis met à jour
+`base/write/cap_end`. Sinon (place libre) : écrit l'item à `*write` (si
+`write!=nullptr` -- garde défensive) puis `write += 1` dans tous les cas.
+
+### Ce qui a été confirmé bit-exact
+
+Harnais rapide (`arm-none-eabi-cpp`+`agbcp -O2`+`as`, sans lien) : les
+**12 premiers octets** du corps (au-delà du prologue, qui matchait déjà du
+premier coup) sont devenus byte-exacts une fois l'ordre d'assignation des
+champs corrigé (`item.f4=a1; item.f0=(u16)a2; item.f8=a3; item.fc=a4;`,
+PAS l'ordre du struct). Nouvelle règle générale confirmée pour
+`DECOMP_RULES.md` (extension de la #5) : **pour une struct locale construite
+à partir de plusieurs paramètres, l'ordre des ASSIGNATIONS suit l'ordre du
+désassemblage, indépendamment de l'ordre de DÉCLARATION des champs dans le
+struct** -- un champ physiquement au début du struct (offset 0) peut être
+écrit APRÈS un champ à un offset supérieur si le code source l'écrit dans
+cet ordre.
+
+### Blocage précis : la taille globale matche (0x11c) mais AUCUNE
+variante testée ne matche au-delà des ~12 premiers octets du corps réel
+
+Trois variantes testées (toutes taille `.text` = `0x11c`, confirmée via
+`arm-none-eabi-readelf -S`), aucune bit-exacte au-delà du prologue+écriture
+de l'item local :
+
+1. **Variante "tout en `q->champ` direct, aucun cache"** : diverge dès
+   l'adresse `self+0x594` (le compilateur choisit `r9` pour porter le
+   pointeur `q`, alors que l'original le garde en `r5` -- parce qu'aucune
+   variable locale `&item` distincte n'existe dans cette variante pour
+   "réclamer" `r9`, cf. point 2 ci-dessous).
+2. **Variante avec `QueueItem *item_ptr = &item;` déclaré juste après `q`,
+   utilisé UNIQUEMENT dans la branche de croissance** (pas dans la branche
+   simple, qui recalcule `&item` via `mov r1,sp` à chaque usage, jamais
+   caché) : corrige l'allocation de `r5`/`r9` pour le pointeur `q` et
+   l'adresse de l'item (confirme l'hypothèse), mais casse ailleurs -- taille
+   `.text` retombe à `0x10c` (16 octets manquants) quand `q->base` est relu
+   deux fois FRAÎCHEMENT (avant ET après le `malloc`, sans variable locale
+   cache) au lieu d'être caché dans une variable survivant l'appel opaque.
+3. **Variante hybride (cache `old_base`/`old_write` comme variables locales
+   traversant le `malloc`/`free`, `item_ptr` séparé)** : taille repasse à
+   `0x11c` (bon), mais le registre alloué au pointeur `q` change encore une
+   fois (`sl`/r10 au lieu de `r5`), et la boucle "dead" de recherche
+   (`base` -> `write` par pas de 16, résultat jamais utilisé avant le
+   `free`) génère un jeu de registres différent (`r3`/`r6` vs `r1`/`r2` dans
+   l'original) dès qu'elle est réécrite avec des variables fraîchement
+   nommées plutôt que les MÊMES variables `old_base`/`old_write` déjà
+   utilisées plus haut dans la fonction.
+
+**Root cause probable, jamais isolée avec certitude faute de temps** : cette
+fonction utilise SIMULTANÉMENT 4 valeurs devant survivre à travers 2 appels
+opaques (`malloc`, `func_080D3BC0`/`free`) -- `q` (pointeur self+0x594),
+`&item` (adresse de l'item local), la valeur `old_write`/`cap_end` (avant
+croissance, réutilisée ~6 fois dans les boucles de copie), et la taille
+d'allocation (`r8`, pour calculer le nouveau `cap_end` après coup). Seuls 4
+registres callee-saved sont disponibles pour ce rôle (`r5`/`r8`/`r9`/`sl`
+d'après le prologue) -- l'allocateur de registres d'agbcp (linéaire, faible,
+pas de vrai graphe de coloriage) semble très sensible à l'ORDRE TEXTUEL de
+PREMIÈRE UTILISATION de chacune de ces 4 valeurs dans le C source pour
+décider quelle valeur va dans quel registre, bien plus que dans les cibles
+"pression de registres" déjà rencontrées (`DrawGlyphAt`, `func_08010F54.s`)
+qui n'avaient que 2-3 valeurs en jeu. Aucune des 3 variantes testées n'a
+trouvé le bon ordre de première-utilisation reproduisant simultanément les 4
+choix de registres de l'original. Signal pratique pour un futur round :
+tester systématiquement les permutations d'ORDRE DE DÉCLARATION (pas
+seulement de contenu) des 4 candidats callee-saved (`q`, `&item`,
+`old_write`/`cap_end`, taille d'alloc) en gardant strictement la variante 3
+(taille correcte) comme base, avant de retoucher la logique elle-même.
+
+### Repo state en fin de round
+
+- **Rien commité** -- aucune tentative n'est bit-exacte au-delà du prologue.
+  Toutes les variantes ont été testées dans `/tmp/w57scratch/` (hors dépôt),
+  jamais appliquées à `asm/code_08070A08.s`/`fomt.lds`.
+- Un fichier parasite `" "` (nommé espace, sortie égarée d'un pipe
+  `cpp | agbcp` sans `-o` explicite pendant le tâtonnement) a été créé par
+  erreur puis supprimé avant la fin du round -- `git status --short` propre
+  confirmé après suppression.
+- `git status --short` vide en fin de round, `origin` intact, rien poussé,
+  aucune PR.
+- Reste ouvert pour un futur round, avec une piste concrète (permutation de
+  l'ordre de première-utilisation des 4 valeurs callee-saved) plutôt que la
+  caractérisation vague "pression de registres" laissée par w37 -- cf.
+  section ci-dessus pour le détail exact des 3 variantes déjà écartées, à ne
+  pas retenter telles quelles.
