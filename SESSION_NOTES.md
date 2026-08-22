@@ -13617,19 +13617,87 @@ en mémoire, même motif constructeur en `+0x8`) pourrait avoir des
 implémentations "réelles" pour les mêmes slots ; non vérifié ce round,
 budget consacré à `func_08050868`.
 
-`func_080ADD78` (233 lignes) : **non tenté ce round** -- la
-caractérisation vtable corrigée ci-dessus change la sémantique probable
-des 4 branches dispatchées (drapeaux de contrôle plutôt que primitives
-de rendu), ce qui aurait rendu toute tentative de C prématurée avant
-d'avoir digéré cette correction. Recommandé pour la suite : relire le
-corps de `func_080ADD78` (déjà lu superficiellement en w101) à la
-lumière de cette sémantique "drapeaux" plutôt que "rendu", en particulier
-pour les 14 cas du switch sur octet de contrôle -- puis tenter le C.
+### 3. `func_080ADD78` : tentative de C -- near-miss serré, sémantique
+100% comprise et validée structurellement, bloqué sur une permutation
+de coloration de registres (même classe que les 2 fonctions en pause)
+
+Budget restant du round utilisé pour tenter directement le corps
+(233 lignes, interpréteur de codes de contrôle du texte de dialogue),
+malgré la recommandation initiale de le repousser. Lecture complète de
+`asm/code_080ADD20.s:57-288` (`func_080ADD78`, 0x080ADD78-0x080ADF40,
+456 octets) a permis de fixer la sémantique exacte, avec deux
+corrections par rapport à w101/w102 :
+
+- **Paramètres** : `arg0` = `Cursor*` (état du curseur de lecture,
+  champs `state`/`field_4`/`text_a`(+8)/`provider`(+0xc)/
+  `pending`(+0x10)/`buf`(+0x14, buffer de destination d'un `strcpy`)),
+  `arg1` = `Src*` (objet virtuel à 6 méthodes, slots `+0x8`(inutilisé
+  ici)/`+0xc`(`TestGlyph`)/`+0x10`/`+0x14`/`+0x18`(3 méthodes
+  "insérer texte dynamique", codes 13/10/12)/`+0x1c`(`CanContinue`) --
+  **PAS** `vtable_unk_080E78F0` (qui est `arg2`/sink), `arg2` = `Sink*`
+  (objet virtuel à 4 méthodes, `+0x8`(inutilisé)/`+0xc`(`PreCheck`)/
+  `+0x10`(`ShouldPause`, code 5)/`+0x14`(`CanResume`, relance après
+  état 2)) -- c'est `vtable_unk_080E78F0` caractérisée en §2. La
+  confusion initiale de w101/w102 ("4 callbacks sur un seul objet") est
+  résolue : ce sont 2 interfaces DIFFÉRENTES sur 2 objets différents
+  (`arg1`/`arg2`), pas 4 méthodes sur le même objet.
+- **Codes de contrôle réellement implémentés (5 sur 14)** : `0`=fin de
+  chaîne (dépile `pending`/`text_a` ou termine), `5`=demande de pause
+  (`Sink::ShouldPause`, passe `state=2`), `10`/`12`/`13`=insertion de
+  texte dynamique (3 méthodes distinctes sur `Src`, ex. nom du
+  joueur/objet/nombre -- probablement LA cible directe pour le pilier
+  "Langue" franglais), le reste (`1,2,3,4,6,7,8,9,11`) partage
+  l'adresse du chemin "texte imprimable" et y est silencieusement
+  ignoré (`cmp byte,#0x1f; bls continue` -- des codes non implémentés
+  dans ce jeu, pas un bug de lecture). Le chemin "texte imprimable"
+  accumule les octets (`acc |= byte`, décalé de 8 bits entre appels)
+  et consulte `Src::TestGlyph(acc)` (glyphe multi-octets classique
+  d'un rendu de police localisée) puis, en cas d'échec, un troisième
+  objet (`cursor->provider`, type `Provider*`) dont la méthode
+  `Substitute(acc)` retourne PAR VALEUR une struct `{u8 present; char
+  text[N]}` (ABI de retour indirect : `this`/`acc` décalés en r1/r2,
+  pointeur de retour caché en r0 -- explique le `strb`/`strcpy`
+  observés) -- mécanisme de substitution de glyphe/motif, également
+  pertinent pour la traduction.
+
+Premier jet compilé (`/tmp/w90s1/dd78_t1.cc`) : structure logique
+correcte du premier coup (aucune divergence de CONTRÔLE DE FLUX --
+tous les branchements/labels/switch correspondent), mais taille fausse
+(460 vs 456 octets, frame de pile `0x2c` au lieu de `0x28`) à cause
+d'un buffer `SubstResult::text` surdimensionné de 4 octets et d'un flag
+`advanced` initialisé conditionnellement au lieu
+d'inconditionnellement en tête de fonction (la cible fait `advanced =
+0;` AVANT même l'appel à `func_080ADF40`, pas seulement dans la
+branche `else`). Les deux corrigés (`/tmp/w90s1/dd78_t2.cc`) : taille
+et layout de pile strictement identiques (`sub sp, #0x28`, flag à
+`[sp, #0x24]`), **structure de contrôle 100% identique** instruction
+par instruction -- mais coloration de registres différente : la cible
+alloue `cursor`->r7, `src`->r8, `budget`->r6, `text`->r5 ; mes tentatives
+allouent `cursor`->r5, `src`->r7, `budget`->r8, `text`->r6 (permutation
+circulaire à 4 éléments). Testé une réorganisation de l'ordre de
+déclaration des locales (`text`/`acc` avant `budget`/`advanced`) sans
+effet observé sur ce choix -- exactement la même signature de blocage
+que `func_0805E99C`/`func_0805E8F0` (permutation de l'allocateur RTL,
+pas un problème de forme du C), donc **PAS creusé davantage ce round**
+conformément à la consigne de ne pas s'acharner sur cette classe de
+résidu sans nouveau signal. Rien commité (aucun match qui ne matche
+pas) -- `asm/code_080ADD20.s` intact.
+
+Scratch conservé : `/tmp/w90s1/dd78_t1.cc`, `dd78_t2.cc` (C le plus
+abouti, structure validée), `dd78_qt2.s`/`.o`, `dd78_target.dis` --
+hors dépôt, non committé. Prochaine piste suggérée : essayer de forcer
+l'allocation via l'ordre des PARAMÈTRES formels eux-mêmes (actuellement
+`(Cursor*, Src*, Sink*)` dans l'ordre `r0,r1,r2` imposé par l'appelant)
+ou via un ordre différent des premiers accès de champ dans le corps
+(`cursor->state` est lu avant tout usage de `src`ou `sink` -- tester
+l'inverse), avant d'envisager un abandon définitif de cette fonction.
 
 ### Compteur mis à jour
 
 **11/13**. Restent : `func_0805E99C` (compositeur, en pause explicite,
 ne pas retoucher), `func_0805E8F0` (near-miss, même classe de résidu,
-en pause explicite, ne pas retoucher), `func_080ADD78` (site d'appel
-localisé en w102, vtable caractérisée précisément en w103 §2 avec
-correction d'offsets, corps de 233 lignes toujours jamais tenté en C).
+en pause explicite, ne pas retoucher), `func_080ADD78` (near-miss
+serré ce round §3, sémantique et structure de contrôle 100% validées,
+bloqué sur une permutation de coloration de registres à 4 éléments --
+même classe de résidu que les 2 précédentes, pas de nouveau signal
+pour la débloquer ce round).
