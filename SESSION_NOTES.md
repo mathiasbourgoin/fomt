@@ -13488,3 +13488,148 @@ corps complet jamais compilé), `func_080ADD78` (site d'appel localisé
 précisément ce round §1, `vtable_unk_080E78F0` identifiée comme
 prochaine piste de recherche pour ses 4 callbacks, corps de 233 lignes
 jamais compilé).
+
+## Round w103 (worktree `w90`, branche `parallel-90`) -- `func_08050868`
+MATCHÉ (323 lignes, byte-exact), caractérisation corrigée de
+`vtable_unk_080E78F0` -- **11/13**, un commit source ce round
+
+Mission : suite directe de w102. Deux tâches dans l'ordre : (1)
+compiler le CORPS COMPLET de `func_08050868` pour valider la
+prédiction de polarité de branchement `bls`/`bhi` du round précédent ;
+(2) caractériser les 4 callbacks de `vtable_unk_080E78F0` avant toute
+tentative sur `func_080ADD78`.
+
+### 1. `func_08050868` : MATCHÉ, 0 octet de différence sur les 624
+octets (`0x08050868`-`0x08050AD8`)
+
+Prédiction w102 confirmée : le corps complet compile bien en `bls`
+(pas `bhi`) dès la première tentative -- la distance réelle vers
+`.L08050AD0` (~0x268 octets) suffit à faire choisir à agbcp le même
+encodage que la cible. Deux découvertes supplémentaires, non prévues
+par w102, ont ensuite été nécessaires pour passer de 600/624 (taille
+fausse) à 624/624 puis à 0 octet de différence :
+
+1. **L'octet de touches D-pad empaqueté (3e argument) doit être un
+   vrai bitfield C**, pas un entier testé par `& masque`. Sondé
+   empiriquement (`/tmp/w90s1/probe1..9.cc`) : un simple `if (keys &
+   0x80)` compile TOUJOURS en 2 instructions (`movs r0,#imm; ands
+   r0,r2`, masque replié directement dans le registre de destination),
+   quel que soit l'ordre des opérandes, le type (`int`/`u8`/cast) ou la
+   présence d'une variable temporaire nommée -- jamais la forme cible
+   à 3 instructions (`movs r1,#imm; adds r0,r2,#0; ands r0,r1`, copie
+   explicite de la valeur source avant le AND). Cette forme à 3
+   instructions n'apparaît QUE si le paramètre est un vrai
+   `struct { u32 field : n; ... }` passé par valeur -- même mécanisme
+   que `func_08050EE4`/`func_080512D8` (déjà documenté dans ces
+   fichiers) : agbcp préserve alors la valeur du paramètre car il "voit"
+   qu'un autre champ du même bitfield sera lu plus tard, et choisit une
+   copie explicite plutôt qu'un repliement direct. Le test combiné à 2
+   bits de case 0/5 (aucun bit du D-pad, masque `0xC0` d'un coup)
+   nécessite en plus la forme `&&` précise : `!keys.left && !keys.right`
+   reproduit exactement le test 3-instructions cible ; l'équivalent en
+   `|`/`||` compile différemment et ÉCRASE le registre paramètre au
+   lieu de le préserver (`ands r1,r0` au lieu de `adds r0,r2,#0; ands
+   r0,r1`), ce qui aurait cassé la relecture du champ `axis2` juste
+   après dans le code réel.
+2. **Les 6 constantes de retour (1 à 6) doivent être des labels goto
+   PARTAGÉS placés une seule fois en fin de fonction**, jamais des
+   `result = N; goto end;` dupliqués à chaque site d'appel -- la cible
+   n'a qu'une seule adresse par constante (`.L08050ABC`..`.L08050AD0`),
+   atteinte par de très nombreux branchements différents à travers
+   toute la fonction (exactement le même principe que les tables de
+   sauts imbriquées de case 3/4, caractérisées en w101, mais appliqué
+   ici aux chemins non-tabulaires). Une fois ce changement fait, 3
+   branchements à 2 voies restants (le test racine `state > 2` de
+   case 1 qui décide entre les blocs partagés `dc_common`/`e4_common`,
+   et 2 tests `state == 4` dans case 2/7) avaient encore une polarité
+   inversée (`ble`/`bne` au lieu de `bgt`/`beq`, avec les 2 branches
+   cibles échangées) -- résolu en inversant simplement l'ORDRE
+   D'ÉCRITURE des deux branches en C (`if (state <= 2) { A } B_après;`
+   au lieu de `if (state > 2) { B } A_après;`, avec `A`/`B` par
+   ailleurs identiques) -- cohérent avec le mécanisme déjà connu
+   (choix d'encodage piloté par la distance/l'ordre physique des
+   blocs, pas par la sémantique).
+
+Itération faite via harnais rapide (`/tmp/w90s1/`, hors dépôt) jusqu'à
+0 octet de différence en cross-compilation isolée (à l'exception
+attendue des mots de table de sauts, qui contiennent des adresses
+absolues et ne peuvent se résoudre correctement qu'au vrai lien), puis
+confirmé par un `make` complet (build + link réel dans `fomt.lds`) et
+un diff octet à octet de `fomt.gba` contre `baserom.gba` sur la plage
+exacte `0x08050868`-`0x08050AD8` : **0 différence sur 624 octets**. Un
+diff plus large englobant les fonctions voisines montre 88 octets de
+différence dans `asm/code_08050AD8.s` (nouveau fichier issu du split),
+mais ce sont les crochets `func_08050D8C`/`func_08050DA0`/
+`func_08050DB4`/`func_08050DC8` -- des hooks franglais PRÉ-EXISTANTS et
+INTENTIONNELS (redirection vers le payload franglais à `0x08801Bxx`),
+copiés octet pour octet depuis l'ancien `asm/code_080507F8.s` sans la
+moindre modification -- pas une régression introduite ce round.
+
+Commit sur `parallel-90` : `asm/code_080507F8.s` tronqué juste après
+`func_080507F8` ; nouveau `asm/code_08050AD8.s` (reste du fichier, à
+partir de `func_08050AD8`) ; nouveau `src/code_08050868.cc` ; `fomt.lds`
+mis à jour (insertion de `src/code_08050868.o(.text)` puis
+`asm/code_08050AD8.o(.text)` à la place de l'ancienne entrée unique).
+
+### 2. `vtable_unk_080E78F0` caractérisée -- hypothèse w101 à corriger :
+CE N'EST PAS un renderer texte à 4 méthodes aux offsets `+0xc/+0x10/
++0x14/+0x18`, c'est un objet à 6 mots dont seuls `+0x8/+0xc/+0x10/+0x14`
+sont peuplés (le suivant, `+0x18`, appartient déjà à
+`vtable_unk_080E7908`)
+
+Désassemblage direct de `baserom.gba` autour de `0x080E10E0`-
+`0x080E1130` (les 4 pointeurs de la table) :
+
+- `+0x0`/`+0x4` : `0` -- inutilisés (pas de destructeur/RTTI dans ce
+  slot pour cette classe, ou champs réservés).
+- `+0x8` = `func_080E10F8` : PAS un callback de rendu -- motif
+  constructeur classique déjà vu ailleurs dans ce dépôt (`self->vtable
+  = &<pointeur>` via `str r0,[r2]` avec le pointeur chargé depuis le
+  pool littéral juste après le corps, cf. `func_08050EE4`/
+  `func_080512D8`), suivi d'un test de bit sur `r1` (`ands r0,#1`) qui
+  déclenche optionnellement un appel à `0x08000608` -- probablement le
+  "constructeur" de l'objet interpréteur passé par valeur/adresse à
+  `func_080ADD78`, appelé une fois en amont, PAS une des 4 méthodes
+  dispatchées dans la boucle de parsing.
+- `+0xc` = `0x080E10F5` (pointeur Thumb, `& ~1` = `0x080E10F4`) :
+  `movs r0, #0; bx lr` -- **retourne toujours 0**, corps de 4 octets.
+- `+0x10` = `0x080E10F1` (`& ~1` = `0x080E10F0`) : `movs r0, #0; bx lr`
+  -- **retourne toujours 0** aussi, autre stub distinct de 4 octets.
+- `+0x14` = `func_080E10EC` : `movs r0, #1; bx lr` -- **retourne
+  toujours 1**.
+
+Donc, pour CETTE instance concrète de vtable (celle effectivement
+utilisée par l'unique site d'appel en boucle de `func_080507F8`), les 3
+méthodes réellement dispatchées pendant le parsing (`+0xc/+0x10/+0x14`)
+sont des stubs triviaux SANS EFFET DE BORD OBSERVABLE (aucun `str`,
+aucun `bl` -- juste des constantes 0/0/1) -- probablement des drapeaux
+de contrôle (`doit_attendre_touche()`, `doit_faire_pause()`,
+`avance_auto_activee()` ou équivalent) plutôt que des primitives de
+rendu ("put glyph"/"portrait"/"line break" auraient nécessairement un
+effet de bord -- écriture VRAM/OAM, appel système -- absent ici).
+L'hypothèse "renderer 4 méthodes" de w101 n'est pas fausse en soi (le
+CODE APPELANT dans `func_080ADD78` dispatche bien 4 méthodes
+virtuelles), mais les offsets corrects sont `+0x8/+0xc/+0x10/+0x14`
+(pas `+0xc/+0x10/+0x14/+0x18` comme supposé), et cette instance
+particulière de vtable a un comportement "no-op"/"plain" pour 3 des 4
+slots -- une autre instance (p. ex. `vtable_unk_080E7908`, juste après
+en mémoire, même motif constructeur en `+0x8`) pourrait avoir des
+implémentations "réelles" pour les mêmes slots ; non vérifié ce round,
+budget consacré à `func_08050868`.
+
+`func_080ADD78` (233 lignes) : **non tenté ce round** -- la
+caractérisation vtable corrigée ci-dessus change la sémantique probable
+des 4 branches dispatchées (drapeaux de contrôle plutôt que primitives
+de rendu), ce qui aurait rendu toute tentative de C prématurée avant
+d'avoir digéré cette correction. Recommandé pour la suite : relire le
+corps de `func_080ADD78` (déjà lu superficiellement en w101) à la
+lumière de cette sémantique "drapeaux" plutôt que "rendu", en particulier
+pour les 14 cas du switch sur octet de contrôle -- puis tenter le C.
+
+### Compteur mis à jour
+
+**11/13**. Restent : `func_0805E99C` (compositeur, en pause explicite,
+ne pas retoucher), `func_0805E8F0` (near-miss, même classe de résidu,
+en pause explicite, ne pas retoucher), `func_080ADD78` (site d'appel
+localisé en w102, vtable caractérisée précisément en w103 §2 avec
+correction d'offsets, corps de 233 lignes toujours jamais tenté en C).
