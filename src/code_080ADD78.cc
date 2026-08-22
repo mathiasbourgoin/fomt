@@ -11,8 +11,7 @@
 //            cursor in state 2 when granted; a later call resumes via
 //            Sink::CanResume.
 //   10/12/13 -- dynamic-text insertion (three distinct Src methods, e.g.
-//            player/item/number names) -- the direct target for the
-//            franglais "Langue" pillar.
+//            player/item/number names).
 //   1-4, 6-9, 11 -- not implemented in this game: they share the printable
 //            path's table entry and are skipped by its `<= 0x1f` guard.
 // Printable bytes (> 0x1f) accumulate into a shifted multi-byte code that
