@@ -668,11 +668,19 @@ func_0804EFAC: @ 0x0804EFAC
 	cmp r2, #3
 	bhi .L0804F016
 	ldr r1, [r7]
-	ands r2, r0
-	lsls r2, r2, #3
-	add r5, sp, #4
-	movs r3, #4
-	movs r4, #2
+	@ Franglais VWF, site A (0x0804EFE2).  This is deliberately an
+	@ in-place 10-byte padded Thumb far jump: the payload target comes from the
+	@ generated franglais_stub_symbols.inc included by
+	@ src/franglais_payload.s, so a stub relink cannot silently leave a
+	@ stale absolute target in this source-port ROM.  The payload wrapper
+	@ reproduces the four replaced setup instructions and resumes at
+	@ 0x0804EFF4; keep the following vanilla instructions intact.
+	@ 0x0804EFE2 is 2 mod 4: the NOP shifts LDR onto a 4-aligned address,
+	@ letting it read the following literal at 0x0804EFE8.
+	nop
+	ldr r3, .Lfranglais_dialogue_vwf_hook_a
+	bx r3
+	.Lfranglais_dialogue_vwf_hook_a: .4byte franglais_dialogue_vwf_hook_a + 1
 	adds r0, r5, #0
 	strh r3, [r0]
 	strh r4, [r5, #2]
@@ -2367,11 +2375,15 @@ func_0804F7A4: @ 0x0804F7A4
 .L0804FD46:
 	adds r6, #0x10
 	adds r5, #0x10
-	movs r2, #1
-	rsbs r2, r2, #0
-	add r8, r2
-	movs r3, #0x20
-	add sb, r3
+	@ Franglais VWF, site B (0x0804FD4A).  The address is 2 mod 4, so
+	@ retain the leading NOP used by thumb_far_jump_padded: its literal load
+	@ is then 4-aligned and reads the word immediately below.  The payload
+	@ wrapper reproduces r8 -= 1 and the old +32 advance when no measured
+	@ width is available, then resumes at 0x0804FD54.
+	nop
+	ldr r3, .Lfranglais_dialogue_vwf_hook_b
+	bx r3
+	.Lfranglais_dialogue_vwf_hook_b: .4byte franglais_dialogue_vwf_hook_b + 1
 	mov r0, r8
 	cmp r0, #0
 	bge .L0804FC7C
