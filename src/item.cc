@@ -82,7 +82,7 @@ char const * Tool::GetName() const
     // to the real (franglais) implementation in .franglais_payload; see
     // FRANGLAIS_TRAMPOLINE in franglais_poc.hh for why this must stay
     // exactly this size.
-    FRANGLAIS_TRAMPOLINE("0x08801975", "15");
+    FRANGLAIS_TRAMPOLINE("franglais_tool_name + 1", "15");
 }
 
 u16 Tool::GetIconId() const
@@ -106,7 +106,7 @@ char const * Tool::GetDesc() const
 {
     // Vanilla body is 0x3C bytes (GetDesc__C4Tool, vanilla ROM). See
     // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
-    FRANGLAIS_TRAMPOLINE("0x088019A1", "23");
+    FRANGLAIS_TRAMPOLINE("franglais_tool_desc + 1", "23");
 }
 
 ToolStack::ToolStack()
@@ -185,7 +185,7 @@ char const * Food::GetName() const
 {
     // Vanilla body is 0x28 bytes (GetName__C4Food, vanilla ROM). See
     // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
-    FRANGLAIS_TRAMPOLINE("0x088019D1", "13");
+    FRANGLAIS_TRAMPOLINE("franglais_food_name + 1", "13");
 }
 
 u16 Food::GetIconId() const
@@ -249,7 +249,7 @@ char const * Food::GetDesc() const
 {
     // Vanilla body is 0x38 bytes (GetDesc__C4Food, vanilla ROM). See
     // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
-    FRANGLAIS_TRAMPOLINE("0x088019FD", "21");
+    FRANGLAIS_TRAMPOLINE("franglais_food_desc + 1", "21");
 }
 
 void Food::AddBonuses(i8 stamina_amount, i8 fatigue_amount)
@@ -352,7 +352,7 @@ char const * Article::GetName() const
 {
     // Vanilla body is 0x2C bytes (GetName__C7Article, vanilla ROM). See
     // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
-    FRANGLAIS_TRAMPOLINE("0x08801A2D", "15");
+    FRANGLAIS_TRAMPOLINE("franglais_article_name + 1", "15");
 }
 
 u16 Article::GetIconId() const
@@ -395,7 +395,7 @@ char const * Article::GetDesc() const
 {
     // Vanilla body is 0x3C bytes (GetDesc__C7Article, vanilla ROM). See
     // FRANGLAIS_TRAMPOLINE in franglais_poc.hh.
-    FRANGLAIS_TRAMPOLINE("0x08801A59", "23");
+    FRANGLAIS_TRAMPOLINE("franglais_article_desc + 1", "23");
 }
 
 ArticleStack::ArticleStack()

@@ -9,3 +9,8 @@ franglais_payload_start:
     .ALIGN 2, 0xFF
     .GLOBAL franglais_payload_end
 franglais_payload_end:
+
+    @ Generated from the matching stub.sym by fomt_patch_pipeline.py.
+    @ Hook trampolines reference these linker symbols instead of freezing
+    @ absolute addresses that become stale whenever the payload layout moves.
+    .INCLUDE "build/franglais_stub_symbols.inc"

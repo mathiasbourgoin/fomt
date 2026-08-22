@@ -104,5 +104,5 @@ struct Unk_0800E324
 // downstream functions by absolute address).
 EC u32 func_0800E324(Unk_0800E324 const & arg_0)
 {
-    FRANGLAIS_TRAMPOLINE("0x08801945", "17");
+    FRANGLAIS_TRAMPOLINE("franglais_season_of + 1", "17");
 }

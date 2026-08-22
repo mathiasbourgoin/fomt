@@ -52,7 +52,7 @@ EC NAKED unsigned int func_0800E4F0(Farmer const & self)
         nop\n\
         nop\n\
         .align 2, 0\n\
-    .Lfranglais_farmer_stamina: .4byte 0x08801075 @ =franglais_farmer_stamina | 1 (thumb bit)\n\
+    .Lfranglais_farmer_stamina: .4byte franglais_farmer_stamina + 1\n\
     ");
 }
 

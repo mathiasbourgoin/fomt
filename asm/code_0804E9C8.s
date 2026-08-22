@@ -4493,7 +4493,7 @@ func_08050D8C: @ 0x08050D8C
 	nop
 	nop
 	.align 2, 0
-.Lfranglais_scene_text_plain: .4byte 0x08801B45
+.Lfranglais_scene_text_plain: .4byte franglais_scene_text_plain + 1
 
 	thumb_func_start func_08050DA0
 func_08050DA0: @ 0x08050DA0
@@ -4506,7 +4506,7 @@ func_08050DA0: @ 0x08050DA0
 	nop
 	nop
 	.align 2, 0
-.Lfranglais_scene_text: .4byte 0x08801B7D
+.Lfranglais_scene_text: .4byte franglais_scene_text + 1
 
 	thumb_func_start func_08050DB4
 func_08050DB4: @ 0x08050DB4
@@ -4519,7 +4519,7 @@ func_08050DB4: @ 0x08050DB4
 	nop
 	nop
 	.align 2, 0
-.Lfranglais_scene_text_mode: .4byte 0x08801BB5
+.Lfranglais_scene_text_mode: .4byte franglais_scene_text_mode + 1
 
 	thumb_func_start func_08050DC8
 func_08050DC8: @ 0x08050DC8
@@ -4530,7 +4530,7 @@ func_08050DC8: @ 0x08050DC8
 	nop
 	nop
 	.align 2, 0
-.Lfranglais_scene_text_mode_arg: .4byte 0x08801BED
+.Lfranglais_scene_text_mode_arg: .4byte franglais_scene_text_mode_arg + 1
 
 	thumb_func_start func_08050DD8
 func_08050DD8: @ 0x08050DD8
@@ -4549,4 +4549,3 @@ func_08050DE4: @ 0x08050DE4
 	strb r1, [r2, #0xd]
 	bx lr
 	.align 2, 0
-

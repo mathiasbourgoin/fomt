@@ -639,7 +639,7 @@ NAKED char const * AScriptEngine::GetString(u32 id) const
         nop\n\
         nop\n\
         .align 2, 0\n\
-    .Lfranglais_get_string: .4byte 0x08800001\n\
+    .Lfranglais_get_string: .4byte franglais_get_string + 1\n\
     ");
 }
 

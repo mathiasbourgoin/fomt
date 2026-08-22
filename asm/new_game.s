@@ -773,7 +773,7 @@ func_08003C80: @ 0x08003C80
 .L08003DDC: .4byte 0x00002D1C
 .L08003DE0: .4byte 0x00002D14
 .L08003DE4: .4byte 0x00002D20
-.L08003DE8: .4byte 0x02001F18
+.L08003DE8: .4byte franglais_options_page
 .L08003DEC: .4byte 0x00002D28
 
     thumb_func_start func_08003DF0

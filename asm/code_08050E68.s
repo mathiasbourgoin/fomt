@@ -8,5 +8,4 @@ func_08050E68: @ 0x08050E68
 	nop
 	nop
 	.align 2, 0
-.Lfranglais_scene_speaker: .4byte 0x08801C25
-
+.Lfranglais_scene_speaker: .4byte franglais_scene_name + 1

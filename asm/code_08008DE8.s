@@ -365,7 +365,7 @@ func_0800912C: @ 0x0800912C
     nop
     nop
     .align 2, 0
-.L08009138: .4byte 0x08801871
+.L08009138: .4byte franglais_read_keys + 1
 
     thumb_func_start func_08009140
 func_08009140: @ 0x08009140
