@@ -13701,3 +13701,126 @@ serré ce round §3, sémantique et structure de contrôle 100% validées,
 bloqué sur une permutation de coloration de registres à 4 éléments --
 même classe de résidu que les 2 précédentes, pas de nouveau signal
 pour la débloquer ce round).
+
+
+## Round w104 (worktree `w90`, branche `parallel-90`) -- session parallèle
+sur `func_0805E99C` lancée avec le contexte w99 (avant w100-w103) :
+résultats CONVERGENTS avec w100 + un OUTILLAGE NOUVEAU (gdb vivant sur
+agbcp) qui est précisément le "nouveau signal" manquant pour la classe
+de résidu coloration-de-registres des 3 fonctions restantes
+
+Avertissement de chronologie : cette session a été lancée sur l'état
+`e7ae09f` (w99 = HEAD) et a travaillé sans connaître w100-w103, qui ont
+été commités pendant son exécution. Elle a donc re-résolu indépendamment
+une partie de w100 -- ce qui vaut VALIDATION CROISÉE (deux chemins
+indépendants, mêmes constructions C gagnantes) -- et produit en plus des
+éléments que w100-w103 n'ont pas. Aucun commit src/asm (la fonction est
+en pause, règle respectée) ; ce qui suit est le delta UTILE uniquement.
+
+### 1. Validation croisée de w100 (chemins indépendants, même verdict)
+
+- raw.b : masques en locales u32 non-const hors boucle -> retrouvé à
+  l'identique (mêmes insns au site). Idem eight/sixteen/one pour les
+  chaînes &1, idem `movs` dupliqués = rematérialisations de reload.
+- Divergences de modèle à trancher un jour par l'arbitre binaire (les
+  deux sessions ont chacune leur meilleur candidat, non fusionnés) :
+  cette session a conclu u32 pour `flags`/`d11` et une variable `u16
+  pal` pour la troncature palette là où w100 (t58, mieux scoré au
+  structurel : 283/292) garde `u8 d11` + `& fifteen`. En cas de reprise
+  future : partir de t58 (w100 §6), PAS des candidats t33/t34 de cette
+  session.
+
+### 2. LE MÉCANISME EXACT du repliement raw.b -- corrige/précise w99 ET w100
+
+Tracé au debugger, pas déduit : `gdb --batch -x script tools/agbcc/bin/agbcp`
+(binaire non strippé, symboles et lignes exploitables).
+
+- `break combine.c:2645` (= `combine_successes++`) + `printf i3/i2/i1`
+  --> la liste exacte des try_combine gagnants. Sur la sonde qui replie :
+  la fenêtre tueuse est le TRIPLE `(i3=and-extérieur, i2=def-du-masque-
+  extérieur, i1=ior)` -- combine substitue la constante via le SET_SRC
+  du def (LOG_LINK direct, même bloc), puis `simplify_and_const_int`/
+  `force_to_mode` annule le terme `(and X C1)` grâce à nonzero_bits du
+  masque intérieur.
+- Les portes exactes (combine.c, source amont `/tmp/agbcc_src`) :
+  - `get_last_value` L10936 : une valeur est visible si
+    `REG_N_SETS==1` (PARTOUT dans la fonction, à travers les labels --
+    le test de label ne s'applique qu'aux multi-sets) ;
+  - L10949 : gate par INSN_CUID -- un def situé APRÈS le début de la
+    fenêtre (`subst_low_cuid`) est INVISIBLE (c'est cette porte qui
+    protège `movs #15` défini après la paire lsl/lsr chez w100 §2) ;
+  - `subst` ne substitue JAMAIS un reg par sa valeur connue (vérifié :
+    get_last_value ne sert qu'à nonzero_bits/num_sign_bit_copies et à
+    3 sites de comparaison) -- seul le SET_SRC d'un insn DANS la
+    fenêtre entre dans le motif. D'où la loi : def hors-bloc = pas de
+    LOG_LINK = jamais dans une fenêtre = constante inexploitable.
+  Nuance vs w100 §1(c) : la protection ne vient pas d'une "méfiance
+  nonzero_bits live-at-start" mais de l'impossibilité de mettre la
+  constante DANS le motif ; nonzero_bits du masque single-set reste
+  exacte partout, elle est juste insuffisante seule.
+- thumb.md : PAS de and-immédiat, et `*zero_extendhisi2_insn`/
+  `*extendqisi2_insn` sont MEMORY-ONLY (le zero_extend de registre
+  n'existe pas comme insn) -- c'est ce qui fait échouer les recombinaisons
+  de secours et laisse la chaîne intacte.
+
+### 3. Lois de résidence pile (tracées : `break assign_stack_local` +
+`break put_addressof_into_stack` avec backtrace + regno + insn uid)
+
+Complète la "règle d'or" de w100 §4 :
+- Les slots des adressables sont attribués dans l'ordre des "give-up"
+  du scan purge_addressof (function.c 2856-3093, un seul passage avant
+  gcse), PUIS viennent les spills de reload. Donne un give-up : accès à
+  offset non-nul (PLUS -> ADDRESSOF nu -> put), accès QI/HI
+  mode-mismatch (le validate du chemin extract échoue), adresse prise
+  comme valeur. Un accès SImode offset-0 reste purgeable (pseudo).
+- `(void)expr` s'expanse en RIEN (aucun marquage, aucun insn).
+- Les "forceurs morts" (statements morts pour manipuler l'ordre des
+  slots) sont IMPOSSIBLES : `delete_trivially_dead_insns` tourne entre
+  cse et purge et les supprime avant qu'ils ne forcent quoi que ce soit
+  (vérifié au debugger : mes forceurs avaient disparu du scan).
+- Corollaire pour le résiduel unique de w100 §5 (placement des 2 ldr
+  pool) : puisqu'il n'y a AUCUN scheduler (w100) et que reload ne
+  rematérialise qu'adjacent (w100), les `ldr r2,=0xFFFF0000` (0x805EAAC)
+  et `ldr r4,=0xFFFF` (0x805EAB2) de la cible sont nécessairement de
+  VRAIS insns de définition présents à ces positions dans le flux RTL
+  pré-reload -- c'est-à-dire émis là par l'EXPANSION (au milieu du bloc
+  raw.a). La question résiduelle devient donc : quelle construction C
+  émet un `set pseudo <- const` à l'intérieur de l'expansion du bloc
+  raw.a sans se faire replier (front-end) ni canon_reg (cse) -- à
+  chercher avec les breakpoints ci-dessus, PAS avec des sondes aveugles.
+
+### 4. Le "nouveau signal" pour la classe coloration-de-registres
+(bloque `func_0805E99C` §w100, `func_0805E8F0` §w101, `func_080ADD78`
+§w103)
+
+Les trois near-miss restants butent sur la même chose : une permutation
+de l'allocateur (global.c/local-alloc.c/reload1.c). Jusqu'ici on ne
+l'observait qu'aux dumps `-dl -dg` (règle 17). Le pas de plus, désormais
+prouvé praticable dans ce dépôt :
+
+    break global.c:<ligne de l'attribution dans find_reg>
+    break local-alloc.c:<qty allocation>
+    commands + printf regno/priorité/hard-reg choisi + continue
+
+donne EN DIRECT l'ordre d'allocation, la priorité chiffrée de chaque
+pseudo et le premier registre libre essayé -- soit exactement les
+données qu'il faut pour savoir QUELLE insn/ref déplace la permutation
+(au lieu de tâtonner des formes C). Recette éprouvée ce round sur
+combine/function.c ; à appliquer telle quelle à `func_080ADD78`
+(permutation circulaire à 4 : cursor/src/budget/text -- il suffit de
+tracer les 4 priorités et de voir laquelle inverse l'ordre d'allocation
+par rapport à la cible, puis de chercher la ref C qui la corrige).
+
+### 5. État / recommandation
+
+Compteur inchangé : 11/13. `func_0805E99C` et `func_0805E8F0` restent
+en pause (rien touché). Recommandation : UN round `func_080ADD78` armé
+du §4 (c'est le débloqueur le plus probable de sa permutation à 4, et
+la fonction est à haute valeur pour le pilier Langue -- codes 10/12/13
+= insertion de texte dynamique). Si le §4 y fait ses preuves, repasser
+ensuite sur `func_0805E8F0` (permutation à 3) avec la même méthode,
+et seulement en dernier sur le compositeur.
+
+Scratch de cette session : `/tmp/w90s9/{try.sh,build.sh,cmp2.py,
+p1..p4.cc,t28..t42.cc,gdbscript,gdbslots,gdbput*,target.bin}` -- hors
+dépôt, non committé ; l'essentiel est intégralement documenté ci-dessus.
