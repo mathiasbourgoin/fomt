@@ -14067,3 +14067,27 @@ les permutations syntaxiques aléatoires.
 
 **12/13.** `func_0805E99C` reste seule non matchée dans ce groupe ;
 `func_0805E8F0` et `func_080ADD78` sont désormais byte-exactes.
+
+## Round w107 (worktree isolé `fomt-e99c-final`, branche `codex/e99c-final`)
+
+Dernière série bornée sur les deux seuls résidus w106. Les alias de sortie
+`x -> r3` et `y -> r1` reproduisent exactement la cible de `0x16c` à
+`0x196` (539/648 octets identiques), puis un alias du byte de `y` en `r0`
+étend l'identité jusqu'à `0x19a` (542/648). Cela confirme définitivement le
+rôle des pseudos 177/180.
+
+Les variantes ciblées suivantes sont falsifiées : contraintes génériques
+x/y (spills, 660 octets), accumulateur `t -> r1` (copies, 652 octets), ordre
+inverse des opérandes commutatifs (combine différent, 644 octets), et
+contraintes vides sur `desc/src` (aucun effet sur le prologue). Le premier
+résidu du bloc final est maintenant l'ordre des deux loads indépendants à
+`0x19c/0x19e`; le résidu du prologue est toujours l'ordre des copies ABI.
+
+Aucun candidat n'a été porté dans `src/`, `asm/` ou `fomt.lds`. Les deux
+candidats-preuves et le rapport reproductible sont conservés sous
+`analysis/e99c_round107/`.
+
+### Compteur
+
+**12/13.** `func_0805E99C` reste non matchée ; la prochaine expérience utile
+doit instrumenter l'émission reload/global-alloc, pas permuter la syntaxe C.
