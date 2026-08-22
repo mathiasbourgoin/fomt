@@ -13341,3 +13341,150 @@ nettement amélioré ce round, cf. §1, registre-coloration bloquante),
 `func_08050868` (caractérisé ce round, §2, jamais compilé),
 `func_080ADD78` (rôle identifié ce round, §3, site d'appel pas
 retrouvé, jamais compilé).
+
+## Round w102 (worktree `w90`, branche `parallel-90`) -- site
+d'appel de `func_080ADD78` localisé (byte-scan complet de la ROM),
+switch extérieur de `func_08050868` isolé et validé structurellement
+-- toujours 10/13, aucun commit source ce round
+
+Mission : suite directe du round w101. Deux tâches, dans l'ordre :
+localiser le site d'appel de `func_080ADD78` par un scan brut de toute
+la ROM (pas seulement les `.s` déjà scindés), puis tenter le switch
+extérieur à 8 cas de `func_08050868` isolément.
+
+### 1. `func_080ADD78` : site d'appel localisé -- scan par décodage
+d'instructions `bl` sur toute la ROM
+
+Un scan par recherche d'octets littéraux (adresse thumb+1 en pool
+littéral) sur les 8 Mo de `baserom.gba` n'a donné AUCUN résultat --
+la fonction n'est référencée par aucun pointeur de fonction/vtable,
+seulement par des `bl` directs (encodage relatif au PC, donc invisible
+à une recherche d'octets constants). Écrit à la place un décodeur
+Python qui parcourt tout le binaire à la recherche de paires
+d'instructions Thumb `BL` (motif `1111 0xxx.../1111 1xxx...`), calcule
+la cible absolue de chaque paire, et la compare à `0x080ADD78`.
+Résultat : exactement 2 sites d'appel dans toute la ROM :
+
+- `0x0804F89C`, dans `func_0804F7A4` (`asm/code_0804E9C8.s`)
+- `0x0805084C`, dans `func_080507F8` (`asm/code_080507F8.s`)
+
+Les deux fichiers sont en fait déjà scindés dans le dépôt (contrairement
+à ce que supposait w101) -- la recherche du round précédent avait dû
+rater ces occurrences pour une raison non identifiée. Contexte de
+chaque appel :
+
+1. `code_0804E9C8.s`, dans `func_0804F7A4` :
+   ```
+   adds r0, r7, #0
+   adds r0, #0xec
+   adds r1, r7, #0
+   adds r1, #0xd0
+   mov r2, sp
+   bl func_080ADD78
+   cmp r0, #1
+   beq .L0804F8B8
+   cmp r0, #1
+   bgt .L0804F8AE
+   cmp r0, #0
+   beq .L0804F8B4
+   b .L0804F8D8
+   ```
+   `r0 = self+0xEC`, `r1 = self+0xD0` (deux champs de structure --
+   vraisemblablement pointeur de texte courant et état/buffer
+   destination), `r2 = sp` (adresse d'une variable locale). Le retour
+   est ensuite dispatché sur les valeurs 0/1/2/défaut.
+
+2. `code_080507F8.s`, dans `func_080507F8` :
+   ```
+   ldr r4, .L08050864 @ =vtable_unk_080E78F0
+   .L08050844:
+       str r4, [sp]
+       adds r0, r5, #0
+       adds r1, r6, #0
+       mov r2, sp
+       bl func_080ADD78
+       str r4, [sp]
+       cmp r0, #1
+       beq .L08050844
+   ```
+   Confirmation directe que `r2` pointe vers une case de pile qui
+   contient un POINTEUR DE VTABLE (`vtable_unk_080E78F0`), et que
+   l'appelant BOUCLE tant que la valeur de retour vaut 1. Ceci fixe
+   la sémantique : `func_080ADD78(text_ptr_ou_etat, dest_ou_etat,
+   vtable_obj_ptr)` traite un code de contrôle / un fragment de texte
+   par appel et renvoie un statut ; 1 == "il reste du texte, rappeler"
+   ; les autres valeurs (0, 2, 3...) pilotent des branchements de suite
+   différents chez l'appelant. Ceci confirme fortement l'hypothèse
+   w101 ("interpréteur de codes de contrôle du moteur de dialogue") et
+   donne une piste concrète pour la suite : inspecter
+   `vtable_unk_080E78F0` pour nommer les 4 emplacements de callback
+   (`+0xc`/`+0x10`/`+0x14`/`+0x18`) avant toute tentative de C sur
+   `func_080ADD78` lui-même (toujours pas tentée ce round, 233 lignes,
+   recherche du site d'appel jugée prioritaire).
+
+### 2. `func_08050868` : switch extérieur isolé -- groupement de cas
+validé, résidu de polarité de branchement expliqué par la taille du
+fragment testé
+
+Scratch dans `/tmp/w90scratch5` (`try.sh` repris tel quel de
+`/tmp/w90scratch4`, `target_outer.bin` = `baserom.gba[0x08050868:
+0x080508A0]`, les 56 premiers octets = prologue + table de sauts du
+switch extérieur uniquement, sans les corps de cas ni les switches
+imbriqués).
+
+`t1.cc` : `switch (new_dir) { case 0: case 5: ...; case 1: ...; case 2:
+case 7: ...; case 3: ...; case 6: ...; case 4: ...; }` avec des corps
+de cas factices (simples appels externes) -- le groupement de cas
+reproduit EXACTEMENT celui de la cible : cas 0 et 5 partagent la même
+adresse cible, cas 2 et 7 partagent la même adresse cible, cas 1/3/4/6
+ont chacun une adresse distincte. La table de sauts générée par agbcc
+correspond bit à bit à ce groupement (comparée entrée par entrée à
+`.L08050880` de la cible).
+
+Diff octet à octet : 6/56 octets identiques (le prologue `push {lr}` /
+`adds r3, r1, #0` / `cmp r0, #7` est identique), la divergence
+commence au branchement de test de bornes : la cible émet `bls`
+(saut vers la table si l'indice est valide) suivi d'un `b` LOINTAIN
+vers l'étiquette partagée `.L08050AD0` (`movs r0, #1`), située à
+~0x268 octets, tout à la fin de la fonction complète (partagée par de
+nombreux autres chemins de repli des switches imbriqués). Mon
+fragment isolé émet l'inverse, `bhi` (saut par-dessus la table si
+invalide), parce qu'en isolation le corps de repli "return 1" n'a
+nulle part loin où aller -- il se trouve juste à côté de la table,
+donc agbcc choisit l'encodage "sauter en avant" plutôt que "traverser,
+sinon sauter loin". Confirmé par deux variantes supplémentaires (`t2.cc`
+: garde explicite `if (new_dir > 7) return 1;` avant le switch ;
+`t3.cc` : `default: return 1;` comme étiquette du switch) -- les deux
+produisent encore `bhi`, jamais `bls`, tant que le corps de repli reste
+physiquement adjacent. Ceci est cohérent avec le choix de branchement
+piloté par la mise en page qu'on connaît déjà d'agbcc (même mécanisme
+sous-jacent que les résidus de coloration de registres parqués sur
+`func_0805E99C`/`func_0805E8F0`, mais PAS le même blocage précis) --
+ce n'est pas une impasse, c'est un artefact de test sur un fragment
+trop petit. Prédiction : compiler le corps complet réel (avec le vrai
+`.L08050AD0` à ~0x268 octets de distance) devrait naturellement
+produire `bls`, puisque la distance physique qui pilote ce choix
+correspondra alors à celle de la cible.
+
+Recommandation pour le prochain round : tenter directement le corps
+complet (323 lignes) en une seule passe, en réutilisant le groupement
+de cas à 6 étiquettes validé ici (forme du switch de `t1.cc`) et le
+même patron `return N` pour les étiquettes finales partagées (2 à 7),
+puis diffuser (diff) toute la plage de 0x268 octets en un coup plutôt
+que d'itérer sur des fragments -- le travail sur le switch extérieur
+isolé est une impasse pour une itération plus poussée en isolation ;
+seule la tentative du corps complet validera la prédiction de polarité
+de branchement.
+
+Scratch conservé : `/tmp/w90scratch5/{try.sh,t1..t3.cc,
+target_outer.bin}` -- hors dépôt, non committé.
+
+### Compteur inchangé
+
+**10/13**. Restent : `func_0805E99C` (compositeur, en pause), 
+`func_0805E8F0` (near-miss, même classe de résidu, en pause),
+`func_08050868` (groupement du switch extérieur validé ce round §2,
+corps complet jamais compilé), `func_080ADD78` (site d'appel localisé
+précisément ce round §1, `vtable_unk_080E78F0` identifiée comme
+prochaine piste de recherche pour ses 4 callbacks, corps de 233 lignes
+jamais compilé).
