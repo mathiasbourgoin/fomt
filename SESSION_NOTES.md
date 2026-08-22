@@ -13184,3 +13184,160 @@ Scratch utilise : `/tmp/w90s8/{try.sh,cmp.py,scmp.py,prelude.h,
 t30..t68.cc,m1/m3/me/mo.cc,target.s,rtl*/cse*/comb*/greg*.txt}` +
 `/tmp/agbcc_src` -- hors depot, non committe ; la source canonique t58
 est reproduite integralement ci-dessus.
+
+## Round w101 (worktree `w90`, branche `parallel-90`) -- near-miss
+amélioré sur `func_0805E8F0` (rotation de boucle enfin correcte),
+caractérisation de `func_08050868` (résolveur de direction 8 voies) et
+première lecture de `func_080ADD78` (interpréteur de codes de contrôle
+texte) -- toujours 10/13, aucun commit ce round
+
+Mission (pivot explicite de Mathias) : `func_0805E99C` est mis en
+pause définitive (6 rounds w96-w100, near-miss structurel documenté,
+ne pas y retoucher). Reprendre `func_0805E8F0` (near-miss w93, rotation
+de boucle inversée) avec une forme C réellement différente, puis si
+ça résiste encore, caractériser `func_08050868` (323 lignes) et
+`func_080ADD78` (233 lignes), jamais regardés au-delà de leur taille.
+
+### 1. `func_0805E8F0` : rotation de boucle résolue, near-miss
+nettement resserré (34/172 -> 64/172 octets identiques), toujours pas
+committé
+
+Scratch recréé dans `/tmp/w90scratch4` (`try.sh` : compile un `.cc`
+isolé via `arm-none-eabi-cpp` + `tools/agbcc/bin/agbcp` + `as`, aligne
+les sections, extrait `.text`, diff octet à octet contre
+`target.bin` = `baserom.gba[0x0805E8F0:0x0805E99C]`, 172 octets).
+
+Les 4 formes déjà essayées en w93 (`for(;;)`, `while(1)`+
+`break`/`continue`, `do{}while(1)`, `goto` explicite) produisaient
+toutes la même rotation de boucle inversée (bloc B avant bloc A, saut
+initial, chute libre B→A). Nouvelle forme testée ce round, en 2 volets
+indépendants qui se sont révélés TOUS LES DEUX nécessaires :
+
+1. **Boucle** : `do { <bloc A: avance l'index selon signe(delta)>;
+   duration = table[index].duration; if (duration == 0) { timer = 0;
+   break; } timer += duration << 8; } while (timer <= 0);` -- un
+   `do{}while(cond)` où le `break` du cas `duration==0` partage le
+   même point de sortie que la condition de boucle naturelle. Cette
+   forme précise (par opposition au strict `do{}while(1)` de w93, qui
+   matérialise le test de sortie comme un `if` interne suivi d'un `b`
+   vers le sommet plutôt que comme condition de boucle) fait enfin
+   sortir agbcc avec la BONNE rotation : bloc A physiquement en
+   premier à l'entrée directe de la boucle, bloc B ensuite, branchement
+   arrière conditionnel (`ble`) en bas -- confirmé par désassemblage,
+   correspond exactement au squelette de la cible. Un intermédiaire
+   testé (`do{}while(keep_going)` avec une variable booléenne
+   explicite au lieu d'un `break`) donne AUSSI la bonne rotation mais
+   matérialise le booléen en instructions superflues (`movs r0,#0/#1`
+   + `cmp`/`bne` au lieu d'un `bgt` direct) -- la forme avec `break` +
+   condition de boucle réelle est strictement meilleure.
+2. **Lecture du champ `count` (+0x08)** : remplacer
+   `table ? *(u16*)(self+8) : 0` par une réécriture qui prend
+   explicitement l'adresse du champ `+0x04` (`table_field =
+   (AnimFrame**)(self+4)`) et lit `+4` relatif À CETTE ADRESSE
+   (`*(u16*)((u8*)table_field + 4)`) plutôt que `self+8` directement --
+   change juste assez l'ordre d'évaluation pour que la taille finale
+   du corps de fonction (172 octets, IDENTIQUE à la cible) et l'ordre
+   des blocs correspondent. Sans ce détail, la fonction compile 4
+   octets plus courte que la cible (168) à cause d'un bloc de sortie
+   dupliqué différent.
+
+Résultat combiné (`/tmp/w90scratch4/t6.cc`) : 172/172 octets de
+longueur (identique à la cible), rotation de boucle correcte, **64/172
+octets identiques** (contre 34/172 en w93, et surtout la mauvaise
+rotation en w93 contre la bonne ici) -- net progrès mais PAS byte-exact.
+
+**Blocage résiduel isolé précisément** : coloration de registres. La
+cible alloue `flags`->r7, `delta`->`ip` (via un `mov` explicite bas/haut
+à chaque test, car `cmp` immédiat contre 0 n'existe qu'en registre
+bas), `count`->r5 (réutilisation du registre ayant servi à l'adresse
+temporaire `self+4`). Le t6 alloue `flags`->r5, `delta`->r7 (testé
+directement sans passer par un registre haut), `count`->`ip`. Même
+squelette structurel, même ordre de calculs, mais une permutation
+différente de l'allocateur de registres RTL d'agbcc -- exactement la
+même classe de blocage que celui documenté pour `func_0805E99C`
+(w97-w100), qui avait déjà nécessité 6 rounds sans résolution complète.
+Conformément à la consigne de Mathias, ce blocage n'a PAS été creusé
+davantage ce round (pas de 3e volet type "extraire bloc B en fonction
+séparée" tenté, faute de signal que ça changerait la coloration plutôt
+que juste la rotation déjà acquise). Aucun fichier `src/`/`asm/`/
+`fomt.lds` touché en dépôt pour cette fonction -- aucun commit.
+
+Scratch conservé : `/tmp/w90scratch4/{try.sh,t1..t9.cc,target.bin,
+*.dis}` -- hors dépôt.
+
+### 2. `func_08050868` (323 lignes) : caractérisé, résolveur de
+direction 8 voies -- PAS de tentative de compilation
+
+Site d'appel unique trouvé dans `asm/code_0804E9C8.s` (même fonction
+englobante que `franglais_transition_impl_tick`, juste avant la zone
+déjà portée) :
+
+```
+r0 = entity->field_0x15c   (u32, "nouvelle direction demandée", 0..7)
+r1 = entity->field_0x158   (u32, ancien état, valeur déjà stockée)
+r2 = packed_key_bits        (u8/u32, octet avec les bits 0x80/0x40/0x30
+                              -- paire haute et paire basse de 2 bits,
+                              forme typique d'un octet de direction
+                              D-pad empaqueté)
+result = func_08050868(r0, r1, r2)
+entity->field_0x158 = result   // stocké directement, sans transformation
+```
+
+Corps : un premier `switch` à 8 cas sur `r0` (table de sauts en
+`.rodata` adjacente, `mov pc, r0`), chaque cas teste un sous-ensemble
+des bits de `r2` (`0xC0`, `0x80`, `0x40`, `0x30`) puis soit retourne
+directement un code 1-7 selon des comparaisons directes sur `r3`
+(l'ancien état), soit délègue à un SECOND switch imbriqué indexé par
+`r3-1` (nouvelle table de sauts locale, jusqu'à 6 cas). Les valeurs de
+retour possibles sont denses (1 à 7), avec un label commun
+`.L08050ABC`..`.L08050AD0` pour chaque constante -- signature classique
+d'une table de transition d'état écrite à la main par les devs
+d'origine (probablement une table de blending 8-directions pour lisser
+le changement de facing du personnage quand plusieurs touches
+directionnelles sont maintenues -- ex. Haut+Droite -> Nord-Est --,
+avec gestion des cas où le joueur relâche une touche en diagonale
+pour ne garder qu'un seul axe). Pas de boucle, pas d'état persistant
+au-delà de l'argument/retour -- purement combinatoire.
+
+Non tenté en compilation ce round (fonction bien plus grosse et à
+switches imbriqués que tout ce qui a été porté jusqu'ici dans cette
+mission ; recommandé pour un round dédié, en commençant par le premier
+switch à 8 cas isolément puis les 3 sous-tables une par une).
+
+### 3. `func_080ADD78` (233 lignes) : première lecture, rôle identifié
+-- interpréteur de codes de contrôle du moteur de texte/dialogue
+
+Pas de site d'appel retrouvé dans les fichiers `asm/` déjà scindés
+autour de `franglais_transition_impl_tick` (probablement appelé depuis
+une autre unité de compilation pas encore localisée -- non cherché plus
+loin ce round, budget épuisé). Corps : boucle sur un pointeur de chaîne
+(`r5`, avancé `ldrb ...; adds r5,#1` à chaque itération), `switch` sur
+l'octet lu (14 cas, table de sauts) qui distingue codes de contrôle
+(0-13, ex. `strcpy` déclenché sur un cas particulier avec un buffer
+local de 0x28 octets sur la pile) et octets de texte normal
+(`cmp r2, #0x1f; bls` -- au-dessus de 0x1F, c'est du texte imprimable
+accumulé dans un accumulateur bit-à-bit `sb` puis émis via un appel de
+méthode virtuelle `_call_via_r2`/`_call_via_r1` sur un objet passé en
+paramètre -- vtable à 4 méthodes distinctes observées, offsets
+`+0xc`/`+0x10`/`+0x14`/`+0x18`, cohérent avec un renderer de texte
+"put glyph"/"portrait"/"line break"/"attente touche"). Rôle très
+probable : le parseur bas niveau du moteur de dialogue qui consomme
+les codes d'échappement du texte du jeu (couleurs, pauses, portraits,
+retours ligne) -- donc potentiellement une cible à forte valeur pour
+le pilier "Langue" de la feuille de route franglais (le texte
+traduit devra passer par exactement ce chemin), mais bien trop gros et
+pas assez caractérisé pour tenter un match ce round. Recommandé pour un
+round dédié : retrouver d'abord le site d'appel (chercher dans les
+`asm/*.s` pas encore scindés, ou dans la table de méthodes virtuelles
+qui pointe dessus) pour fixer la sémantique exacte des 14 codes avant
+toute tentative de C.
+
+### Compteur inchangé
+
+**10/13** callés-fonctions opaques de `franglais_transition_impl_tick`
+portés (inchangé depuis w95). Restent : `func_0805E99C` (compositeur,
+en pause explicite, ne pas retoucher), `func_0805E8F0` (near-miss
+nettement amélioré ce round, cf. §1, registre-coloration bloquante),
+`func_08050868` (caractérisé ce round, §2, jamais compilé),
+`func_080ADD78` (rôle identifié ce round, §3, site d'appel pas
+retrouvé, jamais compilé).
