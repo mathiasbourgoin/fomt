@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "source_commit": "6daf905",
+  "assembly": "asm/code_0804E9C8.s",
+  "transition": {
+    "symbol": "func_0804F7A4",
+    "entry": "0x0804F7A4",
+    "epilogue": "0x08050382",
+    "next_conventional_function": "0x0805039C",
+    "span_bytes": 3064,
+    "frame_bytes": 184,
+    "return": "state->phase (u32 at +0x08)",
+    "arguments": [
+      {"index": 0, "location": "r0", "meaning": "TransitionState*"},
+      {"index": 1, "location": "r1", "meaning": "RenderTickInput const*; u16 fields read at +0x04 and +0x08"},
+      {"index": 2, "location": "r2", "meaning": "SpriteOutput*; forwarded as E99C argument 0"},
+      {"index": 3, "location": "r3", "meaning": "display/context pointer; retained at frame +0x7c"},
+      {"index": 4, "location": "caller stack +0x00", "meaning": "opaque callback owner A"},
+      {"index": 5, "location": "caller stack +0x04", "meaning": "opaque callback owner B"},
+      {"index": 6, "location": "caller stack +0x08", "meaning": "opaque handle passed to func_08008CD0/func_08008B6C; exact role unconfirmed"}
+    ],
+    "phase_dispatch": {
+      "field_offset": "0x08",
+      "cases": {
+        "0": "0x0804F99C",
+        "1": "0x0804F800",
+        "2": "0x0804F880",
+        "3": "0x0804F99C",
+        "4": "0x0804F892",
+        "5": "0x0804F892",
+        "6": "0x0804F90A"
+      }
+    },
+    "internal_frame_entry": {
+      "symbol": "sub_08050342",
+      "address": "0x08050342",
+      "conventional_abi": false,
+      "reason": "Uses the parent's r7 and 0xb8-byte stack frame, then exits through the parent epilogue. It is an early-exit continuation, not a reusable callee."
+    }
+  },
+  "state_layout": {
+    "allocation_size": "0x554",
+    "fields": [
+      {"offset": "0x08", "width": 4, "name": "phase", "evidence": "seven-way jump-table selector and returned value"},
+      {"offset": "0x0c", "width": 1, "name": "phase_counter", "evidence": "increment/decrement and phase guards"},
+      {"offset": "0x0d", "width": 1, "name": "phase_flag", "evidence": "phase-5 render guard"},
+      {"offset": "0x3c", "width": 4, "name": "tile_allocation_count", "evidence": "index is shifted left five before OBJ VRAM DMA and incremented afterwards"},
+      {"offset": "0xd0", "width": 28, "name": "sub_fsm_storage_minimum", "evidence": "passed to ADD78/ADD08; byte +0x1a is read"},
+      {"offset": "0xeb", "width": 1, "name": "dirty_flag", "evidence": "equals sub-FSM storage +0x1b and is written/tested as a byte"},
+      {"offset": "0xec", "width": 4, "name": "sub_mode_pointer_or_value", "evidence": "loaded for 0/1/2 phase selection and passed to ADD78"},
+      {"offset": "0x1c0", "width": null, "name": "sprite_animator_a", "evidence": "self + 0xe0*2 passed to func_0805E8F0"},
+      {"offset": "0x500", "width": 1, "name": "animator_enabled", "evidence": "func_08050C64 clears self + 0xa0*8"},
+      {"offset": "0x504", "width": null, "name": "embedded_object", "evidence": "destructor installs vtable_unk_080E5A28; +0x20 is queried"},
+      {"offset": "0x534", "width": null, "name": "sprite_animator_b", "evidence": "passed to func_0805E8F0 and func_0805E860"},
+      {"offset": "0x550", "width": 1, "name": "feature_flags", "evidence": "self + 0xaa*8 tested bitwise in phase dispatch"}
+    ]
+  },
+  "e99c_dependency": {
+    "symbol": "func_0805E99C",
+    "abi": ["SpriteOutput*", "SpriteInputEntry*", "u32 count", "CompositeDescriptor*"],
+    "input_span": {"data_offset": 0, "count_offset": 4},
+    "descriptor_layout": {
+      "minimum_size": "0x19",
+      "fields": {
+        "x": "i16 +0x00",
+        "y": "i16 +0x02",
+        "attribute_4": "u16 +0x04",
+        "attribute_6": "u16 +0x06",
+        "attribute_8": "u16 +0x08",
+        "attribute_c": "u32 +0x0c",
+        "flags": "u8 +0x10",
+        "mode": "u32 +0x14",
+        "enabled": "u8 +0x18"
+      }
+    },
+    "sites": [
+      {
+        "call": "0x0804FF0E",
+        "continuation": "0x0804FF12",
+        "descriptor": "frame +0x3c",
+        "fixed_position": {"x": 52, "y": 92},
+        "shared_arguments": "output=entry arg2; input=*(frame+0x0c); count=u16(frame+0x10) when input is non-null"
+      },
+      {
+        "call": "0x0805003C",
+        "continuation": "0x08050040",
+        "descriptor": "frame +0x2c",
+        "fixed_position": {"x": 40, "y": 104},
+        "shared_arguments": "output=entry arg2; input=*(frame+0x0c); count=u16(frame+0x10) when input is non-null"
+      }
+    ]
+  },
+  "recommended_source_seam": {
+    "symbol": "func_08050D3C",
+    "entry": "0x08050D3C",
+    "end": "0x08050D5C",
+    "size_bytes": 32,
+    "kind": "replaceable conventional wrapper",
+    "legacy_target": "func_0804F7A4",
+    "strategy": "Replace the whole wrapper entry with a far trampoline to a source-side wrapper. The source wrapper dereferences argument 0, calls the untouched legacy transition with all seven arguments, and may inspect/post-process the SpriteOutput argument. Keep legacy as the default path.",
+    "why_not_patch_e99c_calls_directly": "Each E99C site has only a four-byte BL and immediately-live continuation instructions. The payload at 0x08800000 is outside the Thumb-1 BL range, so a direct source hook needs a separately verified in-range veneer or a larger replay trampoline.",
+    "required_before_implementation": [
+      "payload symbol for the source wrapper",
+      "entry trampoline byte test at 0x08050D3C",
+      "legacy parity boot test through phases 0-6",
+      "first-dialogue render test with post-processing disabled and enabled"
+    ]
+  }
+}
