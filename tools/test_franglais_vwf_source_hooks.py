@@ -32,12 +32,14 @@ SITES = (
     (0x0804FD4A, "franglais_dialogue_vwf_hook_b", b"\xc0\x46\x00\x4b\x18\x47",
      b"\x40\x46\x00\x28"),
 )
+BLITTER = (0x0804E9C8, "vwf_draw_glyph_unaligned", b"\x00\x4c\x20\x47",
+           b"\x00\xb5\x13\x1c")
 
 
 def symbol_offsets(path: Path) -> dict[str, int]:
     result: dict[str, int] = {}
     pattern = re.compile(
-        r"^\.SET (franglais_dialogue_vwf_hook_[ab]), "
+        r"^\.SET (franglais_dialogue_vwf_hook_[ab]|vwf_draw_glyph_unaligned), "
         r"franglais_payload_start \+ 0x([0-9A-Fa-f]+)$")
     for line in path.read_text(encoding="ascii").splitlines():
         match = pattern.match(line)
@@ -62,6 +64,25 @@ def verify(rom_path: Path, symbols_path: Path) -> list[str]:
         actual_continuation = rom[off + 10:off + 10 + len(continuation)]
         if actual_prefix != prefix:
             failures.append(f"{name}: trampoline invalide {actual_prefix.hex()}")
+        if target != expected_target:
+            failures.append(
+                f"{name}: cible 0x{target:08X}, attendu 0x{expected_target:08X}")
+        if actual_continuation != continuation:
+            failures.append(
+                f"{name}: continuation vanilla modifiee "
+                f"{actual_continuation.hex()}")
+
+    site, name, prefix, continuation = BLITTER
+    if name not in offsets:
+        failures.append(f"{name}: alias absent de {symbols_path}")
+    else:
+        off = site - ROM_BASE
+        actual_prefix = rom[off:off + len(prefix)]
+        target = struct.unpack_from("<I", rom, off + len(prefix))[0]
+        expected_target = PAYLOAD_BASE + offsets[name] + 1
+        actual_continuation = rom[off + 8:off + 8 + len(continuation)]
+        if actual_prefix != prefix:
+            failures.append(f"{name}: trampoline r4 invalide {actual_prefix.hex()}")
         if target != expected_target:
             failures.append(
                 f"{name}: cible 0x{target:08X}, attendu 0x{expected_target:08X}")

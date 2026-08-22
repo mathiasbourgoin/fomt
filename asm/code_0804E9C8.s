@@ -3,13 +3,20 @@
 
 	thumb_func_start func_0804E9C8
 func_0804E9C8: @ 0x0804E9C8
-	movs r0, #0
-	bx lr
-
-	thumb_func_start func_0804E9CC
-func_0804E9CC: @ 0x0804E9CC
-	movs r0, #0
-	bx lr
+	@ The source port preserves this 8-byte slot, but its placeholder body
+	@ was a no-op.  Site A deliberately emits unaligned x coordinates, so
+	@ leaving the placeholder here erases every compacted glyph.  This is
+	@ exactly the scratch-r4 trampoline used by the binary fallback: r3 is
+	@ the fourth argument (y) and must remain intact for the payload blitter.
+	ldr r4, .Lfranglais_vwf_draw_glyph_unaligned
+	bx r4
+.Lfranglais_vwf_draw_glyph_unaligned: .4byte vwf_draw_glyph_unaligned + 1
+	@ Vanilla exposes the adjacent recolor entry at 0x0804E9CC.  The binary
+	@ fallback already overwrites that four-byte stub as part of this same
+	@ eight-byte r4 trampoline; retain that exact behaviour for the one source
+	@ caller instead of leaving it as an undefined linker symbol.
+	.global func_0804E9CC
+	.thumb_set func_0804E9CC, func_0804E9C8
 .L0804E9D0:
 	.byte 0x00, 0xB5, 0x13, 0x1C, 0x02, 0x04, 0x12, 0x0C, 0x00, 0x0C, 0x42, 0x43, 0x52, 0x01, 0x92, 0x08
 	.byte 0x03, 0x48, 0x02, 0x40, 0x18, 0x1C, 0x84, 0xF0, 0xB1, 0xFE, 0x01, 0xBC, 0x00, 0x47, 0x00, 0x00
