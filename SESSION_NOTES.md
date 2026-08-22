@@ -13824,3 +13824,167 @@ et seulement en dernier sur le compositeur.
 Scratch de cette session : `/tmp/w90s9/{try.sh,build.sh,cmp2.py,
 p1..p4.cc,t28..t42.cc,gdbscript,gdbslots,gdbput*,target.bin}` -- hors
 dépôt, non committé ; l'essentiel est intégralement documenté ci-dessus.
+
+## Round w105 (worktree `w90`, branche `parallel-90`) -- application de la
+recette gdb w104 (`global.c`) à `func_080ADD78` : formule de priorité
+VALIDÉE en direct sur un vrai compile, mais résultat NÉGATIF -- elle ne
+peut PAS expliquer la permutation observée pour `budget`, ce qui remet
+en cause l'hypothèse "pure priorité global_alloc" pour cette fonction
+
+Mission : appliquer telle quelle la recette gdb de w104 §4
+(`break global.c` sur la sélection de priorité et l'assignation finale
+de `find_reg`) à `func_080ADD78`, pour comprendre le mécanisme exact de
+sa permutation à 4 (`cursor`/`src`/`budget`/`text`, en réalité 6 en
+comptant `sink`/`acc` qui partagent le même pool de registres
+persistants). Verdict : la recette FONCTIONNE et donne des chiffres
+réels exploitables (première fois que ce point précis de l'allocateur
+est instrumenté au débogueur sur cette fonction), mais ces chiffres
+CONTREDISENT l'hypothèse de départ -- **compteur inchangé : 11/13**,
+rien commité (aucune tentative de match forcé).
+
+### 0. Protocole
+
+Scratch reconstruit dans `/tmp/w90s10/` (les scratchs `/tmp/w90s1` et
+`/tmp/w90s9` des rounds précédents n'ont pas survécu au redémarrage,
+comme prévu) ; `/tmp/agbcc_src` (clone amont `notyourav/agbcc`, branche
+`cp`) avait en revanche survécu et a été réutilisé tel quel.
+
+Confirmation préalable indispensable : `gdb --batch -ex "info sources"
+tools/agbcc/bin/agbcp`, filtré sur `global.c`/`local-alloc.c`, montre
+que le binaire a été compilé depuis le sous-dossier `g++/` du clone
+amont (chemins `/tmp/tmp.XXXX/g++/global.c` dans les infos DWARF), PAS
+`g++_arm/` -- point non vérifié explicitement dans les rounds
+précédents, maintenant tranché : c'est bien `/tmp/agbcc_src/g++/*.c`
+qu'il faut lire, pas la variante `_arm`.
+
+Reconstruction de `func_080ADD78` en C++ autonome (`/tmp/w90s10/dd78.cc`,
+hors dépôt) à partir de la sémantique 100% validée en w103 §3 (lecture
+directe de `asm/code_080ADD20.s:57-288`) : classes `Provider`/`Src`/
+`Sink` à méthodes virtuelles (pour obtenir automatiquement les
+`bl _call_via_rN` par `-fvtable-thunks`, sans modéliser les vtables à
+la main), struct `Cursor`, traduction directe du CFG (gotos/labels
+correspondant 1:1 aux étiquettes `.L080ADDxx`/`.L080ADExx` de la
+cible). Compilé au pipeline documenté (w98) :
+`arm-none-eabi-cpp -iquote . dd78.cc | tools/agbcc/bin/agbcp -quiet
+-fno-exceptions -fno-rtti -fvtable-thunks -g -mthumb-interwork
+-Wimplicit -Wparentheses -O2 -fhex-asm -o dd78.s`. Compile propre au
+premier essai, forme de sortie structurellement isomorphe à la cible
+(même squelette switch/table de sauts/blocs), mais avec sa PROPRE
+permutation de registres (différente à la fois de la cible et des
+tentatives de w103) : `cursor`→r5, `text`→r6, `src`→r7, `acc`→r8,
+`sink`→r9, `budget`→r10(`sl`). Ce nouveau point de données confirme
+au passage que la permutation est bien sensible à la forme C exacte
+(cette reconstruction, bien que sémantiquement fidèle, diffère déjà de
+celle de w103 : `budget`/`text` ont notamment échangé de rôle relatif).
+
+### 1. Recette gdb w104 appliquée à `global.c` : deux points d'arrêt
+
+- `break global.c:821` (dans `allocno_compare`, juste après le calcul
+  complet de `pri1`/`pri2`, avant le `if (pri2 - pri1) return ...`) :
+  `commands` affiche `v1`, `v2`, `allocno_reg[v1/v2]` (le regno pseudo),
+  `allocno_n_refs[v1/v2]`, `allocno_live_length[v1/v2]`, `pri1`, `pri2`.
+- `break global.c:1602` (`reg_renumber[allocno_reg[allocno]] = best_reg;`,
+  le point exact où `find_reg` fige l'assignation finale) : affiche
+  `allocno`, le regno pseudo, `best_reg` (le registre matériel choisi),
+  `allocno_n_refs`/`allocno_live_length` de cet allocno.
+
+`gdb --batch -x gdbscript tools/agbcc/bin/agbcp` avec `run ... < dd78.i`
+(stdin redirigé vers le `.i` prétraité par `cpp`) : 247 comparaisons
+`allocno_compare` tracées, 9 assignations finales `find_reg` tracées
+sur toute la compilation (dont 3 pour des registres bas r1/r2, des
+temporaires courts sans rapport avec nos 6 variables). Extrait pour
+les 6 variables qui nous intéressent (identifiées sans ambiguïté par
+recoupement avec la sortie assembleur `dd78.s`, dans l'ordre de
+déclaration source `cursor,src,sink` = allocno 0/1/2, `budget` =
+allocno 3, `text`/`acc` = allocno 18/19) :
+
+| variable | allocno | regno | refs | live_length | priorité (×10⁴) | registre obtenu |
+|---|---|---|---|---|---|---|
+| `cursor` | 0 | 22 | 21 | 170 | 4941 | r5 |
+| `text`   | 18| 44 | 15 | 120 | 3750 | r6 |
+| `src`    | 1 | 23 | 11 | 141 | 2340 | r7 |
+| `acc`    | 19| 45 | 11 | 222 | 1486 | r8 |
+| `sink`   | 2 | 24 | 7  | 143 |  979 | r9 |
+| `budget` | 3 | 25 | 5  | 138 |  725 | r10|
+
+(priorité = `floor_log2(refs) * refs / live_length * 10000`, formule
+lue directement dans `global.c:813-820`, `allocno_size` valant 1 pour
+les 6 -- toutes des pointeurs/`int` en `SImode`.)
+
+**Le mécanisme est validé EN DIRECT, sans ambiguïté** : l'ordre de
+priorité décroissante (`cursor > text > src > acc > sink > budget`)
+prédit EXACTEMENT l'ordre d'assignation observé au point d'arrêt
+`global.c:1602`, et cet ordre, combiné à `REG_ALLOC_ORDER` d'ARM
+(`config/arm/arm.h`, sous-séquence pertinente pour les registres
+préservés par l'appelant : `4,5,6,7,8,10,9,11`), explique intégralement
+QUEL registre matériel obtient chaque allocno (le premier alloué prend
+le premier libre dans cet ordre -- ici r4 déjà pris par une variable
+locale `advanced` allouée par `local-alloc.c`, donc r5 est le premier
+disponible). C'est la confirmation empirique complète, jamais faite
+avant ce round, de la mécanique décrite (mais pas testée) en w104 §4.
+
+### 2. Le résultat NÉGATIF : la même formule REFUSE d'expliquer
+l'assignation de la CIBLE
+
+Assignation cible (relevée directement dans `asm/code_080ADD20.s:57-77`,
+`0x080ADD78`-`0x080ADD90`) : `cursor`→r7, `src`→r8, `sink`→r10(`sl`),
+`budget`→r6, `text`→r5, `acc`→r9(`sb`, déduit par élimination -- même
+registre que dans nos tentatives). Pour que cet ordre (`text > budget
+> cursor > src > sink > acc`) soit produit par LA MÊME formule, il
+faudrait :
+
+- `budget` (5 refs, confirmés identiques dans la cible par comptage
+  manuel exhaustif de chaque occurrence de r6 dans le désassemblage :
+  1 def + 1 cmp + 1 `subs` (compte pour 2, use+def) + 1 cmp = 5) doit
+  dépasser la priorité de `cursor` (21 refs). Avec `floor_log2(5)=2`,
+  ceci exige `live_length[budget] < 10000*10/4941 ≈ 20.2` instructions
+  statiques -- alors que `budget` est défini dès l'entrée de fonction
+  et relu/décrémenté au fond de la boucle puis re-testé juste avant la
+  sortie, donc une portée squelettique proche de celle de `cursor`
+  (170 dans notre compile) est attendue, PAS moins de 20. Le rapport de
+  priorité `cursor`/`budget` sous n'importe quelle reformulation
+  plausible de la même sémantique reste de l'ordre de ×10 en faveur de
+  `cursor`, jamais inversé.
+- Ceci n'est PAS un problème de forme C (une reformulation change les
+  refs/live_length de quelques unités, pas d'un facteur 10).
+
+**Conclusion honnête** : soit (a) l'association registre↔rôle héritée
+de w101/w103 pour cette fonction contient une erreur (p. ex. `budget`
+et une autre variable à vie courte sont inversées dans notre lecture
+du désassemblage cible -- reste à re-vérifier octet par octet, pas
+juste "à l'œil"), soit (b) l'assignation finale de `budget` dans la
+cible NE PASSE PAS par le chemin normal de `find_reg` en première passe
+décrit ici, mais par un mécanisme distinct -- candidat le plus probable :
+`reload1.c` (retry/caller-save après le passage initial de
+`global_alloc`, notamment `retry_global_alloc`, jamais tracé au
+débogueur jusqu'ici ; w104 §4 mentionnait déjà `reload1.c` dans la
+liste des fichiers à instrumenter mais seul `global.c` a été fait ce
+round, faute de temps). Aucune des deux hypothèses n'est tranchée.
+
+### 3. Recommandation pour la suite
+
+1. Re-vérifier au bit près (pas à l'œil) la correspondance
+   registre↔rôle de la cible pour `func_080ADD78`, en particulier la
+   paire `budget`/`text` (r6/r5) -- un product simple d'échange
+   d'étiquette entre les deux résoudrait immédiatement la contradiction
+   du §2 sans remettre en cause le mécanisme.
+2. Si la correspondance est confirmée correcte, étendre la recette gdb
+   à `reload1.c` (`retry_global_alloc`, le chemin caller-save) --
+   c'est le seul autre endroit où un registre peut recevoir son
+   assignation finale après `global_alloc`, et w104 §4 le mentionnait
+   déjà sans le tester.
+3. Ne PAS retenter de variations aveugles de forme C sur cette
+   fonction sans l'un des deux signaux ci-dessus -- l'écart de priorité
+   mesuré (~×10) est trop grand pour être comblé par une reformulation
+   superficielle.
+
+### Compteur
+
+**11/13, inchangé.** `func_0805E99C`, `func_0805E8F0` toujours en
+pause. `func_080ADD78` : mécanisme de priorité de `global_alloc`
+désormais VALIDÉ EN DIRECT (première fois, chiffres réels obtenus par
+gdb), mais insuffisant à lui seul pour expliquer la permutation cible
+-- nouvelle piste concrète et falsifiable pour la suite (§3).
+
+Scratch de cette session : `/tmp/w90s10/{dd78.cc,dd78.i,dd78.s,
+gdbscript,gdbout.txt,dd78_body.txt}` -- hors dépôt, non committé.
