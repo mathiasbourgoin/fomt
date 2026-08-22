@@ -13988,3 +13988,82 @@ gdb), mais insuffisant à lui seul pour expliquer la permutation cible
 
 Scratch de cette session : `/tmp/w90s10/{dd78.cc,dd78.i,dd78.s,
 gdbscript,gdbout.txt,dd78_body.txt}` -- hors dépôt, non committé.
+
+## Round w106 (worktree isolé `fomt-e99c`, branche
+`codex/e99c-round106`) -- hypothèse `reload1.c` falsifiée, emplacement
+des deux masques prouvé, near-match resserré à 301/303 instructions
+
+Mission : reprendre `func_0805E99C` après le match de
+`func_0805E8F0`, sans permutations C aveugles : vérifier d'abord
+l'association rôle-registre, puis tracer le chemin
+`reload1.c`/caller-save recommandé en w105.
+
+### 1. Association registre-rôle vérifiée
+
+Une comparaison automatisée des instructions structurellement alignées
+entre la cible et le candidat canonique w100 `t58.cc` confirme les
+registres à vie longue : `r7=desc`, `sl=src`, `r6=width`, `r9=height`,
+`r8=mode`. Il n'y a pas d'échange d'étiquettes caché dans le modèle
+sémantique de E99C. Baseline mesurée avec le comparateur w106 :
+648/648 octets, 303/303 instructions, 297/303 alignées structurellement.
+
+### 2. Hypothèse reload/caller-save falsifiée au debugger
+
+Les breakpoints réels sur `reload`, `save_call_clobbered_regs` et
+`retry_global_alloc` donnent :
+
+```text
+RELOAD global=1 caller_save_needed=0
+save_call_clobbered_regs : jamais appelé
+retry_global_alloc      : jamais appelé
+```
+
+Le déplacement tardif des `ldr` de `0xFFFF0000`/`0x0000FFFF` n'est
+donc produit ni par caller-save ni par une seconde allocation globale.
+La recommandation w105 est tranchée négativement pour E99C.
+
+### 3. Mécanisme des masques confirmé
+
+Les quatre écritures `raw.arr[0..3]` confirment l'hypothèse w100 :
+l'expansion émet bien les deux définitions de constantes avant/dans le
+bloc `raw.a`, mais `local-alloc` promeut encore la note `REG_EQUAL` du
+masque haut en `REG_EQUIV`, puis reload le rematérialise à son usage.
+Le masque bas perd sa note pendant combine et reste, lui, en place.
+
+Un candidat d'instrumentation avec contraintes `asm("")` sans
+instruction machine force les deux pseudos à survivre. Les deux `ldr`
+sont alors exactement aux offsets cibles `0x110` et `0x116`. En
+contraignant également les rôles déjà prouvés `shape`, `mode` et
+`flags`, le near-match atteint :
+
+```text
+taille                 648 / 648 octets
+instructions           303 / 303
+alignement structurel  301 / 303
+octets identiques      534 / 648
+```
+
+Ce candidat est une PREUVE d'allocateur, pas une décompilation à
+intégrer : aucune modification n'a été faite dans `src/`, `asm/` ou
+`fomt.lds`. Les deux résidus structurels sont maintenant (a) l'ordre
+des copies indépendantes `desc -> r7` / `src -> sl` dans le prologue,
+et (b) la coloration basse équivalente du bloc final de construction
+des attributs, à partir du reload pile à l'offset `0x19c`.
+
+### 4. Instrumentation conservée et prochaine hypothèse falsifiable
+
+Les scripts GDB, le candidat-preuve et le rapport détaillé sont dans
+`analysis/e99c_round106/`. La trace globale montre que les pseudos
+post-affine actuels sont `177 -> r4` et `180 -> r2`, là où la cible
+emploie naturellement `r3` et `r1`. Les forcer directement crée des
+spills supplémentaires et a été rejeté.
+
+Prochaine expérience : reconstruire la forme source qui donne
+naturellement `x/y -> r3/r1` dans le bloc attribut, puis seulement
+revenir à l'ordre de création des pseudos du prologue. Ne pas reprendre
+les permutations syntaxiques aléatoires.
+
+### Compteur
+
+**12/13.** `func_0805E99C` reste seule non matchée dans ce groupe ;
+`func_0805E8F0` et `func_080ADD78` sont désormais byte-exactes.
