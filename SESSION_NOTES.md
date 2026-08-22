@@ -12944,3 +12944,243 @@ passer par une variable mémoire).
 
 Scratch utilisé : `/tmp/w90s8/{try.sh,t18..t27.cc,*.s}` -- hors dépôt,
 non committé.
+
+
+## Round w100 (worktree `w90`, branche `parallel-90`) -- percee majeure sur
+`func_0805E99C` : 283/292 structurel (contre 280/310 depuis w97), les 3
+enigmes w97 (raw.b, chaines &1, ldrsb de y) sont RESOLUES au niveau des
+constructions C, un SEUL residuel reste (placement des ldr pool des masques)
+
+Mission : (1) suivre la piste `sign_extend(mem:QI)`/combine du round
+interrompu ; (2) sinon, poursuivre l'angle w99 (echapper au fold arbre en
+gardant les masques "gratuits"). Verdict : les DEUX pistes ont converge et
+sont percees. Pas encore byte-exact (aucun commit de src/asm, regle
+respectee), mais le residuel est passe de "3 enigmes + ~30 instructions"
+a UN SEUL mecanisme non reproduit (2 ldr pool places tot) dont dependent
+en cascade les ~9 sites restants. Compteur global inchange : 10/13.
+
+### 0. Protocole
+
+Scratch `/tmp/w90s7` perdu ; nouveau scratch `/tmp/w90s8/` :
+`try.sh` (cpp -nostdinc + agbcp -quiet -O2 -fhex-asm), `cmp.py`
+(comparaison normalisee contre le desassemblage de baserom, resolution
+des pools .Lnn+off des deux cotes), `scmp.py` (comparaison STRUCTURELLE
+insensible aux numeros de registres -- la metrique qui compte tant que
+l'allocation cascade), `target.s` (objdump de 0x805E99C..0x805EC04),
+sondes t30..t68 + micro-sondes m1/m3/me/mo. Clone amont agbcc refait en
+`/tmp/agbcc_src` (branche cp). Les dumps RTL s'obtiennent avec -dr -ds
+-dc -df -dg etc. : ils atterrissent dans `gccdump.*` A LA RACINE DU
+DEPOT (les nettoyer !). IMPORTANT : -dS/-dR produisent des dumps VIDES
+-> aucun scheduler ne tourne sur Thumb, tout ordre d'instruction est
+l'ordre d'emission RTL.
+
+### 1. raw.b (ex-5.1) : RESOLU -- deux affectations + masques dans des
+variables locales HORS BOUCLE
+
+La forme cible (ldrh lo ; ldr [sp,#8] ; ands 0xFFFF0000 ; orrs ; ldrh
+hi ; lsls ; ands 0xFFFF ; orrs ; str) sort EXACTEMENT de :
+
+    u32 mask_hi = 0xFFFF0000;   // avant la boucle
+    u32 mask_lo = 0x0000FFFF;
+    ...
+    raw.p.b = line[2].affineParam | (raw.p.b & mask_hi);
+    raw.p.b = (line[3].affineParam << 16) | (raw.p.b & mask_lo);
+
+Mecanisme (verifie sur dumps .rtl/.cse/.combine de la micro-sonde m1 et
+des sondes pleines) : (a) le fold FRONT-END de w99 est esquive car les
+masques ne sont pas des litteraux dans l'expression ; (b) cse fait le
+store-forwarding (une seule lecture, un seul str) mais NE simplifie PAS
+l'algebre (simplify_binary_operation exige deux operandes constants) ;
+(c) combine ne peut ni substituer les constantes (defs hors boucle -> pas
+de LOG_LINKS inter-blocs) ni utiliser reg_nonzero_bits : le pseudo est
+LIVE-AT-START des blocs de la boucle, et combine ne fait alors plus
+confiance a nonzero_bits (c'est LA regle qui separe la micro-sonde m1,
+mono-bloc, qui replie, du contexte en boucle qui ne replie pas) ; (d)
+reload rematerialise chaque masque en UN `ldr rX, .pool` (REG_EQUIV
+constant, cout zero en cadre). L'ordre cible des operandes est obtenu par
+`lo | (raw & m)` puis `(hi << 16) | (raw & m)` (operande gauche evalue
+d'abord).
+
+### 2. Chaines &1 des etages 2/3 (ex-5.2) : RESOLUES -- petites
+constantes opacifiees par variables hors boucle
+
+    u32 one = 1; u32 eight = 8; u32 sixteen = 16;   // avant la boucle
+    ...
+    t = ((((eight & d11) >> 3) & one) << 28) | (t & 0xEFFFFFFF);
+    t = ((((sixteen & d11) >> 4) & one) << 29) | (t & 0xDFFFFFFF);
+
+-> movs #8 ; ands ; lsrs #3 ; movs #1 ; ands ; lsls #28 ; ldr pool ;
+ands ; orrs : BYTE-IDENTIQUE a la cible, y compris les `movs #1`
+dupliques (rematerialisations de reload avec inheritance cassee par le
+clobber de r1 entre les deux sites -- exactement le motif "genere apres
+CSE" observe en w97). Deux subtilites : l'ordre VALEUR-D'ABORD
+(`(...) | (t & masque)`, la cible fait la valeur avant le masque,
+t18 avait l'inverse) et `eight & d11` (le 8 a gauche) qui evite un
+`add rX,rY,#0` parasite. La troncature u16 de palette survit de meme via
+`u32 fifteen = 15;` : `((u16)(((t<<16)>>28) + desc->unk4) & fifteen)`
+garde le lsl/lsr #16 (avec 0xF litteral le front-end replie la
+troncature a travers le &).
+
+### 3. ldrsb de y (ex-5.3) et ldrh de attr2 : RESOLUS -- union `SrcCur`
+a vue u16 et lecture (i8) d'un element
+
+    union SrcCur { SrcEntry e; u16 h[4]; };
+    union SrcCur cur;  ...  cur.e = *src;
+    y = (i8)cur.h[0];           // -> add r1,sp,#0x1c ; movs r0,#0 ;
+                                //    ldrsb r0,[r1,r0]  (EXACT)
+    e->attr2 = cur.h[2];        // -> ldrh depuis le slot (+0x20)
+
+C'etait bien la piste `sign_extend(mem:QI)` du round interrompu : le
+(i8) d'une lecture u16 se retrecit en (sign_extend (mem:QI ...)) qui
+survit a combine, et reload legitimise l'adresse sp+0x1c en
+`add r1,sp,#0x1c` + la template *extendqisi2_insn (thumb.md) emet
+`mov %0,#0 ; ldrsb %0,[%1,%0]`. ATTENTION fragilite extreme :
+`y = *(i8*)&cur`, `y = cur.b[0]` (membre i8 b[8]), `y = (i8)cur.e.w0`,
+ou un membre struct {i8 y0;...} donnent TOUS un resultat faux (shifts,
+ldrb+lsl+asr, ou re-empilement precoce de cur qui detruit tout le
+layout). Seule la forme (i8) d'un element du tableau u16 marche.
+AJOUTER un membre a l'union est sans danger (t56), y ACCEDER tot non.
+
+### 4. Layout de pile et residence memoire : le modele complet
+
+Avec l'union SrcCur (et CoeffBlock qui contient deja un tableau), cur,
+raw, coeffs deviennent des objets a residence pile assignee TOT, et le
+layout cible sort tout seul : sp+0 arg, raw +4/+8, x +0xc, y +0x10,
+coeffs +0x14, cur +0x1c/+0x20, dest +0x24 (SPILLE, recharge par
+`ldr r2,[sp,#0x24]` au calcul de line ✓), end +0x28. Le prologue est
+BYTE-EXACT (cadre 0x2c, str r0,[sp,#0x24], mov sl,r1, copie DImode
+ldr/ldr/str/str puis relecture [sp,#0x1c] ✓). d11 reste u8 (le passer
+en u32 casse l'allocation globale ; les etages travaillent en SImode
+grace a eight/sixteen). Regle d'or decouverte : l'ordre des slots suit
+l'ordre de decouverte des prises d'adresse (mo.cc : &b,&c,&a ->
+b+0,c+4,a+8), et toute lecture etroite precoce d'un membre d'union
+re-empile l'objet immediatement (d'ou la fragilite du point 3).
+
+### 5. LE residuel unique : le placement des `ldr rX, .pool` des masques
+
+Cible : `ldr r2,=0xFFFF0000` a 0x805EAAC et `ldr r4,=0xFFFF` a
+0x805EAB2, c'est-a-dire AVANT et AU MILIEU du bloc raw.a, a 8-9
+instructions de leurs utilisations (eabe/eac6). Nous : rematerialisations
+adjacentes (`ldr` juste avant chaque `ands`). Meme probleme au bloc
+attr01 (cible : pool 0xFFFFFF00 AVANT `ldr r1,[sp,#0x1c]` ; nous :
+apres). Consequence en cascade : les vies de r2/r4 etendues chez la
+cible augmentent la pression dans le bloc table, ce qui (arithmetique de
+priorites w97) expulse height vers r9 et produit les ~7 navettes
+mov-haut restantes + les 2-3 orientations de copies. Un seul mecanisme,
+~9 sites.
+
+Hypotheses ELIMINEES empiriquement (sondes t59-t68) :
+- pas de scheduler (dumps sched vides) ;
+- reload ne place les rematerialisations QUE adjacentes ;
+- copies locales `u32 m1 = mask_hi;` : propagees par le FRONT-END
+  (aucune copie au .rtl : t66) ; forme affectation `m1 = mask_hi;` :
+  la copie existe au .rtl mais canon_reg de CSE reecrit les usages vers
+  mask_hi (qty_first_reg = le plus ancien) et la copie meurt (t67,
+  verifie aux dumps) ;
+- masques litteraux ou affectes en constantes DANS la boucle : replies
+  par le front-end avant meme le RTL (t59/t60/t68), meme avec
+  multi-affectation de la variable externe ;
+- static const, tableaux locaux, extern : deja elimines en w99 (cout
+  memoire) ; volatile : trafic memoire en trop (w99 t20).
+
+Piste pour le prochain round : le seul emplacement d'insn reel qui
+colle est une definition dont la SOURCE survit a canon_reg/combine.
+Lire cse.c (canon_reg/qty) et reload1.c (choix du reload reg,
+inheritance) pour trouver la forme RTL exacte qui produit ces deux defs
+la ; ou variante : chercher si une double utilisation des masques
+(quatre insertions arr[] avec `raw.p.a = 0` prealable ?) laisse les defs
+de store_bit_field aux bonnes positions. Alternativement, accepter le
+near-miss (283/292 structurel, 169/292 exact) et pivoter vers
+`func_0805E8F0`/`func_08050868`/`func_080ADD78`.
+
+### 6. Source candidate canonique (t58.cc, 283/292 structurel,
+292/292 en nombre d'instructions, prologue/layout/pool byte-exacts)
+
+```c
+
+struct SrcEntry { u32 w0; u32 w1; };
+struct DestEntry { u32 attr01; u16 attr2; u16 affineParam; };
+struct CompositeDesc { i16 x, y; u16 unk4, unk6; u16 unk8; u16 pad_a;
+    u32 unk_c; u8 flags; u8 unk11; u16 pad_12; u32 mode; u8 unk18; };
+struct DestArray { u8 count; u8 pad[3]; DestEntry entries[128]; };
+struct CoeffPair { u32 a; u32 b; };
+union CoeffBlock { CoeffPair p; i16 arr[4]; };
+union SrcCur { SrcEntry e; u16 h[4]; };
+
+extern "C" void func_0805E99C(DestArray *dest, SrcEntry *src, u32 count, CompositeDesc *desc)
+{
+    u32 mask_hi = 0xFFFF0000;
+    u32 mask_lo = 0x0000FFFF;
+    u32 one = 1;
+    u32 eight = 8;
+    u32 sixteen = 16;
+    u32 fifteen = 15;
+    SrcEntry *end = src + count;
+    for (; src != end; src++) {
+        union SrcCur cur; union CoeffBlock coeffs; i32 y; i32 x;
+        union CoeffBlock raw; u32 shape, size, mode; i32 width, height;
+        cur.e = *src;
+        shape = (cur.e.w0 << 16) >> 30;
+        size = cur.e.w0 >> 30;
+        if (shape == 0) { height = 8 << size; width = height; }
+        else {
+            u32 big = 8 << (((size + 1) >> 1) + 1);
+            u32 small = 8;
+            if (size != 1) small = big >> 1;
+            if (shape != 1) { height = big; width = small; }
+            else            { height = small; width = big; }
+        }
+        x = (i32)(cur.e.w0 << 7) >> 23;
+        y = (i8)cur.h[0];
+        mode = desc->mode;
+        if (mode == 0) {
+            u8 flags = desc->flags;
+            if (1 & flags) { x = -(x + width);
+                cur.e.w0 = (((((cur.e.w0 << 3) >> 31) ^ 1) & 1) << 28) | (cur.e.w0 & 0xEFFFFFFF); }
+            if (2 & flags) { y = -(y + height);
+                cur.e.w0 = (((((cur.e.w0 << 2) >> 31) ^ 1) & 1) << 29) | (cur.e.w0 & 0xDFFFFFFF); }
+        } else {
+            u8 d11 = desc->unk11;
+            DestEntry *line;
+            { u32 t = ((d11 & 7) << 25) | (cur.e.w0 & 0xF1FFFFFF);
+              t = ((((eight & d11) >> 3) & one) << 28) | (t & 0xEFFFFFFF);
+              t = ((((sixteen & d11) >> 4) & one) << 29) | (t & 0xDFFFFFFF);
+              cur.e.w0 = t; }
+            line = (DestEntry *)((u8 *)dest + 4 + (d11 & 0x1F) * 32);
+            raw.p.a = (line[1].affineParam << 16) | line[0].affineParam;
+                raw.p.b = line[2].affineParam | (raw.p.b & mask_hi);
+            raw.p.b = (line[3].affineParam << 16) | (raw.p.b & mask_lo);
+            coeffs = raw;
+            func_0805EC24(&x, &y, width, height, coeffs.arr);
+            if (mode == 3) { x -= width / 2; y -= height / 2; }
+        }
+        x += desc->x; y += desc->y;
+        if (mode == 0) {
+            if (x + width <= 0 || x > 0xEF || y + height <= 0 || y > 0x9F)
+                goto next;
+        }
+        { u32 t = (u8)y | (0xFFFFFF00 & cur.e.w0);
+          t = ((mode & 3) << 8) | (t & 0xFFFFFCFF);
+          t = ((desc->unk_c & 3) << 10) | (t & 0xFFFFF3FF);
+          t = ((desc->unk18 & 1) << 12) | (t & 0xFFFFEFFF);
+          t = ((x & 0x1FF) << 16) | (t & 0xFE00FFFF);
+          cur.e.w0 = t; }
+        { u32 t = ((((((cur.e.w1 << 22) >> 22) + desc->unk6) << 22) >> 22)) | (cur.e.w1 & 0xFFFFFC00);
+          t = ((desc->unk8 & 3) << 10) | (t & 0xFFFFF3FF);
+          t = (((u16)(((t << 16) >> 28) + desc->unk4) & fifteen) << 12) | (t & 0xFFFF0FFF);
+          cur.e.w1 = t; }
+        { u32 c = dest->count;
+          if (c <= 0x7F) {
+              DestEntry *e = (DestEntry *)((u8 *)dest + 4 + c * 8);
+              e->attr01 = cur.e.w0;
+              e->attr2 = cur.h[2];
+              dest->count = c + 1; } }
+    next:;
+    }
+}
+```
+
+Scratch utilise : `/tmp/w90s8/{try.sh,cmp.py,scmp.py,prelude.h,
+t30..t68.cc,m1/m3/me/mo.cc,target.s,rtl*/cse*/comb*/greg*.txt}` +
+`/tmp/agbcc_src` -- hors depot, non committe ; la source canonique t58
+est reproduite integralement ci-dessus.
