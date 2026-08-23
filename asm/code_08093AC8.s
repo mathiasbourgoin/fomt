@@ -1240,6 +1240,7 @@ func_08094668: @ 0x08094668
 	.align 2, 0
 .L080946A4: .4byte gUnk_081009DC
 
+	.if 0
 	thumb_func_start func_080946A8
 func_080946A8: @ 0x080946A8
 	push {lr}
@@ -1251,6 +1252,7 @@ func_080946A8: @ 0x080946A8
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
 
 	.section .text.tail080946C4, "ax", %progbits
 	thumb_func_start func_080946C4

@@ -16120,6 +16120,7 @@ func_080DCF4C: @ 0x080DCF4C
 .L080DCFC4: .4byte vtable_unk_080E7568
 .L080DCFC8: .4byte __vt_7AEntity
 
+	.if 0
 	thumb_func_start func_080DCFCC
 func_080DCFCC: @ 0x080DCFCC
 	push {r4, lr}
@@ -16131,6 +16132,9 @@ func_080DCFCC: @ 0x080DCFCC
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
+
+	.section .text.code_080DCFE0, "ax", %progbits
 
 	thumb_func_start func_080DCFE0
 func_080DCFE0: @ 0x080DCFE0
