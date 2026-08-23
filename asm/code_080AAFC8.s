@@ -5744,11 +5744,3 @@ func_080ADB54: @ 0x080ADB54
 	pop {r4}
 	pop {r0}
 	bx r0
-
-	thumb_func_start func_080ADB78
-func_080ADB78: @ 0x080ADB78
-	push {lr}
-	ldr r0, [r0, #4]
-	bl func_080A5A9C
-	pop {r1}
-	bx r1
