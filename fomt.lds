@@ -152,7 +152,7 @@ SECTIONS
         src/code_080098AC.o(.text);
         asm/code_080098AC.o(.text);
         src/code_080098DC.o(.text);
-        asm/code_08009908.o(.text);
+        src/code_08009908.o(.text);
         src/code_08009940.o(.text);
         src/code_08009968.o(.text);
         src/code_08009984.o(.text);
