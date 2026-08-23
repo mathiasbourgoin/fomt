@@ -36,25 +36,3 @@ func_0801DDCC: @ 0x0801DDCC
     .align 2, 0
 .L0801DDF0: .4byte 0x00001038
 .L0801DDF4: .4byte 0x000034D8
-
-    thumb_func_start func_0801DDF8
-func_0801DDF8: @ 0x0801DDF8
-    push {r4, r5, lr}
-    adds r4, r0, #0
-    adds r5, r1, #0
-    ldr r1, .L0801DE1C @ =0x00001038
-    adds r0, r4, r1
-    ldr r0, [r0]
-    ldr r1, .L0801DE20 @ =0x000034D8
-    adds r0, r0, r1
-    adds r1, r5, #0
-    bl func_0809C5D0
-    ldr r0, [r4, #4]
-    adds r1, r5, #0
-    bl func_080AA850
-    pop {r4, r5}
-    pop {r0}
-    bx r0
-    .align 2, 0
-.L0801DE1C: .4byte 0x00001038
-.L0801DE20: .4byte 0x000034D8
