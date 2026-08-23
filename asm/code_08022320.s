@@ -2432,6 +2432,7 @@ func_08024C74: @ 0x08024C74
     bx lr
     .align 2, 0
 
+    .if 0
     thumb_func_start func_08024C88
 func_08024C88: @ 0x08024C88
     adds r2, r0, #0
@@ -2443,6 +2444,7 @@ func_08024C88: @ 0x08024C88
     strb r1, [r0]
     bx lr
 
+    .endif
     .section .text.tail08024CA0, "ax", %progbits
     thumb_func_start func_08024CA0
 func_08024CA0: @ 0x08024CA0
