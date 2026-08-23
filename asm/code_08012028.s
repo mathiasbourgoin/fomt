@@ -4504,7 +4504,8 @@ func_08014214: @ 0x08014214
     bx r0
     .align 2, 0
 
-    thumb_func_start func_08014234
+	.if 0
+	thumb_func_start func_08014234
 func_08014234: @ 0x08014234
     push {lr}
     ldr r0, [r0, #4]
@@ -4528,11 +4529,14 @@ func_0801424C: @ 0x0801424C
     adds r2, #0xa8
     ldr r2, [r2]
     bl _call_via_r2
-    pop {r1}
-    bx r1
-    .align 2, 0
+	pop {r1}
+	bx r1
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_08014264
+	.section .text.tail08014264, "ax", %progbits
+
+	thumb_func_start func_08014264
 func_08014264: @ 0x08014264
     push {r4, lr}
     adds r4, r2, #0
