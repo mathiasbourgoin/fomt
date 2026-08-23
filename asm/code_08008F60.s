@@ -653,10 +653,3 @@ func_080093AC: @ 0x080093AC
     bx r1
 
     .section .text.tail080094AC, "ax", %progbits
-    thumb_func_start func_080094AC
-func_080094AC: @ 0x080094AC
-    push {lr}
-    adds r0, #0xc
-    bl func_080093AC
-    pop {r1}
-    bx r1
