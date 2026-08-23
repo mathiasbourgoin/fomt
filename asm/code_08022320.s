@@ -2396,6 +2396,7 @@ func_08024BFC: @ 0x08024BFC
     bx r2
     .align 2, 0
 
+    .if 0
     thumb_func_start func_08024C54
 func_08024C54: @ 0x08024C54
     push {lr}
@@ -2416,6 +2417,8 @@ func_08024C64: @ 0x08024C64
     bx r0
     .align 2, 0
 
+    .endif
+    .section .text.tail08024C74, "ax", %progbits
     thumb_func_start func_08024C74
 func_08024C74: @ 0x08024C74
     adds r2, r0, #0
