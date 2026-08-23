@@ -432,13 +432,7 @@ func_0809EB4C: @ 0x0809EB4C
 	pop {r1}
 	bx r1
 
-	thumb_func_start func_0809EB68
-func_0809EB68: @ 0x0809EB68
-	ldrb r0, [r0, #0x14]
-	lsls r0, r0, #0x1c
-	lsrs r0, r0, #0x1c
-	bx lr
-
+	.section .text.tail0809EB70, "ax", %progbits
 	thumb_func_start func_0809EB70
 func_0809EB70: @ 0x0809EB70
 	push {lr}
