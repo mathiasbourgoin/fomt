@@ -167,7 +167,7 @@ asm/code_0801DD78.o(.text);
         src/code_0801DE30.o(.text);
         asm/code_0801DE3C.o(.text);
         src/code_0801FD48.o(.text);
-        asm/code_0801FD60.o(.text);
+        src/code_0801FD60.o(.text);
         src/entity.o(.text);
         src/code_entity_08020018.o(.text);
         asm/code_entities.o(.text);
