@@ -1080,10 +1080,3 @@ func_08008918: @ 0x08008918
     bx lr
     .align 2, 0
 
-    thumb_func_start func_08008920
-func_08008920: @ 0x08008920
-    ldr r0, [r0]
-    adds r0, #0x8c
-    bx lr
-    .align 2, 0
-
