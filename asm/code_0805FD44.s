@@ -8766,6 +8766,7 @@ func_08063E04: @ 0x08063E04
 	pop {r1}
 	bx r1
 
+	.if 0
 	thumb_func_start func_08063E58
 func_08063E58: @ 0x08063E58
 	push {lr}
@@ -8774,6 +8775,8 @@ func_08063E58: @ 0x08063E58
 	pop {r1}
 	bx r1
 
+	.endif
+	.section .text.tail08063E64, "ax", %progbits
 	thumb_func_start func_08063E64
 func_08063E64: @ 0x08063E64
 	push {lr}
