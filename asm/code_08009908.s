@@ -121,18 +121,3 @@ func_080099B0: @ 0x080099B0
     str r0, [r3, #0x10]
     bx lr
     .align 2, 0
-
-    thumb_func_start func_080099D4
-func_080099D4: @ 0x080099D4
-    ldr r3, [r0, #0xc]
-    ldr r2, [r1, #0xc]
-    str r2, [r0, #0xc]
-    str r3, [r1, #0xc]
-    ldr r2, [r0, #0x10]
-    ldr r1, [r1, #0x10]
-    ldr r3, [r2]
-    ldr r0, [r1]
-    str r0, [r2]
-    str r3, [r1]
-    bx lr
-    .align 2, 0

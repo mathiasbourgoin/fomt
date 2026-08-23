@@ -150,6 +150,7 @@ SECTIONS
         asm/code_080098AC.o(.text);
         src/code_080098DC.o(.text);
         asm/code_08009908.o(.text);
+        src/code_080099D4.o(.text);
         src/code_080099EC.o(.text);
         src/farm.o(.text);
         src/field.o(.text);
