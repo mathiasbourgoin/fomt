@@ -1,32 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_08037A04
-func_08037A04: @ 0x08037A04
-    push {r4, lr}
-    sub sp, #8
-    adds r4, r0, #0
-    mov r0, sp
-    bl func_080A19EC
-    adds r0, r4, #0
-    mov r1, sp
-    bl SetLocation__12AActorEntityRC13ActorLocation
-    adds r0, r4, #0
-    movs r1, #0
-    bl func_08037A38
-    adds r1, r0, #0
-    ldrh r0, [r4, #0x22]
-    cmp r0, r1
-    beq .L08037A2E
-    adds r0, r4, #0
-    bl SetAnim__12AActorEntityUi
-.L08037A2E:
-    add sp, #8
-    pop {r4}
-    pop {r0}
-    bx r0
-    .align 2, 0
-
     thumb_func_start func_08037A38
 func_08037A38: @ 0x08037A38
     ldr r0, .L08037A44 @ =gUnk_080F1644
@@ -4027,4 +4001,3 @@ func_080399C0: @ 0x080399C0
     .align 2, 0
 .L08039A28: .4byte vtable_unk_080E74DC
 .L08039A2C: .4byte __vt_7AEntity
-
