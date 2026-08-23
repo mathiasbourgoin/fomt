@@ -16597,6 +16597,7 @@ func_080DD3D4: @ 0x080DD3D4
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080DD404
 func_080DD404: @ 0x080DD404
 	push {lr}
@@ -16605,6 +16606,8 @@ func_080DD404: @ 0x080DD404
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DD410"
 	thumb_func_start func_080DD410
 func_080DD410: @ 0x080DD410
 	ldrb r3, [r1]
@@ -16723,6 +16726,7 @@ func_080DD460: @ 0x080DD460
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080DD4E4
 func_080DD4E4: @ 0x080DD4E4
 	push {lr}
@@ -16731,6 +16735,8 @@ func_080DD4E4: @ 0x080DD4E4
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DD4F0"
 	thumb_func_start func_080DD4F0
 func_080DD4F0: @ 0x080DD4F0
 	ldrb r3, [r1]
@@ -16814,6 +16820,7 @@ func_080DD540: @ 0x080DD540
 	.align 2, 0
 .L080DD584: .4byte 0x000009A9
 
+	.if 0
 	thumb_func_start func_080DD588
 func_080DD588: @ 0x080DD588
 	push {lr}
@@ -16822,6 +16829,8 @@ func_080DD588: @ 0x080DD588
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DD594"
 	thumb_func_start func_080DD594
 func_080DD594: @ 0x080DD594
 	ldrb r3, [r1]
@@ -17079,6 +17088,7 @@ func_080DD5E4: @ 0x080DD5E4
 	.align 2, 0
 .L080DD784: .4byte 0x000008F9
 
+	.if 0
 	thumb_func_start func_080DD788
 func_080DD788: @ 0x080DD788
 	push {lr}
@@ -17087,6 +17097,8 @@ func_080DD788: @ 0x080DD788
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DD794"
 	thumb_func_start func_080DD794
 func_080DD794: @ 0x080DD794
 	ldrb r3, [r1]
@@ -17196,6 +17208,7 @@ func_080DD7E4: @ 0x080DD7E4
 	.align 2, 0
 .L080DD85C: .4byte 0x0000065C
 
+	.if 0
 	thumb_func_start func_080DD860
 func_080DD860: @ 0x080DD860
 	push {lr}
@@ -17204,6 +17217,8 @@ func_080DD860: @ 0x080DD860
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DD86C"
 	thumb_func_start func_080DD86C
 func_080DD86C: @ 0x080DD86C
 	ldrb r3, [r1]
@@ -17314,6 +17329,7 @@ func_080DD8BC: @ 0x080DD8BC
 	.align 2, 0
 .L080DD934: .4byte 0x0000087B
 
+	.if 0
 	thumb_func_start func_080DD938
 func_080DD938: @ 0x080DD938
 	push {lr}
@@ -17322,6 +17338,8 @@ func_080DD938: @ 0x080DD938
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DD944"
 	thumb_func_start func_080DD944
 func_080DD944: @ 0x080DD944
 	push {r4, lr}
@@ -17704,6 +17722,7 @@ func_080DD9CC: @ 0x080DD9CC
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080DDC18
 func_080DDC18: @ 0x080DDC18
 	push {lr}
@@ -17712,6 +17731,8 @@ func_080DDC18: @ 0x080DDC18
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DDC24"
 	thumb_func_start func_080DDC24
 func_080DDC24: @ 0x080DDC24
 	ldrb r3, [r1]
@@ -18012,6 +18033,7 @@ func_080DDC78: @ 0x080DDC78
 	pop {r0}
 	bx r0
 
+	.if 0
 	thumb_func_start func_080DDE68
 func_080DDE68: @ 0x080DDE68
 	push {lr}
@@ -18020,6 +18042,8 @@ func_080DDE68: @ 0x080DDE68
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DDE74"
 	thumb_func_start func_080DDE74
 func_080DDE74: @ 0x080DDE74
 	ldrb r3, [r1]
@@ -18103,6 +18127,7 @@ func_080DDEC4: @ 0x080DDEC4
 	.align 2, 0
 .L080DDF08: .4byte 0x00000806
 
+	.if 0
 	thumb_func_start func_080DDF0C
 func_080DDF0C: @ 0x080DDF0C
 	push {lr}
@@ -18111,6 +18136,8 @@ func_080DDF0C: @ 0x080DDF0C
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DDF18"
 	thumb_func_start func_080DDF18
 func_080DDF18: @ 0x080DDF18
 	ldrb r3, [r1]
@@ -18194,6 +18221,7 @@ func_080DDF68: @ 0x080DDF68
 	.align 2, 0
 .L080DDFAC: .4byte 0x000003DB
 
+	.if 0
 	thumb_func_start func_080DDFB0
 func_080DDFB0: @ 0x080DDFB0
 	push {lr}
@@ -18202,6 +18230,8 @@ func_080DDFB0: @ 0x080DDFB0
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DDFBC"
 	thumb_func_start func_080DDFBC
 func_080DDFBC: @ 0x080DDFBC
 	ldrb r3, [r1]
@@ -18404,6 +18434,7 @@ func_080DE0AC: @ 0x080DE0AC
 	.align 2, 0
 .L080DE124: .4byte 0x000009BA
 
+	.if 0
 	thumb_func_start func_080DE128
 func_080DE128: @ 0x080DE128
 	push {lr}
@@ -18412,6 +18443,8 @@ func_080DE128: @ 0x080DE128
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DE134"
 	thumb_func_start func_080DE134
 func_080DE134: @ 0x080DE134
 	push {r4, r5, r6, r7, lr}
