@@ -419,11 +419,7 @@ func_080092C8: @ 0x080092C8
     pop {r0}
     bx r0
 
-    thumb_func_start func_080092FC
-func_080092FC: @ 0x080092FC
-    strh r1, [r0, #0xc]
-    bx lr
-
+    .section .text.tail08009300, "ax", %progbits
     thumb_func_start func_08009300
 func_08009300: @ 0x08009300
     push {r4, r5, lr}
