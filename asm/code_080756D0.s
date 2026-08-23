@@ -864,14 +864,3 @@ func_08075DD4: @ 0x08075DD4
 	bl memset
 	pop {r0}
 	bx r0
-
-	thumb_func_start func_08075DEC
-func_08075DEC: @ 0x08075DEC
-	push {lr}
-	ldr r2, .L08075DFC @ =vtable_unk_080E7B68
-	str r2, [r0, #8]
-	bl func_080098AC
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L08075DFC: .4byte vtable_unk_080E7B68
