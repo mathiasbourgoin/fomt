@@ -8824,18 +8824,7 @@ func_080CECE8: @ 0x080CECE8
 	pop {r0}
 	bx r0
 
-	thumb_func_start func_080CF050
-func_080CF050: @ 0x080CF050
-	ldr r0, [r0, #0x7c]
-	bx lr
-
-	thumb_func_start func_080CF054
-func_080CF054: @ 0x080CF054
-	adds r0, #0x80
-	ldr r0, [r0]
-	bx lr
-	.align 2, 0
-
+	.section .text.tail080CF05C, "ax", %progbits
 	thumb_func_start func_080CF05C
 func_080CF05C: @ 0x080CF05C
 	push {r4, r5, r6, r7, lr}
