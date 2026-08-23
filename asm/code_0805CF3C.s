@@ -1,34 +1,6 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
 
-	thumb_func_start func_0805CF3C
-func_0805CF3C: @ 0x0805CF3C
-	push {r4, r5, lr}
-	sub sp, #4
-	adds r5, r0, #0
-	adds r4, r1, #0
-	ldr r1, [r4, #4]
-	mov r0, sp
-	bl func_080588AC
-	ldr r1, [sp]
-	cmp r1, #0
-	beq .L0805CF5E
-	ldr r0, [r1]
-	ldr r2, [r0, #8]
-	adds r0, r1, #0
-	movs r1, #3
-	bl _call_via_r2
-.L0805CF5E:
-	ldr r1, [r4, #8]
-	movs r0, #0
-	str r0, [r4, #8]
-	str r1, [r5]
-	adds r0, r5, #0
-	add sp, #4
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-
 	thumb_func_start func_0805CF70
 func_0805CF70: @ 0x0805CF70
 	push {r4, r5, r6, r7, lr}
@@ -2789,4 +2761,3 @@ func_0805DFC4: @ 0x0805DFC4
 .L0805E618: .4byte 0xFE00FFFF
 .L0805E61C: .4byte 0xFFFFFF00
 .L0805E620: .4byte 0xFFFFFC00
-
