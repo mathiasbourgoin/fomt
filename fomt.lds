@@ -66,6 +66,7 @@ SECTIONS
         src/code_080004F4.o(.text);
         src/code_0800050C.o(.text);
         src/code_08000528.o(.text);
+        src/code_08000540.o(.text);
         asm/interrupt.o(.text);
         src/code_08000568.o(.text);
         src/code_0800057C.o(.text);
