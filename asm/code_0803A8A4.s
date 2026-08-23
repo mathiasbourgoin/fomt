@@ -2763,10 +2763,3 @@ func_0803BEEC: @ 0x0803BEEC
 	movs r1, #0
 	ldrsh r0, [r0, r1]
 	bx lr
-
-	thumb_func_start func_0803BEF4
-func_0803BEF4: @ 0x0803BEF4
-	ldr r0, [r0]
-	movs r1, #2
-	ldrsh r0, [r0, r1]
-	bx lr
