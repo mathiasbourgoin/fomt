@@ -2,6 +2,7 @@
 
 EC u32 func_0800912C();
 EC void func_08009140(void *);
+EC void func_08009154(void *);
 
 EC u32 func_08009158(u16 *out)
 {
@@ -13,6 +14,13 @@ EC u32 func_08009158(u16 *out)
 EC u16 *func_08009168(u16 *self)
 {
     func_08009140(self);
+    self[2] = self[0];
+    return self;
+}
+
+EC u16 *func_0800917C(u16 *self)
+{
+    func_08009154(self);
     self[2] = self[0];
     return self;
 }
