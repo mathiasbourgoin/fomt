@@ -1470,6 +1470,7 @@ func_080D772C: @ 0x080D772C
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080D780C
 func_080D780C: @ 0x080D780C
 	push {lr}
@@ -1490,6 +1491,8 @@ func_080D781C: @ 0x080D781C
 	bx r1
 	.align 2, 0
 
+	.endif
+	.section .text.tail080D782C, "ax", %progbits
 	thumb_func_start func_080D782C
 func_080D782C: @ 0x080D782C
 	push {r4, lr}
