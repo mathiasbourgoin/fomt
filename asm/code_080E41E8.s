@@ -394,26 +394,3 @@ func_080E4438: @ 0x080E4438
 	bx r1
 	.align 2, 0
 
-	thumb_func_start func_080E44B8
-func_080E44B8: @ 0x080E44B8
-	push {r4, r5, lr}
-	adds r5, r0, #0
-	adds r4, r1, #0
-	adds r0, r5, #4
-	movs r1, #2
-	bl func_080AC85C
-	ldr r0, .L080E44E0 @ =vtable_unk_080E61A0
-	str r0, [r5]
-	movs r0, #1
-	ands r0, r4
-	cmp r0, #0
-	beq .L080E44D8
-	adds r0, r5, #0
-	bl __builtin_delete
-.L080E44D8:
-	pop {r4, r5}
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L080E44E0: .4byte vtable_unk_080E61A0
-
