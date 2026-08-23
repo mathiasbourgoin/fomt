@@ -474,7 +474,8 @@ func_080122E0: @ 0x080122E0
 .L08012384: .4byte 0x000003FF
 .L08012388: .4byte 0xFFFFFC00
 
-    thumb_func_start func_0801238C
+	.if 0
+	thumb_func_start func_0801238C
 func_0801238C: @ 0x0801238C
     push {r4, lr}
     ldr r0, [r0, #4]
@@ -485,10 +486,13 @@ func_0801238C: @ 0x0801238C
     bl _call_via_r4
     pop {r4}
     pop {r0}
-    bx r0
-    .align 2, 0
+	bx r0
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_080123A4
+	.section .text.tail080123A4, "ax", %progbits
+
+	thumb_func_start func_080123A4
 func_080123A4: @ 0x080123A4
     push {r4, lr}
     ldr r4, [r0, #4]
