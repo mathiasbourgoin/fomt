@@ -732,6 +732,7 @@ asm/code_0801DD78.o(.text);
         src/code_080E1124.o(.text);
         src/code_080E1128.o(.text);
         src/code_080E1148.o(.text);
+        src/code_080E118C.o(.text);
         asm/code_080E10F8.o(.text);
         src/code_080E4190.o(.text);
         src/code_080E41B0.o(.text);

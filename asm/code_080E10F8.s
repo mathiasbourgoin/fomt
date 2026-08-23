@@ -1,54 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-	thumb_func_start func_080E118C
-func_080E118C: @ 0x080E118C
-	push {r4, r5, r6, lr}
-	sub sp, #0x24
-	adds r6, r0, #0
-	cmp r2, #0xff
-	bne .L080E11D4
-	add r4, sp, #0x20
-	ldrh r1, [r1, #4]
-	adds r0, r4, #0
-	bl __7ArticleUi
-	adds r0, r4, #0
-	bl GetName__C7Article
-	adds r5, r0, #0
-	bl strlen
-	adds r4, r0, #0
-	cmp r4, #0x1f
-	bls .L080E11B4
-	movs r4, #0x1f
-.L080E11B4:
-	mov r0, sp
-	adds r1, r5, #0
-	adds r2, r4, #0
-	bl memcpy
-	mov r0, sp
-	adds r1, r0, r4
-	movs r0, #0
-	strb r0, [r1]
-	movs r0, #1
-	strb r0, [r6]
-	adds r0, r6, #4
-	mov r1, sp
-	bl strcpy
-	b .L080E11E2
-.L080E11D4:
-	mov r1, sp
-	movs r0, #0
-	strb r0, [r1]
-	strb r0, [r6]
-	adds r0, r6, #4
-	bl strcpy
-.L080E11E2:
-	adds r0, r6, #0
-	add sp, #0x24
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-
 	thumb_func_start func_080E11EC
 func_080E11EC: @ 0x080E11EC
 	push {r4, r5, r6, r7, lr}
