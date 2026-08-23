@@ -15,6 +15,11 @@ It deliberately does not claim that the door path is understood yet.
 `InputState` is now represented in `include/input.hh`. Its middle halfword at
 `+02` remains unknown and is not assigned a semantic name.
 
+The adjacent `080091A4..080092EC` code is a generic repeat/filter layer: it
+stores timing values and four per-direction counters. It is still input
+infrastructure, not player movement; it must be followed through its callers
+rather than renamed as movement code.
+
 ## Explicitly not yet connected
 
 The callers that turn an `InputState` into player movement, front-tile tests,
