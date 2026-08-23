@@ -1,4 +1,4 @@
-#include "prelude.h"
+#include "input.hh"
 
 EC u32 func_0800912C()
 {
