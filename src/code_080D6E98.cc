@@ -24,3 +24,14 @@ EC void func_080D6EAC(u8 *self)
     self[0] = one;
     self[1] = zero;
 }
+
+EC void func_080D6ECC(u8 *self)
+{
+    func_080D6EAC(self + 4);
+    func_080D6EAC(self + 0x20);
+    register u32 zero asm("r1") = 0;
+    asm("" : "+r"(zero));
+    register u32 one asm("r0") = 1;
+    self[0] = one;
+    self[1] = zero;
+}
