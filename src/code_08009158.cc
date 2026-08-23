@@ -1,8 +1,14 @@
 #include "prelude.h"
 
 EC u32 func_0800912C();
-EC void func_08009140(void *);
 EC void func_08009154(void *);
+
+EC u16 *func_08009140(u16 *) __attribute__((section(".text.func_08009140")));
+EC u16 *func_08009140(u16 *self)
+{
+    self[0] = func_0800912C();
+    return self;
+}
 
 EC u32 func_08009158(u16 *out)
 {

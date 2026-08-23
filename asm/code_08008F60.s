@@ -186,7 +186,8 @@ func_08009094: @ 0x08009094
     .align 2, 0
 
     .section .text.tail08009140, "ax", %progbits
-    thumb_func_start func_08009140
+	.if 0
+	thumb_func_start func_08009140
 func_08009140: @ 0x08009140
     push {r4, lr}
     adds r4, r0, #0
@@ -198,7 +199,8 @@ func_08009140: @ 0x08009140
     bx r1
     .align 2, 0
 
-    .section .text.tail08009158, "ax", %progbits
+	.endif
+	.section .text.tail08009158, "ax", %progbits
     .if 0
     thumb_func_start func_08009158
 func_08009158: @ 0x08009158
