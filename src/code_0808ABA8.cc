@@ -1,0 +1,12 @@
+#include "prelude.h"
+
+EC void func_0808A55C(void *object);
+
+EC void *func_0808ABA8(void *self, void *other)
+{
+    func_0808A55C(*(void **)((u8 *)other + 4));
+    void *object = *(void **)((u8 *)other + 8);
+    *(void **)((u8 *)other + 8) = nullptr;
+    *(void **)self = object;
+    return self;
+}
