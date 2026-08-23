@@ -44,6 +44,7 @@ func_080B3C78: @ 0x080B3C78
 
 	.endif
 	.section .text.tail080B3C84, "ax", %progbits
+	.if 0
 	thumb_func_start func_080B3C84
 func_080B3C84: @ 0x080B3C84
 	ldr r0, [r0, #4]
@@ -53,6 +54,8 @@ func_080B3C84: @ 0x080B3C84
 	ldr r0, [r0]
 	bx lr
 
+	.endif
+	.section .text.tail080B3C90, "ax", %progbits
 	thumb_func_start func_080B3C90
 func_080B3C90: @ 0x080B3C90
 	push {r4, r5, r6, lr}
