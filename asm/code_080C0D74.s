@@ -604,15 +604,7 @@ func_080C0DCC: @ 0x080C0DCC
 .L080C12B0: .4byte 0x00000974
 .L080C12B4: .4byte 0x00000988
 
-	thumb_func_start func_080C12B8
-func_080C12B8: @ 0x080C12B8
-	ldr r1, .L080C12C0 @ =0x0000096A
-	adds r0, r0, r1
-	ldrb r0, [r0]
-	bx lr
-	.align 2, 0
-.L080C12C0: .4byte 0x0000096A
-
+	.section .text.tail080C12C4, "ax", %progbits
 	thumb_func_start func_080C12C4
 func_080C12C4: @ 0x080C12C4
 	push {r4, r5, r6, r7, lr}
