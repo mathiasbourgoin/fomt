@@ -334,6 +334,7 @@ func_080E0C38: @ 0x080E0C38
 	.align 2, 0
 .L080E0D4C: .4byte vtable_unk_080E5A28
 
+	.if 0
 	thumb_func_start func_080E0D50
 func_080E0D50: @ 0x080E0D50
 	push {lr}
@@ -345,6 +346,7 @@ func_080E0D50: @ 0x080E0D50
 	movs r0, #0
 	pop {r1}
 	bx r1
+	.endif
 
 	.section .text.tail080E0D70, "ax", %progbits
 	thumb_func_start func_080E0D70

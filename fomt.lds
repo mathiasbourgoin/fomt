@@ -1104,6 +1104,7 @@ asm/code_0801DD78.o(.text);
         src/code_080E0A7C.o(.text);
         src/code_080E0A88.o(.text);
         asm/code_080E09BC.o(.text);
+		src/code_080E0D50.o(.text);
         src/code_080E0D64.o(.text);
         asm/code_080E09BC.o(.text.tail080E0D70);
         *(.gnu.linkonce.t.__lower_bound__H4ZPC12JumpTableEntZiZ28ScriptJumpTableSearchCompareZl_X01T0RCX11X21PX31_X01);
