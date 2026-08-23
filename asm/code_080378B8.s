@@ -1,47 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_080378FC
-func_080378FC: @ 0x080378FC
-    push {lr}
-    cmp r1, #0xc
-    bhi .L08037944
-    lsls r0, r1, #2
-    ldr r1, .L0803790C @ =.L08037910
-    adds r0, r0, r1
-    ldr r0, [r0]
-    mov pc, r0
-    .align 2, 0
-.L0803790C: .4byte .L08037910
-.L08037910: @ jump table
-    .4byte .L08037944 @ case 0
-    .4byte .L08037948 @ case 1
-    .4byte .L0803794E @ case 2
-    .4byte .L08037944 @ case 3
-    .4byte .L08037944 @ case 4
-    .4byte .L08037944 @ case 5
-    .4byte .L08037944 @ case 6
-    .4byte .L08037944 @ case 7
-    .4byte .L08037944 @ case 8
-    .4byte .L08037944 @ case 9
-    .4byte .L08037944 @ case 10
-    .4byte .L0803794E @ case 11
-    .4byte .L08037944 @ case 12
-.L08037944:
-    movs r0, #0
-    b .L08037952
-.L08037948:
-    movs r0, #0x80
-    lsls r0, r0, #8
-    b .L08037952
-.L0803794E:
-    movs r0, #0x80
-    lsls r0, r0, #9
-.L08037952:
-    pop {r1}
-    bx r1
-    .align 2, 0
-
     thumb_func_start func_08037958
 func_08037958: @ 0x08037958
     push {r4, r5, r6, r7, lr}
