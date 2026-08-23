@@ -662,13 +662,7 @@ func_080093AC: @ 0x080093AC
     pop {r1}
     bx r1
 
-    thumb_func_start func_080094A4
-func_080094A4: @ 0x080094A4
-    ldr r0, [r0]
-    movs r1, #4
-    ldrsh r0, [r0, r1]
-    bx lr
-
+    .section .text.tail080094AC, "ax", %progbits
     thumb_func_start func_080094AC
 func_080094AC: @ 0x080094AC
     push {lr}
