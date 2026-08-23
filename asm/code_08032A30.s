@@ -2199,8 +2199,9 @@ func_08033B24: @ 0x08033B24
     pop {r1}
     bx r1
 
-    .section .text.tail08033B84, "ax", %progbits
-    thumb_func_start func_08033B84
+	.section .text.tail08033B84, "ax", %progbits
+	.if 0
+	thumb_func_start func_08033B84
 func_08033B84: @ 0x08033B84
     push {lr}
     ldr r0, [r0, #0x10]
@@ -2208,8 +2209,11 @@ func_08033B84: @ 0x08033B84
     beq .L08033B90
     bl func_08034BFC
 .L08033B90:
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
+
+	.section .text.tail08033B94, "ax", %progbits
 .L08033B94:
     .byte 0xF0, 0xB5, 0x57, 0x46, 0x4E, 0x46, 0x45, 0x46, 0xE0, 0xB4, 0xAB, 0xB0
     .byte 0x07, 0x1C, 0x0A, 0x1C, 0x78, 0x6B, 0x80, 0x46, 0x39, 0x68, 0x8A, 0x46, 0xC0, 0x69, 0x05, 0x28
