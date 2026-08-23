@@ -3359,13 +3359,7 @@ func_080A0384: @ 0x080A0384
 	bx r1
 	.align 2, 0
 
-	thumb_func_start func_080A039C
-func_080A039C: @ 0x080A039C
-	ldrb r0, [r0, #3]
-	lsls r0, r0, #0x1b
-	lsrs r0, r0, #0x1d
-	bx lr
-
+	.section .text.tail080A03A4, "ax", %progbits
 	thumb_func_start func_080A03A4
 func_080A03A4: @ 0x080A03A4
 	movs r2, #7
