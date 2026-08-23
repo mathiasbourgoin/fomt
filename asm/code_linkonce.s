@@ -15306,6 +15306,7 @@ func_080DCA20: @ 0x080DCA20
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080DCA2C
 func_080DCA2C: @ 0x080DCA2C
 	push {lr}
@@ -15474,6 +15475,8 @@ func_080DCB1C: @ 0x080DCB1C
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DCB28"
 	thumb_func_start func_080DCB28
 func_080DCB28: @ 0x080DCB28
 	push {lr}
