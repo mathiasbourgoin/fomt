@@ -88,16 +88,7 @@ func_08037568: @ 0x08037568
     bx r0
     .align 2, 0
 
-    thumb_func_start func_08037618
-func_08037618: @ 0x08037618
-    ldr r0, .L08037624 @ =gUnk_080F1560
-    lsls r1, r1, #1
-    adds r1, r1, r0
-    ldrh r0, [r1]
-    bx lr
-    .align 2, 0
-.L08037624: .4byte gUnk_080F1560
-
+    .section .text.tail08037628, "ax", %progbits
     thumb_func_start func_08037628
 func_08037628: @ 0x08037628
     push {lr}
@@ -191,4 +182,3 @@ func_0803763C: @ 0x0803763C
     bx r1
     .align 2, 0
 .L080376E0: .4byte gUnk_080F156C
-
