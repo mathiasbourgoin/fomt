@@ -737,16 +737,7 @@ func_08011510: @ 0x08011510
     strb r1, [r0, #8]
     bx lr
 
-    thumb_func_start func_0801151C
-func_0801151C: @ 0x0801151C
-    ldr r0, [r0]
-    bx lr
-
-    thumb_func_start func_08011520
-func_08011520: @ 0x08011520
-    ldr r0, [r0, #4]
-    bx lr
-
+    .section .text.tail08011524, "ax", %progbits
     thumb_func_start func_08011524
 func_08011524: @ 0x08011524
     push {lr}
