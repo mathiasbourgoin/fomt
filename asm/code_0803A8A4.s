@@ -2605,13 +2605,7 @@ func_0803BDB8: @ 0x0803BDB8
 	pop {r0}
 	bx r0
 
-	thumb_func_start func_0803BDE4
-func_0803BDE4: @ 0x0803BDE4
-	strh r1, [r0]
-	strh r2, [r0, #2]
-	bx lr
-	.align 2, 0
-
+	.section .text.tail0803BDEC, "ax", %progbits
 	thumb_func_start func_0803BDEC
 func_0803BDEC: @ 0x0803BDEC
 	ldrh r3, [r0]
