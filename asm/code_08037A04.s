@@ -1071,13 +1071,7 @@ func_0803834C: @ 0x0803834C
     pop {r2}
     bx r2
 
-    thumb_func_start func_0803836C
-func_0803836C: @ 0x0803836C
-    movs r1, #0x1e
-    ldrsh r0, [r0, r1]
-    bx lr
-    .align 2, 0
-
+    .section .text.tail08038374, "ax", %progbits
     thumb_func_start func_08038374
 func_08038374: @ 0x08038374
     push {r4, r5, r6, lr}
