@@ -279,6 +279,9 @@ SECTIONS
 		asm/code_08012028.o(.text.tail08012ADC);
 		src/code_08012454.o(.text.func_08012BAC);
 		asm/code_08012028.o(.text.tail08012BBC);
+		src/code_08012454.o(.text.func_080142F0);
+		src/code_08012454.o(.text.func_08014304);
+		asm/code_08012028.o(.text.tail08014318);
         src/code_0801468C.o(.text);
         asm/code_08012028.o(.text.tail08014694);
 		src/code_08012454.o(.text.func_080167CC);

@@ -30,3 +30,14 @@ EC void func_08012BAC(u8 *self, u16 value)
     *(u16 *)(data + 0xe0) = value;
     *(u32 *)(data + 0x9c) = 0x15;
 }
+
+#define FLAG_34C4_WRAPPER(address, value) \
+    EC void func_##address(u8 *) __attribute__((section(".text.func_" #address))); \
+    EC void func_##address(u8 *self) { \
+        u8 *data = *(u8 **)(self + 4); \
+        u8 *state = *(u8 **)(data + 0x8c); \
+        state[0x34c4] = value; \
+    }
+
+FLAG_34C4_WRAPPER(080142F0, 1)
+FLAG_34C4_WRAPPER(08014304, 0)

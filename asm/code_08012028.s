@@ -4594,6 +4594,7 @@ func_080142D4: @ 0x080142D4
     bx r0
     .align 2, 0
 
+    .if 0
     thumb_func_start func_080142F0
 func_080142F0: @ 0x080142F0
     ldr r0, [r0, #4]
@@ -4620,6 +4621,8 @@ func_08014304: @ 0x08014304
     .align 2, 0
 .L08014314: .4byte 0x000034C4
 
+    .endif
+    .section .text.tail08014318, "ax", %progbits
     thumb_func_start func_08014318
 func_08014318: @ 0x08014318
     push {r4, r5, r6, r7, lr}
