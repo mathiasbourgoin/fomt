@@ -50,6 +50,7 @@ func_0807E4D4: @ 0x0807E4D4
 .L0807E500: .4byte vtable_unk_080E7C40
 .L0807E504: .4byte 0x000006A4
 
+	.if 0
 	thumb_func_start func_0807E508
 func_0807E508: @ 0x0807E508
 	push {lr}
@@ -61,6 +62,8 @@ func_0807E508: @ 0x0807E508
 	.align 2, 0
 .L0807E518: .4byte vtable_unk_080E7C40
 
+	.endif
+	.section .text.tail0807E51C, "ax", %progbits
 	thumb_func_start func_0807E51C
 func_0807E51C: @ 0x0807E51C
 	push {r4, lr}

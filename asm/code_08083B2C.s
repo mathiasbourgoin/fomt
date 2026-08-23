@@ -144,6 +144,7 @@ func_08083BD4: @ 0x08083BD4
 .L08083C48: .4byte gUnk_080FF838
 .L08083C4C: .4byte 0x000061F0
 
+	.if 0
 	thumb_func_start func_08083C50
 func_08083C50: @ 0x08083C50
 	push {lr}
@@ -155,6 +156,8 @@ func_08083C50: @ 0x08083C50
 	.align 2, 0
 .L08083C60: .4byte vtable_unk_080E7D14
 
+	.endif
+	.section .text.tail08083C64, "ax", %progbits
 	thumb_func_start func_08083C64
 func_08083C64: @ 0x08083C64
 	push {r4, r5, r6, r7, lr}
@@ -2379,4 +2382,3 @@ sub_080854D8: @ 0x080854D8
 	pop {r4, r5, r6, r7}
 	pop {r0}
 	bx r0
-
