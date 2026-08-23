@@ -702,14 +702,7 @@ func_080050F8: @ 0x080050F8
     bx r1
     .align 2, 0
 
-    thumb_func_start func_08005254
-func_08005254: @ 0x08005254
-    push {lr}
-    bl func_08008724
-    pop {r0}
-    bx r0
-    .align 2, 0
-
+    .section .text.tail08005260, "ax", %progbits
     thumb_func_start func_08005260
 func_08005260: @ 0x08005260
     ldr r2, .L08005270 @ =0x00001A75

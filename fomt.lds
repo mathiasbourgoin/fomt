@@ -93,6 +93,8 @@ SECTIONS
         src/code_08004C48.o(.text);
         src/code_08004C54.o(.text);
         asm/code_08004C68.o(.text);
+        src/code_08005254.o(.text);
+        asm/code_08004C68.o(.text.tail08005260);
         src/code_0800598C.o(.text);
         src/code_080059D0.o(.text);
         src/code_08005A00.o(.text);
