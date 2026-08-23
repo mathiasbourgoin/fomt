@@ -237,19 +237,7 @@ func_0809C694: @ 0x0809C694
     bx r1
     .align 2, 0
 
-    thumb_func_start func_0809C6AC
-func_0809C6AC: @ 0x0809C6AC
-    strh r1, [r0, #0xc]
-    bx lr
-
-    thumb_func_start func_0809C6B0
-func_0809C6B0: @ 0x0809C6B0
-    ldr r1, .L0809C6B8 @ =0x0000FFFF
-    strh r1, [r0, #0xc]
-    bx lr
-    .align 2, 0
-.L0809C6B8: .4byte 0x0000FFFF
-
+    .section .text.tail0809C6BC, "ax", %progbits
     thumb_func_start func_0809C6BC
 func_0809C6BC: @ 0x0809C6BC
     push {r4, r5, r6, r7, lr}

@@ -664,6 +664,8 @@ asm/code_0801DD78.o(.text);
         asm/code_0809C32C.o(.text);
         src/code_0809C5EC.o(.text);
         asm/code_0809C32C.o(.text.tail0809C5F4);
+        src/code_0809C6AC.o(.text);
+        asm/code_0809C32C.o(.text.tail0809C6BC);
         src/npc.o(.text);
         src/bachelorette.o(.text);
         src/harvest_sprite.o(.text);
