@@ -468,6 +468,8 @@ asm/code_0801DD78.o(.text);
         src/code_08037A38.o(.text);
         src/code_08037A48.o(.text);
         asm/code_08037A04.o(.text);
+		src/code_08037CC4.o(.text);
+		asm/code_08037A04.o(.text.tail08037CDC);
 		src/code_allocator_wrappers.o(.text.func_08037CF0);
 		asm/code_08037A04.o(.text.tail08037D08);
 		src/code_allocator_wrappers.o(.text.func_08037E9C);
