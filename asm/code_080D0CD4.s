@@ -1,56 +1,6 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
 
-	thumb_func_start func_080D0CD4
-func_080D0CD4: @ 0x080D0CD4
-	push {lr}
-	adds r1, r0, #0
-	ldr r0, .L080D0D08 @ =0x0000FFFF
-	cmp r1, r0
-	bhi .L080D0D02
-	movs r3, #0xff
-	ands r3, r1
-	movs r0, #0xff
-	lsls r0, r0, #8
-	ands r0, r1
-	asrs r2, r0, #8
-	adds r0, r3, #0
-	subs r0, #0x40
-	cmp r0, #0xbc
-	bhi .L080D0D02
-	cmp r2, #0x80
-	bls .L080D0D02
-	cmp r2, #0xea
-	bhi .L080D0D02
-	adds r0, r2, #0
-	subs r0, #0xa0
-	cmp r0, #0x3f
-	bhi .L080D0D0C
-.L080D0D02:
-	movs r0, #1
-	rsbs r0, r0, #0
-	b .L080D0D22
-	.align 2, 0
-.L080D0D08: .4byte 0x0000FFFF
-.L080D0D0C:
-	cmp r2, #0x9f
-	bhi .L080D0D14
-	subs r2, #0x81
-	b .L080D0D16
-.L080D0D14:
-	subs r2, #0xc1
-.L080D0D16:
-	subs r3, #0x40
-	lsls r1, r2, #1
-	adds r1, r1, r2
-	lsls r0, r1, #6
-	subs r0, r0, r1
-	adds r0, r0, r3
-.L080D0D22:
-	pop {r1}
-	bx r1
-	.align 2, 0
-
 	thumb_func_start func_080D0D28
 func_080D0D28: @ 0x080D0D28
 	push {r4, r5, r6, lr}
