@@ -86,6 +86,7 @@ func_0804EA58: @ 0x0804EA58
 	.align 2, 0
 .L0804EA7C: .4byte vtable_unk_080E7868
 
+	.if 0
 	thumb_func_start func_0804EA80
 func_0804EA80: @ 0x0804EA80
 	push {lr}
@@ -97,6 +98,8 @@ func_0804EA80: @ 0x0804EA80
 	.align 2, 0
 .L0804EA90: .4byte vtable_unk_080E7868
 
+	.endif
+	.section .text.tail0804EA94, "ax", %progbits
 	thumb_func_start func_0804EA94
 func_0804EA94: @ 0x0804EA94
 	push {r4, r5, r6, r7, lr}
@@ -357,6 +360,7 @@ func_0804ED28: @ 0x0804ED28
 	.byte 0x05, 0x9E, 0x00, 0x24, 0x04, 0x60, 0x44, 0x60, 0x04, 0x4C, 0x84, 0x60, 0xC1, 0x60, 0x02, 0x61
 	.byte 0x83, 0x82, 0xC5, 0x82, 0x86, 0x61, 0x70, 0xBC, 0x02, 0xBC, 0x08, 0x47, 0x58, 0x78, 0x0E, 0x08
 
+	.if 0
 	thumb_func_start func_0804EDA0
 func_0804EDA0: @ 0x0804EDA0
 	push {lr}
@@ -368,6 +372,8 @@ func_0804EDA0: @ 0x0804EDA0
 	.align 2, 0
 .L0804EDB0: .4byte vtable_unk_080E7858
 
+	.endif
+	.section .text.tail0804EDB4, "ax", %progbits
 	thumb_func_start func_0804EDB4
 func_0804EDB4: @ 0x0804EDB4
 	push {r4, r5, r6, r7, lr}
@@ -409,6 +415,7 @@ func_0804EDB4: @ 0x0804EDB4
 	.byte 0x04, 0x60, 0x44, 0x60, 0x04, 0x4C, 0x84, 0x60, 0xC1, 0x60, 0x02, 0x61, 0x83, 0x82, 0xC5, 0x82
 	.byte 0x86, 0x61, 0x70, 0xBC, 0x02, 0xBC, 0x08, 0x47, 0x48, 0x78, 0x0E, 0x08
 
+	.if 0
 	thumb_func_start func_0804EE1C
 func_0804EE1C: @ 0x0804EE1C
 	push {lr}
@@ -420,6 +427,8 @@ func_0804EE1C: @ 0x0804EE1C
 	.align 2, 0
 .L0804EE2C: .4byte vtable_unk_080E7848
 
+	.endif
+	.section .text.tail0804EE30, "ax", %progbits
 	thumb_func_start func_0804EE30
 func_0804EE30: @ 0x0804EE30
 	push {r4, r5, r6, r7, lr}
@@ -470,6 +479,7 @@ func_0804EE64: @ 0x0804EE64
 	.align 2, 0
 .L0804EE84: .4byte vtable_unk_080E7838
 
+	.if 0
 	thumb_func_start func_0804EE88
 func_0804EE88: @ 0x0804EE88
 	push {lr}
@@ -481,6 +491,8 @@ func_0804EE88: @ 0x0804EE88
 	.align 2, 0
 .L0804EE98: .4byte vtable_unk_080E7838
 
+	.endif
+	.section .text.tail0804EE9C, "ax", %progbits
 	thumb_func_start func_0804EE9C
 func_0804EE9C: @ 0x0804EE9C
 	push {r4, lr}
