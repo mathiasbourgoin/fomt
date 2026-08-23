@@ -5164,6 +5164,7 @@ func_080E3A5C: @ 0x080E3A5C
 
 	.endif
 	.section .text.tail080E3A6C, "ax", %progbits
+	.if 0
 	thumb_func_start func_080E3A6C
 func_080E3A6C: @ 0x080E3A6C
 	push {lr}
@@ -5175,6 +5176,7 @@ func_080E3A6C: @ 0x080E3A6C
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
 
 	.if 0
 	thumb_func_start func_080E3A80

@@ -7,6 +7,7 @@ EC u32 func_080088CC(void *);
 EC void func_080D0644(void *, u8);
 EC void func_080D0454(u32);
 EC void func_080D0444(void *, void *);
+EC void func_080D0558(void *, void *, void *, void *);
 
 #define IN_SECTION(address) __attribute__((section(".text.func_" #address)))
 
@@ -24,6 +25,12 @@ EC u32 func_080E3868(u8 *self) { return func_080088CC(self - 8); }
 
 EC void func_080E3A5C(void *, void *, u8) IN_SECTION(080E3A5C);
 EC void func_080E3A5C(void *, void *value, u8 kind) { func_080D0644(value, kind); }
+
+EC void func_080E3A6C(void *, void *, void *, void *, void *) IN_SECTION(080E3A6C);
+EC void func_080E3A6C(void *, void *first, void *second, void *third, void *fourth)
+{
+    func_080D0558(first, second, third, fourth);
+}
 
 EC void func_080E3A80(void *) IN_SECTION(080E3A80);
 EC void func_080E3A80(void *) { func_080D0454(0); }
