@@ -481,6 +481,7 @@ asm/code_0801DD78.o(.text);
         src/code_080C0D1C.o(.text);
         src/code_080C0D44.o(.text);
         src/code_080C0D74.o(.text);
+        src/code_080C0D80.o(.text);
         asm/code_080C0D74.o(.text);
         src/code_080C7EA8.o(.text);
         src/code_080C7ED0.o(.text);
