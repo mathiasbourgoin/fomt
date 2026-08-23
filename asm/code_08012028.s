@@ -5061,13 +5061,7 @@ func_080145F8: @ 0x080145F8
 .L08014684: .4byte vtable_unk_080E5E74
 .L08014688: .4byte vtable_unk_080E5D04
 
-    thumb_func_start func_0801468C
-func_0801468C: @ 0x0801468C
-    ldr r0, [r0, #4]
-    adds r0, #0xd0
-    bx lr
-    .align 2, 0
-
+    .section .text.tail08014694, "ax", %progbits
     thumb_func_start func_08014694
 func_08014694: @ 0x08014694
     push {lr}
