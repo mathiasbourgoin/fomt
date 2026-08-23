@@ -11030,6 +11030,7 @@ func_080CFFC0: @ 0x080CFFC0
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080D01E0
 func_080D01E0: @ 0x080D01E0
 	ldr r2, .L080D01F4 @ =gUnk_03000418
@@ -11043,6 +11044,9 @@ func_080D01E0: @ 0x080D01E0
 	bx lr
 	.align 2, 0
 .L080D01F4: .4byte gUnk_03000418
+	.endif
+
+	.section .text.tail080D01F8, "ax", %progbits
 
 	thumb_func_start malloc
 malloc: @ 0x080D01F8
