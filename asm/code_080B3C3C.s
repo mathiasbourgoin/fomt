@@ -1009,6 +1009,7 @@ func_080B3CC8: @ 0x080B3CC8
 .L080B44D8: .4byte 0x0000072C
 .L080B44DC: .4byte 0x0000073C
 
+	.if 0
 	thumb_func_start func_080B44E0
 func_080B44E0: @ 0x080B44E0
 	movs r1, #0xb3
@@ -1018,6 +1019,8 @@ func_080B44E0: @ 0x080B44E0
 	bx lr
 	.align 2, 0
 
+	.endif
+	.section .text.tail080B44EC, "ax", %progbits
 	thumb_func_start func_080B44EC
 func_080B44EC: @ 0x080B44EC
 	push {r4, r5, r6, r7, lr}

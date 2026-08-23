@@ -720,6 +720,7 @@ func_080114F8: @ 0x080114F8
     strb r1, [r0]
     bx lr
 
+    .if 0
     thumb_func_start func_08011510
 func_08011510: @ 0x08011510
     movs r1, #0x10
@@ -729,6 +730,7 @@ func_08011510: @ 0x08011510
     strb r1, [r0, #8]
     bx lr
 
+    .endif
     .section .text.tail08011524, "ax", %progbits
     thumb_func_start func_08011524
 func_08011524: @ 0x08011524
