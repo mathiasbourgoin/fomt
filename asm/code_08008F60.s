@@ -511,7 +511,8 @@ func_08009378: @ 0x08009378
     pop {r0}
     bx r0
 
-    thumb_func_start func_080093A0
+	.if 0
+	thumb_func_start func_080093A0
 func_080093A0: @ 0x080093A0
     ldr r2, [r0]
     ldrh r0, [r2, #4]
@@ -520,7 +521,9 @@ func_080093A0: @ 0x080093A0
     asrs r0, r0, #0x10
     bx lr
 
-    thumb_func_start func_080093AC
+	.endif
+	.section .text.tail080093AC, "ax", %progbits
+	thumb_func_start func_080093AC
 func_080093AC: @ 0x080093AC
     push {r4, r5, r6, r7, lr}
     ldr r5, [r0]

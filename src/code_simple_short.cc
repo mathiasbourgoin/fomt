@@ -28,3 +28,12 @@ EC void func_080D0444(u32 first, u32 second)
     *(u32 *)(state + 4) = first;
     *(u32 *)(state + 8) = second;
 }
+
+EC i32 func_080093A0(u8 **, u16) IN_SECTION(080093A0);
+EC i32 func_080093A0(u8 **self, u16 value)
+{
+    register u8 *state asm("r2") = *self;
+    register u32 old asm("r0") = *(u16 *)(state + 4);
+    *(u16 *)(state + 4) = value;
+    return (i16)old;
+}
