@@ -1,10 +1,18 @@
 #include "prelude.h"
 
 EC u32 func_0800912C();
+EC void func_08009140(void *);
 
 EC u32 func_08009158(u16 *out)
 {
     u32 value = func_0800912C();
     *out = value;
     return value;
+}
+
+EC u16 *func_08009168(u16 *self)
+{
+    func_08009140(self);
+    self[2] = self[0];
+    return self;
 }
