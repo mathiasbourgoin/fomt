@@ -407,13 +407,3 @@ func_08050DD8: @ 0x08050DD8
 	strb r1, [r2, #0xd]
 	bx lr
 	.align 2, 0
-
-	thumb_func_start func_08050DE4
-func_08050DE4: @ 0x08050DE4
-	ldr r2, [r0]
-	ldrb r0, [r2, #0xd]
-	movs r1, #1
-	strb r1, [r2, #0xd]
-	bx lr
-	.align 2, 0
-
