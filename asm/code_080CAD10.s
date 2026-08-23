@@ -2691,23 +2691,7 @@ func_080CC134: @ 0x080CC134
 	.align 2, 0
 .L080CC140: .4byte gUnk_0811783C
 
-	thumb_func_start func_080CC144
-func_080CC144: @ 0x080CC144
-	ldr r1, .L080CC14C @ =gUnk_08117838
-	ldr r1, [r1]
-	str r1, [r0]
-	bx lr
-	.align 2, 0
-.L080CC14C: .4byte gUnk_08117838
-
-	thumb_func_start func_080CC150
-func_080CC150: @ 0x080CC150
-	push {lr}
-	bl func_080CAF6C
-	pop {r0}
-	bx r0
-	.align 2, 0
-
+	.section .text.tail080CC15C, "ax", %progbits
 	thumb_func_start func_080CC15C
 func_080CC15C: @ 0x080CC15C
 	push {r4, r5, r6, r7, lr}
