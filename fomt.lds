@@ -478,7 +478,7 @@ asm/code_0801DD78.o(.text);
         src/code_080D7AAC.o(.text);
         src/code_080D7AD4.o(.text);
         src/code_080D7B04.o(.text);
-        asm/code_080D7B2C.o(.text);
+        src/code_080D7B2C.o(.text);
         *(.gnu.linkonce.t.__as__5SheepRC5Sheep);
         *(.gnu.linkonce.t.__as__3CowRC3Cow);
         *(.gnu.linkonce.t.__as__9LivestockRC9Livestock);
