@@ -577,7 +577,8 @@ func_080123CC: @ 0x080123CC
     .align 2, 0
 .L08012450: .4byte 0x0000FFFF
 
-    thumb_func_start func_08012454
+	.if 0
+	thumb_func_start func_08012454
 func_08012454: @ 0x08012454
     push {lr}
     ldr r0, [r0, #4]
@@ -587,7 +588,9 @@ func_08012454: @ 0x08012454
     bx r0
     .align 2, 0
 
-    thumb_func_start func_08012464
+	.endif
+	.section .text.tail08012464, "ax", %progbits
+	thumb_func_start func_08012464
 func_08012464: @ 0x08012464
     push {r4, r5, r6, r7, lr}
     adds r6, r1, #0
@@ -1456,7 +1459,8 @@ func_08012AA4: @ 0x08012AA4
     bx r0
     .align 2, 0
 
-    thumb_func_start func_08012ACC
+	.if 0
+	thumb_func_start func_08012ACC
 func_08012ACC: @ 0x08012ACC
     push {lr}
     ldr r0, [r0, #4]
@@ -1466,7 +1470,9 @@ func_08012ACC: @ 0x08012ACC
     pop {r0}
     bx r0
 
-    thumb_func_start func_08012ADC
+	.endif
+	.section .text.tail08012ADC, "ax", %progbits
+	thumb_func_start func_08012ADC
 func_08012ADC: @ 0x08012ADC
     push {r4, r5, lr}
     sub sp, #0x34
@@ -9422,7 +9428,8 @@ func_080167AC: @ 0x080167AC
     pop {r1}
     bx r1
 
-    thumb_func_start func_080167CC
+	.if 0
+	thumb_func_start func_080167CC
 func_080167CC: @ 0x080167CC
     push {lr}
     ldr r0, [r0, #4]
@@ -9432,7 +9439,9 @@ func_080167CC: @ 0x080167CC
     bx r1
     .align 2, 0
 
-    thumb_func_start func_080167DC
+	.endif
+	.section .text.tail080167DC, "ax", %progbits
+	thumb_func_start func_080167DC
 func_080167DC: @ 0x080167DC
     push {r4, lr}
     ldr r4, [r0, #4]

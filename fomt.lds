@@ -264,10 +264,16 @@ SECTIONS
         asm/code_08012028.o(.text);
         src/code_08012218.o(.text);
         asm/code_08012028.o(.text.tail0801221C);
+		src/code_08012454.o(.text.func_08012454);
+		asm/code_08012028.o(.text.tail08012464);
         src/code_080124C4.o(.text);
         asm/code_08012028.o(.text.tail080124D0);
+		src/code_08012454.o(.text.func_08012ACC);
+		asm/code_08012028.o(.text.tail08012ADC);
         src/code_0801468C.o(.text);
         asm/code_08012028.o(.text.tail08014694);
+		src/code_08012454.o(.text.func_080167CC);
+		asm/code_08012028.o(.text.tail080167DC);
         src/code_0801DD18.o(.text);
         src/code_0801DD24.o(.text);
         src/code_0801DD30.o(.text);
