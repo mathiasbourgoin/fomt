@@ -64,7 +64,9 @@ LDS := $(BUILD_NAME).lds
 C_SRCS := $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/rt/*.c)
 C_OBJS := $(C_SRCS:%.c=$(BUILD_DIR)/%.o)
 
-CXX_SRCS := $(wildcard $(SRC_DIR)/*.cc $(SRC_DIR)/rt/*.cc)
+# Address-anchored files can live below their recovered game component.  The
+# linker script remains the sole authority for their original ROM order.
+CXX_SRCS := $(wildcard $(SRC_DIR)/*.cc $(SRC_DIR)/rt/*.cc $(SRC_DIR)/actor/npc/*.cc)
 CXX_OBJS := $(CXX_SRCS:%.cc=$(BUILD_DIR)/%.o)
 
 ASM_SRCS := $(wildcard $(SRC_DIR)/*.s $(ASM_DIR)/*.s)

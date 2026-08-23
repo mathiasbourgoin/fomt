@@ -1,6 +1,6 @@
 #include "prelude.h"
 
-#include "npc_entity.hh"
+#include "actor/npc_entity.hh"
 
 EC void func_08034F00(ANpcEntity * self, int arg_unk_1);
 EC void func_08035380(ANpcEntity & self);

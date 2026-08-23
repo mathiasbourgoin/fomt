@@ -1,4 +1,4 @@
-#include "npc_entity.hh"
+#include "actor/npc_entity.hh"
 
 extern u8 gUnk_080F61FC[];
 extern u32 vtable_unk_080E6DD8[];
@@ -7,6 +7,7 @@ EC ANpcEntity *__10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi(
     ANpcEntity *self, GameObject *game_object, Npc *npc, u32 arg_3,
     void const *schedule, u32 idle_anim, u32 moving_anim, u32 initial_state);
 
+/* Concrete NPC variant: schedule 080F61FC, animations 08B8/08BC. */
 EC ANpcEntity *func_080362C0(ANpcEntity *self, GameObject *game_object, Npc *npc, u32 arg_3)
 {
     __10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi(
@@ -14,3 +15,4 @@ EC ANpcEntity *func_080362C0(ANpcEntity *self, GameObject *game_object, Npc *npc
     *(void **)((u8 *)self + 0x14) = vtable_unk_080E6DD8;
     return self;
 }
+
