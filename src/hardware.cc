@@ -115,3 +115,50 @@ EC void func_080071BC(Unk_hardware_H * self, unsigned int from, unsigned int cou
         h->unk_51 = count;
     }
 }
+
+EC unsigned int func_0800736C()
+{
+    register Unk_hardware_03000404 *h asm("r2") = gUnk_03000404;
+    register Unk_hardware_ent_080D6D98 *entry asm("r3") = h->unk_00;
+    register Unk_hardware_ent_080D6D98 *saved_entry asm("r5") = entry;
+    register unsigned int result asm("r2");
+    if (entry == nullptr)
+        goto none;
+    h->unk_00 = entry->next_free;
+    if (entry == nullptr)
+        goto none;
+
+    {
+    register int offset asm("r0") = (unsigned int)((u8 *)entry - 4);
+    asm("" : "+r"(offset));
+    offset -= (unsigned int)h;
+    register unsigned int index asm("r4") = offset >> 2;
+    if (index <= 0xf)
+        h->unk_44 |= 1u << (index & 0x1f);
+    register u16 *active asm("r1") = &h->unk_48;
+    (*active)++;
+    entry->params.unk_00 = 1;
+
+    active++;
+    register unsigned int generation asm("r0") = *active + 1;
+    register unsigned int maximum asm("r2") = 0xffff;
+    if (generation > maximum)
+        generation = 1;
+    saved_entry->params.unk_02 = generation;
+    *active = generation;
+
+    register unsigned int low_mask asm("r1") = 0xf;
+    generation = saved_entry->params.unk_02;
+    generation &= maximum;
+    generation <<= 4;
+    result = index;
+    result &= low_mask;
+    result |= generation;
+    goto done;
+    }
+
+none:
+    result = 0;
+done:
+    return result;
+}
