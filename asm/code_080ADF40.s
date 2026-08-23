@@ -880,14 +880,7 @@ func_080AE4E4: @ 0x080AE4E4
 .L080AE6B8: .4byte 0x0000043C
 .L080AE6BC: .4byte 0x00000889
 
-	thumb_func_start func_080AE6C0
-func_080AE6C0: @ 0x080AE6C0
-	push {lr}
-	bl func_08008724
-	pop {r0}
-	bx r0
-	.align 2, 0
-
+	.section .text.tail080AE6CC, "ax", %progbits
 	thumb_func_start func_080AE6CC
 func_080AE6CC: @ 0x080AE6CC
 	push {r4, r5, lr}
@@ -11812,4 +11805,3 @@ func_080B3BA8: @ 0x080B3BA8
 	pop {r4}
 	pop {r0}
 	bx r0
-
