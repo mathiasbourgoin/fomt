@@ -612,15 +612,7 @@ func_0801140C: @ 0x0801140C
 .L08011450: .4byte 0x00001AA8
 .L08011454: .4byte 0x000034C5
 
-    thumb_func_start func_08011458
-func_08011458: @ 0x08011458
-    ldrb r1, [r0]
-    movs r2, #0x10
-    orrs r1, r2
-    strb r1, [r0]
-    bx lr
-    .align 2, 0
-
+    .section .text.tail08011464, "ax", %progbits
     thumb_func_start func_08011464
 func_08011464: @ 0x08011464
     push {r4, lr}
