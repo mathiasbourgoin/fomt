@@ -613,6 +613,7 @@ asm/code_0801DD78.o(.text);
         src/m4a_1.o(.text);
         src/m4a.o(.text);
         asm/code_lib_syscall.o(.text);
+        src/code_080D3778.o(.text);
         asm/code_lib_sram.o(.text);
         *libgcc.a:_call_via_rX.o(.text);
         /* these need to be recompiled using -mthumb-interwork */
