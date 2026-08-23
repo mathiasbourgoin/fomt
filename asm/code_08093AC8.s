@@ -662,6 +662,7 @@ func_0809424C: @ 0x0809424C
 	.endif
 
 	.section .text.tail08094268, "ax", %progbits
+	.if 0
 
 	thumb_func_start func_08094268
 func_08094268: @ 0x08094268
@@ -680,6 +681,9 @@ func_08094268: @ 0x08094268
 	bx r0
 	.align 2, 0
 .L08094284: .4byte vtable_unk_080E8028
+	.endif
+
+	.section .text.tail08094288, "ax", %progbits
 
 	thumb_func_start func_08094288
 func_08094288: @ 0x08094288
