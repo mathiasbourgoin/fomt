@@ -1191,13 +1191,7 @@ func_0809CDEC: @ 0x0809CDEC
 .L0809CE14: .4byte 0x3B9AC9FF
 .L0809CE18: .4byte 0x3B9ACA00
 
-    thumb_func_start func_0809CE1C
-func_0809CE1C: @ 0x0809CE1C
-    lsls r1, r1, #3
-    adds r0, r0, r1
-    ldr r0, [r0]
-    bx lr
-
+    .section .text.tail0809CE24, "ax", %progbits
     thumb_func_start func_0809CE24
 func_0809CE24: @ 0x0809CE24
     lsls r1, r1, #3
