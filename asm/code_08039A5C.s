@@ -1129,6 +1129,7 @@ func_0803A320: @ 0x0803A320
 	.endif
 
 	.section .text.tail0803A334, "ax", %progbits
+	.if 0
 
 	thumb_func_start func_0803A334
 func_0803A334: @ 0x0803A334
@@ -1145,8 +1146,11 @@ func_0803A334: @ 0x0803A334
     bx lr
     .align 2, 0
 .L0803A34C: .4byte gUnk_080F16D2
+	.endif
 
-    thumb_func_start func_0803A350
+	.section .text.tail0803A350, "ax", %progbits
+
+	thumb_func_start func_0803A350
 func_0803A350: @ 0x0803A350
     push {r4, r5, r6, lr}
     adds r6, r1, #0
