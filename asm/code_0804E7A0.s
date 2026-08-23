@@ -1,40 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-	.align 2, 0
-
-	thumb_func_start func_0804E7A0
-func_0804E7A0: @ 0x0804E7A0
-	push {lr}
-	sub sp, #4
-	movs r3, #0xf
-	ands r3, r2
-	lsls r2, r3, #4
-	orrs r3, r2
-	lsls r2, r3, #8
-	orrs r3, r2
-	lsls r2, r3, #0x10
-	orrs r3, r2
-	lsls r2, r0, #0x10
-	lsrs r2, r2, #0x10
-	lsrs r0, r0, #0x10
-	lsls r0, r0, #5
-	muls r2, r0, r2
-	str r3, [sp]
-	lsrs r2, r2, #2
-	ldr r0, .L0804E7D8 @ =0x001FFFFF
-	ands r2, r0
-	movs r0, #0x80
-	lsls r0, r0, #0x11
-	orrs r2, r0
-	mov r0, sp
-	bl CpuFastSet
-	add sp, #4
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L0804E7D8: .4byte 0x001FFFFF
-
 	thumb_func_start func_0804E7DC
 func_0804E7DC: @ 0x0804E7DC
 	push {r4, r5, r6, r7, lr}
@@ -180,4 +146,3 @@ func_0804E7DC: @ 0x0804E7DC
 	.align 2, 0
 .L0804E8E8: .4byte 0x3FFFFFF8
 .L0804E8EC: .4byte 0x001FFFFF
-
