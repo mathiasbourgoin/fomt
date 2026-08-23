@@ -877,6 +877,7 @@ func_0804F0E0: @ 0x0804F0E0
 	.align 2, 0
 
 	.section .text.tail0804F160, "ax", %progbits
+	.if 0
 	thumb_func_start func_0804F160
 func_0804F160: @ 0x0804F160
 	push {lr}
@@ -890,6 +891,7 @@ func_0804F160: @ 0x0804F160
 	pop {r1}
 	bx r1
 	.align 2, 0
+	.endif
 
 	.section .text.tail0804F178, "ax", %progbits
 	thumb_func_start func_0804F178
