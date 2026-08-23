@@ -1184,15 +1184,7 @@ func_0809CDEC: @ 0x0809CDEC
 .L0809CE18: .4byte 0x3B9ACA00
 
     .section .text.tail0809CE24, "ax", %progbits
-    thumb_func_start func_0809CE24
-func_0809CE24: @ 0x0809CE24
-    lsls r1, r1, #3
-    adds r0, #4
-    adds r0, r0, r1
-    ldr r0, [r0]
-    bx lr
-    .align 2, 0
-
+    .section .text.tail0809CE30, "ax", %progbits
     thumb_func_start func_0809CE30
 func_0809CE30: @ 0x0809CE30
     push {lr}
