@@ -212,7 +212,7 @@ asm/code_0801DD78.o(.text);
         src/code_080362FC.o(.text);
         src/code_08036328.o(.text);
         src/code_08036364.o(.text);
-        asm/code_08036390.o(.text);
+        src/code_08036390.o(.text);
         src/code_080363CC.o(.text);
         asm/code_080363F8.o(.text);
         src/code_08036500.o(.text);
