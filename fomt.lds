@@ -350,6 +350,8 @@ asm/code_0801DD78.o(.text);
         asm/code_entities_080320DC.o(.text.tail080324BC);
         src/code_08032A00.o(.text);
         asm/code_08032A30.o(.text);
+		src/code_08033914.o(.text);
+		asm/code_08032A30.o(.text.tail08033928);
         src/code_08033B7C.o(.text);
         asm/code_08032A30.o(.text.tail08033B84);
         src/npc_entity.o(.text);

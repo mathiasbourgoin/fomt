@@ -1996,7 +1996,8 @@ func_080338F0: @ 0x080338F0
     bx r1
     .align 2, 0
 
-    thumb_func_start func_08033914
+	.if 0
+	thumb_func_start func_08033914
 func_08033914: @ 0x08033914
     movs r1, #0xc0
     lsls r1, r1, #9
@@ -2006,10 +2007,13 @@ func_08033914: @ 0x08033914
     movs r1, #0x80
     lsls r1, r1, #8
     adds r0, r0, r1
-    bx lr
-    .align 2, 0
+	bx lr
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_08033928
+	.section .text.tail08033928, "ax", %progbits
+
+	thumb_func_start func_08033928
 func_08033928: @ 0x08033928
     push {r4, r5, r6, r7, lr}
     mov r7, r8
