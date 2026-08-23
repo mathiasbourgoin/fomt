@@ -37,3 +37,31 @@ EC u32 func_080244C4(u32 value)
         return 1;
     }
 }
+
+EC u32 func_08023804(u32 value) IN_SECTION(08023804);
+EC u32 func_08023804(u32 value)
+{
+    switch (value) {
+    case 0:
+        return 9;
+    case 1:
+        return 11;
+    case 2:
+        return 12;
+    default:
+        return 9;
+    }
+}
+
+EC u32 func_080244D8(u32 value) IN_SECTION(080244D8);
+EC u32 func_080244D8(u32 value)
+{
+    switch (value) {
+    case 0:
+        return 10;
+    case 1:
+        return 13;
+    default:
+        return 10;
+    }
+}
