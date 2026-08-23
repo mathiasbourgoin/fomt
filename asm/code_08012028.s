@@ -19741,7 +19741,8 @@ func_0801D948: @ 0x0801D948
     bx r0
     .align 2, 0
 
-    thumb_func_start func_0801D9A8
+	.if 0
+	thumb_func_start func_0801D9A8
 func_0801D9A8: @ 0x0801D9A8
     push {lr}
     ldr r3, .L0801D9B8 @ =0x00001054
@@ -19750,8 +19751,11 @@ func_0801D9A8: @ 0x0801D9A8
     bl func_08012B24
     pop {r0}
     bx r0
-    .align 2, 0
+	.align 2, 0
 .L0801D9B8: .4byte 0x00001054
+	.endif
+
+	.section .text.tail0801D9BC, "ax", %progbits
 .L0801D9BC:
     .byte 0x70, 0xB5, 0x04, 0x1C
     .byte 0x04, 0x49, 0x60, 0x18, 0x01, 0x68, 0x0E, 0x1C, 0x08, 0x36, 0x88, 0x68, 0x01, 0x28, 0x03, 0xD1
@@ -19780,7 +19784,8 @@ func_0801D9A8: @ 0x0801D9A8
     .byte 0x80, 0x18, 0x00, 0x0E, 0x0D, 0x28, 0x01, 0xD8, 0x0D, 0x20, 0x00, 0xE0, 0x0E, 0x20, 0x70, 0xBC
     .byte 0x02, 0xBC, 0x08, 0x47
 
-    thumb_func_start func_0801DB44
+	.if 0
+	thumb_func_start func_0801DB44
 func_0801DB44: @ 0x0801DB44
     push {lr}
     ldr r1, .L0801DB54 @ =0x00001054
@@ -19789,10 +19794,13 @@ func_0801DB44: @ 0x0801DB44
     bl func_0801468C
     pop {r1}
     bx r1
-    .align 2, 0
+	.align 2, 0
 .L0801DB54: .4byte 0x00001054
+	.endif
 
-    thumb_func_start func_0801DB58
+	.section .text.tail0801DB58, "ax", %progbits
+
+	thumb_func_start func_0801DB58
 func_0801DB58: @ 0x0801DB58
     push {r4, r5, lr}
     sub sp, #0xc
