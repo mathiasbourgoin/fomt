@@ -364,15 +364,3 @@ func_08050D8C: @ 0x08050D8C
 	pop {r0}
 	bx r0
 	.align 2, 0
-
-	thumb_func_start func_08050DA0
-func_08050DA0: @ 0x08050DA0
-	push {lr}
-	adds r3, r2, #0
-	ldr r0, [r0]
-	movs r2, #0x80
-	lsls r2, r2, #1
-	bl func_08050424
-	pop {r0}
-	bx r0
-	.align 2, 0
