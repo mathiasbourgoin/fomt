@@ -872,11 +872,3 @@ func_080087C8: @ 0x080087C8
 .L080088AC: .4byte vtable_unk_080E5BB4
 .L080088B0: .4byte vtable_unk_080E5BD8
 .L080088B4: .4byte 0x00000494
-
-    thumb_func_start func_080088B8
-func_080088B8: @ 0x080088B8
-    push {lr}
-    ldr r0, [r0]
-    bl func_08009268
-    pop {r0}
-    bx r0
