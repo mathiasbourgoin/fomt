@@ -10,3 +10,8 @@ EC u8 func_0809EAE0(u8 *self)
 {
     return ((Unk_0809EAE0 *)self)->flag;
 }
+
+EC void func_0809EAEC(u8 *self)
+{
+    ((Unk_0809EAE0 *)self)->flag = 1;
+}

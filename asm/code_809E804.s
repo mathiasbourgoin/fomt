@@ -370,15 +370,7 @@ func_0809EA6C: @ 0x0809EA6C
 	.section .text.tail0809EAD8, "ax", %progbits
 	.section .text.tail0809EAE0, "ax", %progbits
 	.section .text.tail0809EAEC, "ax", %progbits
-	thumb_func_start func_0809EAEC
-func_0809EAEC: @ 0x0809EAEC
-	adds r0, #0x26
-	ldrb r1, [r0]
-	movs r2, #1
-	orrs r1, r2
-	strb r1, [r0]
-	bx lr
-
+	.section .text.tail0809EAF8, "ax", %progbits
 	thumb_func_start func_0809EAF8
 func_0809EAF8: @ 0x0809EAF8
 	push {r4, lr}
