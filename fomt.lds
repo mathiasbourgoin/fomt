@@ -312,6 +312,8 @@ asm/code_0801DD78.o(.text);
         asm/code_entities.o(.text);
         src/code_080202C4.o(.text);
         asm/code_entities.o(.text.tail080202CC);
+		src/code_08020460.o(.text);
+		asm/code_entities.o(.text.tail08020474);
         src/code_0802161C.o(.text);
 		src/code_short_mappers.o(.text.func_08021620);
 		asm/code_entities.o(.text.tail08021634);
