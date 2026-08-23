@@ -242,6 +242,7 @@ func_0800917C: @ 0x0800917C
 
     .endif
     .section .text.tail08009190, "ax", %progbits
+    .if 0
     thumb_func_start func_08009190
 func_08009190: @ 0x08009190
     push {r4, r5, lr}
@@ -254,6 +255,8 @@ func_08009190: @ 0x08009190
     pop {r1}
     bx r1
 
+    .endif
+    .section .text.tail080091A4, "ax", %progbits
     thumb_func_start func_080091A4
 func_080091A4: @ 0x080091A4
     push {r4, r5, r6, lr}

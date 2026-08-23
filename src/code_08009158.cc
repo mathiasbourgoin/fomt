@@ -24,3 +24,12 @@ EC u16 *func_0800917C(u16 *self)
     self[2] = self[0];
     return self;
 }
+
+EC u32 func_08009190(u16 *self)
+{
+    u32 previous = self[0];
+    u32 value = func_08009158(self);
+    value &= ~previous;
+    self[2] = value;
+    return value;
+}
