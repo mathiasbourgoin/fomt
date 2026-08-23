@@ -6384,6 +6384,7 @@ func_080D7F3C: @ 0x080D7F3C
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080D7F60
 func_080D7F60: @ 0x080D7F60
 	push {lr}
@@ -6422,6 +6423,9 @@ func_080D7F88: @ 0x080D7F88
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
+
+	.section .text.code_080D7F9C, "ax", %progbits
 
 	thumb_func_start func_080D7F9C
 func_080D7F9C: @ 0x080D7F9C
