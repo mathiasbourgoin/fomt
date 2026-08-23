@@ -298,6 +298,8 @@ asm/code_0801DD78.o(.text);
         asm/code_08022320.o(.text.tail0802C2E0);
         src/entity_actor.o(.text);
         asm/code_entities_080320DC.o(.text);
+        src/code_080324B8.o(.text);
+        asm/code_entities_080320DC.o(.text.tail080324BC);
         src/code_08032A00.o(.text);
         asm/code_08032A30.o(.text);
         src/npc_entity.o(.text);

@@ -85,11 +85,7 @@ func_0803242C: @ 0x0803242C
     pop {r0}
     bx r0
 
-    thumb_func_start func_080324B8
-func_080324B8: @ 0x080324B8
-    movs r0, #0
-    bx lr
-
+    .section .text.tail080324BC, "ax", %progbits
     thumb_func_start func_080324BC
 func_080324BC: @ 0x080324BC
     push {r4, r5, r6, r7, lr}
@@ -792,4 +788,3 @@ func_08032934: @ 0x08032934
     @ 329fa:       bc04            pop     {r2}
     @ 329fc:       4710            bx      r2
     @ 329fe:       0000            movs    r0, r0
-
