@@ -15255,6 +15255,7 @@ func_080AAF1C: @ 0x080AAF1C
 	bx lr
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080AAF28
 func_080AAF28: @ 0x080AAF28
 	lsls r1, r1, #0x18
@@ -15267,6 +15268,9 @@ func_080AAF28: @ 0x080AAF28
 	bx lr
 	.align 2, 0
 .L080AAF38: .4byte gUnk_08107458
+	.endif
+
+	.section .text.tail080AAF3C, "ax", %progbits
 
 	thumb_func_start func_080AAF3C
 func_080AAF3C: @ 0x080AAF3C
