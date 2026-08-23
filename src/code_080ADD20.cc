@@ -43,3 +43,13 @@ EC void func_080ADD44(TextCursor *self)
     self->field_10 = nullptr;
     self->field_14 = 0;
 }
+
+EC void func_080ADD5C(TextCursor *self, void *text, void *provider)
+{
+    self->field_8 = text;
+    self->field_C = provider;
+    self->field_10 = nullptr;
+    self->field_14 = 0;
+    self->field_0 = text != nullptr;
+    self->field_6 = 0;
+}
