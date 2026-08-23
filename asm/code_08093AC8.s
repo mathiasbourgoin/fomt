@@ -1252,16 +1252,7 @@ func_080946A8: @ 0x080946A8
 	bx r0
 	.align 2, 0
 
-	thumb_func_start func_080946BC
-func_080946BC: @ 0x080946BC
-	bx lr
-	.align 2, 0
-
-	thumb_func_start func_080946C0
-func_080946C0: @ 0x080946C0
-	bx lr
-	.align 2, 0
-
+	.section .text.tail080946C4, "ax", %progbits
 	thumb_func_start func_080946C4
 func_080946C4: @ 0x080946C4
 	push {lr}
