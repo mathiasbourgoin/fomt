@@ -18,3 +18,13 @@ EC void func_08011510(u8 *self)
     *(u32 *)(self + 4) = 0x10;
     self[8] = 0;
 }
+
+extern u8 *gUnk_03000420;
+
+EC void func_080D0444(u32, u32) IN_SECTION(080D0444);
+EC void func_080D0444(u32 first, u32 second)
+{
+    register u8 *state asm("r2") = gUnk_03000420;
+    *(u32 *)(state + 4) = first;
+    *(u32 *)(state + 8) = second;
+}
