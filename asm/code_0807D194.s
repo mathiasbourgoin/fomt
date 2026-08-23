@@ -1,39 +1,6 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
 
-.L0807D1C8:
-	.byte 0x00, 0xB5, 0x03, 0x4A, 0x42, 0x60, 0x4B, 0xF0
-	.byte 0xC7, 0xF8, 0x01, 0xBC, 0x00, 0x47, 0x00, 0x00, 0x14, 0x7C, 0x0E, 0x08
-
-	thumb_func_start func_0807D1DC
-func_0807D1DC: @ 0x0807D1DC
-	push {r4, lr}
-	sub sp, #4
-	adds r4, r0, #0
-	ldr r2, .L0807D214 @ =gUnk_080FDDD8
-	lsls r1, r1, #2
-	adds r1, r1, r4
-	movs r0, #0xaa
-	lsls r0, r0, #2
-	adds r1, r1, r0
-	ldr r0, [r1]
-	lsls r0, r0, #3
-	adds r0, r0, r2
-	ldr r1, [r0]
-	mov r0, sp
-	bl __4ToolUi
-	mov r0, sp
-	bl GetDesc__C4Tool
-	adds r1, r0, #0
-	adds r0, r4, #0
-	bl func_080CABEC
-	add sp, #4
-	pop {r4}
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L0807D214: .4byte gUnk_080FDDD8
-
 	thumb_func_start func_0807D218
 func_0807D218: @ 0x0807D218
 	push {r4, r5, r6, r7, lr}
