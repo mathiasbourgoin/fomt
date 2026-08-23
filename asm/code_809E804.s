@@ -366,11 +366,7 @@ func_0809EA6C: @ 0x0809EA6C
 	.align 2, 0
 .L0809EAC8: .4byte gUnk_08104108
 
-	thumb_func_start func_0809EACC
-func_0809EACC: @ 0x0809EACC
-	adds r0, #0x14
-	bx lr
-
+	.section .text.tail0809EAD0, "ax", %progbits
 	thumb_func_start func_0809EAD0
 func_0809EAD0: @ 0x0809EAD0
 	adds r0, #0x24
@@ -9818,4 +9814,3 @@ func_080A3618: @ 0x080A3618
 	pop {r4, r5, r6, r7}
 	pop {r0}
 	bx r0
-
