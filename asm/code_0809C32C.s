@@ -2646,6 +2646,7 @@ func_0809D8B8: @ 0x0809D8B8
 	.endif
 
 	.section .text.tail0809D8D4, "ax", %progbits
+	.if 0
 
 	thumb_func_start func_0809D8D4
 func_0809D8D4: @ 0x0809D8D4
@@ -2658,9 +2659,12 @@ func_0809D8D4: @ 0x0809D8D4
     ldrb r0, [r0, #4]
     lsls r0, r0, #0x1c
     lsrs r0, r0, #0x1c
-    bx lr
+	bx lr
+	.endif
 
-    thumb_func_start func_0809D8E8
+	.section .text.tail0809D8E8, "ax", %progbits
+
+	thumb_func_start func_0809D8E8
 func_0809D8E8: @ 0x0809D8E8
     push {r4, r5, r6, r7, lr}
     mov r7, sl

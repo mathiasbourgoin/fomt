@@ -874,7 +874,7 @@ asm/code_0801DD78.o(.text);
         asm/code_0809C32C.o(.text.tail0809CE8C);
         src/code_0809D8A0.o(.text);
 		src/code_0809D8A4.o(.text);
-		asm/code_0809C32C.o(.text.tail0809D8D4);
+		asm/code_0809C32C.o(.text.tail0809D8E8);
 		src/code_0809E174.o(.text);
 		asm/code_0809C32C.o(.text.tail0809E1B4);
         src/npc.o(.text);
