@@ -147,24 +147,7 @@ func_080D6F0C: @ 0x080D6F0C
 	.align 2, 0
 
 	.endif
-	.section .text.tail080D6F3C, "ax", %progbits
-
-	thumb_func_start func_080D6F3C
-func_080D6F3C: @ 0x080D6F3C
-	push {r4, lr}
-	adds r4, r0, #0
-	adds r0, #0x20
-	bl func_080D6F1C
-	adds r0, r4, #4
-	bl func_080D6F1C
-	movs r0, #0
-	strb r0, [r4]
-	movs r0, #1
-	strb r0, [r4, #1]
-	pop {r4}
-	pop {r0}
-	bx r0
-	.align 2, 0
+	.section .text.tail080D6F5C, "ax", %progbits
 
 	thumb_func_start func_080D6F5C
 func_080D6F5C: @ 0x080D6F5C
