@@ -1,58 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_0809C32C
-func_0809C32C: @ 0x0809C32C
-    push {lr}
-    adds r2, r0, #0
-    movs r3, #0
-    ldrb r1, [r2, #7]
-    rsbs r1, r1, #0
-    ldrb r0, [r2, #1]
-    rsbs r0, r0, #0
-    orrs r0, r1
-    cmp r0, #0
-    bge .L0809C384
-    ldrb r1, [r2, #6]
-    rsbs r1, r1, #0
-    ldrb r0, [r2]
-    rsbs r0, r0, #0
-    orrs r0, r1
-    cmp r0, #0
-    bge .L0809C384
-    ldrb r1, [r2, #8]
-    rsbs r1, r1, #0
-    ldrb r0, [r2, #2]
-    rsbs r0, r0, #0
-    orrs r0, r1
-    cmp r0, #0
-    bge .L0809C384
-    ldrb r1, [r2, #9]
-    rsbs r1, r1, #0
-    ldrb r0, [r2, #3]
-    rsbs r0, r0, #0
-    orrs r0, r1
-    cmp r0, #0
-    bge .L0809C384
-    ldrb r1, [r2, #0xa]
-    rsbs r1, r1, #0
-    ldrb r0, [r2, #4]
-    rsbs r0, r0, #0
-    orrs r0, r1
-    cmp r0, #0
-    bge .L0809C384
-    ldrb r1, [r2, #0xb]
-    rsbs r1, r1, #0
-    ldrb r0, [r2, #5]
-    rsbs r0, r0, #0
-    orrs r0, r1
-    lsrs r3, r0, #0x1f
-.L0809C384:
-    adds r0, r3, #0
-    pop {r1}
-    bx r1
-    .align 2, 0
-
     thumb_func_start func_0809C38C
 func_0809C38C: @ 0x0809C38C
     push {lr}
