@@ -657,11 +657,6 @@ func_0803C52C: @ 0x0803C52C
 	pop {r0}
 	bx r0
 
-	thumb_func_start func_0803C540
-func_0803C540: @ 0x0803C540
-	ldrb r0, [r0, #0xc]
-	bx lr
-
 	.section .text.tail0803C54C, "ax", %progbits
 	thumb_func_start func_0803C54C
 func_0803C54C: @ 0x0803C54C
