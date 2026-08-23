@@ -2,6 +2,19 @@
 
 #define IN_SECTION(address) __attribute__((section(".text.func_" #address)))
 
+EC u32 func_08021620(u32 value) IN_SECTION(08021620);
+EC u32 func_08021620(u32 value)
+{
+    switch (value) {
+    case 0:
+        return 6;
+    case 1:
+        return 8;
+    default:
+        return 6;
+    }
+}
+
 EC u32 func_08022B5C(u32 value) IN_SECTION(08022B5C);
 EC u32 func_08022B5C(u32 value)
 {
