@@ -990,6 +990,7 @@ func_080E1A28: @ 0x080E1A28
 	.align 2, 0
 .L080E1A44: .4byte vtable_unk_080E76F8
 
+	.if 0
 	thumb_func_start func_080E1A48
 func_080E1A48: @ 0x080E1A48
 	push {lr}
@@ -998,6 +999,8 @@ func_080E1A48: @ 0x080E1A48
 	pop {r1}
 	bx r1
 
+	.endif
+	.section .text.tail080E1A54, "ax", %progbits
 	thumb_func_start func_080E1A54
 func_080E1A54: @ 0x080E1A54
 	push {lr}
@@ -4542,6 +4545,7 @@ func_080E3504: @ 0x080E3504
 	.align 2, 0
 .L080E35D8: .4byte vtable_unk_080E5A28
 
+	.if 0
 	thumb_func_start func_080E35DC
 func_080E35DC: @ 0x080E35DC
 	push {lr}
@@ -4550,6 +4554,8 @@ func_080E35DC: @ 0x080E35DC
 	pop {r0}
 	bx r0
 
+	.endif
+	.section .text.tail080E35E8, "ax", %progbits
 	thumb_func_start func_080E35E8
 func_080E35E8: @ 0x080E35E8
 	push {r4, lr}
@@ -4879,6 +4885,7 @@ func_080E37DC: @ 0x080E37DC
 	bx r1
 
 	.section .text.tail080E385C, "ax", %progbits
+	.if 0
 	thumb_func_start func_080E385C
 func_080E385C: @ 0x080E385C
 	push {lr}
@@ -4895,6 +4902,8 @@ func_080E3868: @ 0x080E3868
 	pop {r1}
 	bx r1
 
+	.endif
+	.section .text.tail080E3874, "ax", %progbits
 	thumb_func_start func_080E3874
 func_080E3874: @ 0x080E3874
 	push {lr}
@@ -5138,6 +5147,7 @@ func_080E39EC: @ 0x080E39EC
 	bx r1
 
 	.section .text.tail080E3A5C, "ax", %progbits
+	.if 0
 	thumb_func_start func_080E3A5C
 func_080E3A5C: @ 0x080E3A5C
 	push {lr}
@@ -5148,6 +5158,8 @@ func_080E3A5C: @ 0x080E3A5C
 	pop {r0}
 	bx r0
 
+	.endif
+	.section .text.tail080E3A6C, "ax", %progbits
 	thumb_func_start func_080E3A6C
 func_080E3A6C: @ 0x080E3A6C
 	push {lr}
@@ -5160,6 +5172,7 @@ func_080E3A6C: @ 0x080E3A6C
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080E3A80
 func_080E3A80: @ 0x080E3A80
 	push {lr}
@@ -5178,6 +5191,8 @@ func_080E3A8C: @ 0x080E3A8C
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section .text.tail080E3A9C, "ax", %progbits
 	thumb_func_start func_080E3A9C
 func_080E3A9C: @ 0x080E3A9C
 	push {r4, lr}
