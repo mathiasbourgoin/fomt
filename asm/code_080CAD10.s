@@ -11597,14 +11597,7 @@ func_080D06B4: @ 0x080D06B4
 	.align 2, 0
 .L080D06CC: .4byte gUnk_03000420
 
-	thumb_func_start func_080D06D0
-func_080D06D0: @ 0x080D06D0
-	ldr r0, .L080D06D8 @ =gUnk_03000420
-	ldr r0, [r0]
-	ldr r0, [r0, #0x18]
-	bx lr
-	.align 2, 0
-.L080D06D8: .4byte gUnk_03000420
+	.section .text.tail080D06DC, "ax", %progbits
 .L080D06DC:
 	.byte 0x00, 0xB5, 0x06, 0x48
 	.byte 0x00, 0x68, 0x02, 0x6A, 0x00, 0x2A, 0x09, 0xD0, 0xC1, 0x69, 0x64, 0x20, 0x48, 0x43, 0x11, 0x1C
