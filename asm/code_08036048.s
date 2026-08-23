@@ -81,19 +81,3 @@ func_08036084: @ 0x08036084
     .align 2, 0
 .L08036130: .4byte 0x0000082F
 .L08036134: .4byte 0x00000833
-
-    thumb_func_start func_08036138
-func_08036138: @ 0x08036138
-    push {r4, r5, lr}
-    adds r5, r0, #0
-    adds r4, r1, #0
-    bl func_08034F00
-    cmp r4, #1
-    ble .L0803614C
-    adds r0, r5, #0
-    bl func_08036084
-.L0803614C:
-    pop {r4, r5}
-    pop {r0}
-    bx r0
-    .align 2, 0
