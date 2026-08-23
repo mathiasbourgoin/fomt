@@ -876,6 +876,8 @@ asm/code_0801DD78.o(.text);
 
         src/code_080D3BC0.o(.text);
         asm/code_linkonce.o(.text.code_080D3BC0);
+		src/code_080D3C60.o(.text);
+		asm/code_linkonce.o(.text.code_080D3C6C);
         *(.gnu.linkonce.t.__as__6AnimalRC6Animal);
         asm/code_linkonce.o(.text.code_080D68C0);
         src/code_080D6D98.o(.text);

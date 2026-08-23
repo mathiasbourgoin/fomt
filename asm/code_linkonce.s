@@ -66,6 +66,7 @@ func_080D3C24: @ 0x080D3C24
 	pop {r1}
 	bx r1
 
+	.if 0
 	thumb_func_start func_080D3C60
 func_080D3C60: @ 0x080D3C60
 	push {lr}
@@ -74,6 +75,8 @@ func_080D3C60: @ 0x080D3C60
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080D3C6C"
 	thumb_func_start func_080D3C6C
 func_080D3C6C: @ 0x080D3C6C
 	push {lr}
