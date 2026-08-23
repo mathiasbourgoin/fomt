@@ -2923,11 +2923,3 @@ func_0801FD0C: @ 0x0801FD0C
     bx r0
 .L0801FD30:
     .byte 0x01, 0x49, 0x40, 0x18, 0x00, 0x68, 0x70, 0x47, 0x24, 0x10, 0x00, 0x00
-
-    thumb_func_start func_0801FD3C
-func_0801FD3C: @ 0x0801FD3C
-    push {lr}
-    ldr r0, [r0, #4]
-    bl func_080A5A9C
-    pop {r1}
-    bx r1
