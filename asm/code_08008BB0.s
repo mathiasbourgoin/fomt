@@ -27,11 +27,3 @@ func_08008BB0: @ 0x08008BB0
 .L08008BDC:
     pop {r0}
     bx r0
-
-    thumb_func_start func_08008BE0
-func_08008BE0: @ 0x08008BE0
-    push {lr}
-    ldr r0, [r0]
-    bl m4aMPlayStop
-    pop {r0}
-    bx r0
