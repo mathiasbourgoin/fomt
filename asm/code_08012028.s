@@ -969,7 +969,8 @@ func_08012720: @ 0x08012720
     .align 2, 0
 .L08012748: .4byte 0x00002210
 
-    thumb_func_start func_0801274C
+	.if 0
+	thumb_func_start func_0801274C
 func_0801274C: @ 0x0801274C
     push {lr}
     ldr r0, [r0, #4]
@@ -979,10 +980,13 @@ func_0801274C: @ 0x0801274C
     beq .L0801275C
     bl func_08050E74
 .L0801275C:
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
 
-    thumb_func_start func_08012760
+	.section .text.tail08012760, "ax", %progbits
+
+	thumb_func_start func_08012760
 func_08012760: @ 0x08012760
     push {lr}
     ldr r2, [r0, #4]
@@ -1007,7 +1011,8 @@ func_08012760: @ 0x08012760
     .align 2, 0
 .L08012788: .4byte 0x00002210
 
-    thumb_func_start func_0801278C
+	.if 0
+	thumb_func_start func_0801278C
 func_0801278C: @ 0x0801278C
     push {lr}
     ldr r0, [r0, #4]
@@ -1017,10 +1022,13 @@ func_0801278C: @ 0x0801278C
     beq .L0801279C
     bl func_08050E5C
 .L0801279C:
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
 
-    thumb_func_start func_080127A0
+	.section .text.tail080127A0, "ax", %progbits
+
+	thumb_func_start func_080127A0
 func_080127A0: @ 0x080127A0
     push {r4, lr}
     ldr r4, [r0, #4]
@@ -1106,7 +1114,8 @@ func_080127A0: @ 0x080127A0
     .align 2, 0
 .L08012848: .4byte 0x0000270F
 
-    thumb_func_start func_0801284C
+	.if 0
+	thumb_func_start func_0801284C
 func_0801284C: @ 0x0801284C
     push {lr}
     ldr r0, [r0, #4]
@@ -1116,10 +1125,13 @@ func_0801284C: @ 0x0801284C
     beq .L0801285C
     bl func_08050E8C
 .L0801285C:
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
 
-    thumb_func_start func_08012860
+	.section .text.tail08012860, "ax", %progbits
+
+	thumb_func_start func_08012860
 func_08012860: @ 0x08012860
     push {r4, r5, r6, r7, lr}
     sub sp, #0xc
