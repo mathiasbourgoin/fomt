@@ -56,6 +56,7 @@ func_08050AD8: @ 0x08050AD8
 	pop {r0}
 	bx r0
 
+	.if 0
 	thumb_func_start func_08050B3C
 func_08050B3C: @ 0x08050B3C
 	movs r1, #0xee
@@ -68,6 +69,9 @@ func_08050B3C: @ 0x08050B3C
 	strb r1, [r0]
 	bx lr
 	.align 2, 0
+	.endif
+
+	.section .text.tail08050B50, "ax", %progbits
 
 	thumb_func_start func_08050B50
 func_08050B50: @ 0x08050B50
@@ -176,6 +180,7 @@ func_08050B50: @ 0x08050B50
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_08050C18
 func_08050C18: @ 0x08050C18
 	movs r1, #0xf8
@@ -188,6 +193,9 @@ func_08050C18: @ 0x08050C18
 	strb r1, [r0]
 	bx lr
 	.align 2, 0
+	.endif
+
+	.section .text.tail08050C2C, "ax", %progbits
 
 	thumb_func_start func_08050C2C
 func_08050C2C: @ 0x08050C2C
