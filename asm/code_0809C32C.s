@@ -130,13 +130,7 @@ func_0809C5D0: @ 0x0809C5D0
     bx r0
     .align 2, 0
 
-    thumb_func_start func_0809C5EC
-func_0809C5EC: @ 0x0809C5EC
-    movs r1, #0
-    str r1, [r0]
-    bx lr
-    .align 2, 0
-
+    .section .text.tail0809C5F4, "ax", %progbits
     thumb_func_start func_0809C5F4
 func_0809C5F4: @ 0x0809C5F4
     ldr r1, [r0]
