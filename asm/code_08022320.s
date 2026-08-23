@@ -4368,7 +4368,8 @@ func_08025A40: @ 0x08025A40
     bx r0
     .align 2, 0
 
-    thumb_func_start func_08025AFC
+	.if 0
+	thumb_func_start func_08025AFC
 func_08025AFC: @ 0x08025AFC
     push {lr}
     ldrh r0, [r0, #4]
@@ -4380,10 +4381,13 @@ func_08025AFC: @ 0x08025AFC
     movs r0, #1
 .L08025B0A:
     pop {r1}
-    bx r1
-    .align 2, 0
+	bx r1
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_08025B10
+	.section .text.tail08025B10, "ax", %progbits
+
+	thumb_func_start func_08025B10
 func_08025B10: @ 0x08025B10
     push {r4, r5, lr}
     adds r5, r0, #0
