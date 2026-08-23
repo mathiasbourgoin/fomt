@@ -77,6 +77,7 @@ func_080D3C60: @ 0x080D3C60
 
 	.endif
 	.section ".text.code_080D3C6C"
+	.if 0
 	thumb_func_start func_080D3C6C
 func_080D3C6C: @ 0x080D3C6C
 	push {lr}
@@ -85,6 +86,8 @@ func_080D3C6C: @ 0x080D3C6C
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080D3C78"
 	thumb_func_start func_080D3C78
 func_080D3C78: @ 0x080D3C78
 	push {r4, r5, r6, lr}
@@ -499,6 +502,7 @@ func_080D4004: @ 0x080D4004
 	pop {r1}
 	bx r1
 
+	.if 0
 	thumb_func_start func_080D4040
 func_080D4040: @ 0x080D4040
 	push {lr}
@@ -507,6 +511,8 @@ func_080D4040: @ 0x080D4040
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080D404C"
 	thumb_func_start func_080D404C
 func_080D404C: @ 0x080D404C
 	push {r4, r5, lr}
@@ -6218,6 +6224,7 @@ func_080D6C58: @ 0x080D6C58
 .L080D6D84: .4byte 0x00000524
 .L080D6D88: .4byte gUnk_0300040C
 
+	.if 0
 	thumb_func_start func_080D6D8C
 func_080D6D8C: @ 0x080D6D8C
 	push {lr}
@@ -6226,6 +6233,7 @@ func_080D6D8C: @ 0x080D6D8C
 	bx r0
 	.align 2, 0
 
+	.endif
 	.section ".text.code_080D7CFC"
 
 	thumb_func_start func_080D7E64
@@ -12709,6 +12717,7 @@ func_080DB2EC: @ 0x080DB2EC
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080DB314
 func_080DB314: @ 0x080DB314
 	push {lr}
@@ -12717,6 +12726,8 @@ func_080DB314: @ 0x080DB314
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DB320"
 	thumb_func_start func_080DB320
 func_080DB320: @ 0x080DB320
 	push {r4, r5, r6, lr}
@@ -14439,6 +14450,7 @@ func_080DC1A0: @ 0x080DC1A0
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080DC1C8
 func_080DC1C8: @ 0x080DC1C8
 	push {lr}
@@ -14447,6 +14459,8 @@ func_080DC1C8: @ 0x080DC1C8
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DC1D4"
 	thumb_func_start func_080DC1D4
 func_080DC1D4: @ 0x080DC1D4
 	push {r4, r5, r6, lr}
@@ -14541,6 +14555,7 @@ func_080DC244: @ 0x080DC244
 	pop {r1}
 	bx r1
 
+	.if 0
 	thumb_func_start func_080DC288
 func_080DC288: @ 0x080DC288
 	push {lr}
@@ -14549,6 +14564,8 @@ func_080DC288: @ 0x080DC288
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DC294"
 	thumb_func_start func_080DC294
 func_080DC294: @ 0x080DC294
 	push {r4, lr}
