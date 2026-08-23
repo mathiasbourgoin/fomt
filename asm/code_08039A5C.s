@@ -1114,7 +1114,8 @@ func_0803A180: @ 0x0803A180
     pop {r1}
     bx r1
 
-    thumb_func_start func_0803A320
+	.if 0
+	thumb_func_start func_0803A320
 func_0803A320: @ 0x0803A320
     ldr r0, .L0803A330 @ =gUnk_080F16D2
     lsls r1, r1, #0x10
@@ -1123,10 +1124,13 @@ func_0803A320: @ 0x0803A320
     movs r2, #0
     ldrsh r0, [r1, r2]
     bx lr
-    .align 2, 0
+	.align 2, 0
 .L0803A330: .4byte gUnk_080F16D2
+	.endif
 
-    thumb_func_start func_0803A334
+	.section .text.tail0803A334, "ax", %progbits
+
+	thumb_func_start func_0803A334
 func_0803A334: @ 0x0803A334
     ldr r2, .L0803A34C @ =gUnk_080F16D2
     lsls r1, r1, #0x10

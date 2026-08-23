@@ -1,0 +1,11 @@
+#include "prelude.h"
+
+extern i16 gUnk_080F16D2[];
+
+EC i32 func_0803A320(void *, u32 index)
+{
+    register i16 *table asm("r0") = gUnk_080F16D2;
+    asm("" : "+r"(table));
+    register i32 offset asm("r1") = (i16)index;
+    return table[offset];
+}
