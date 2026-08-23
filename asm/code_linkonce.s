@@ -23718,8 +23718,3 @@ func_080E10E0: @ 0x080E10E0
 	pop {r0}
 	bx r0
 	.align 2, 0
-
-	thumb_func_start func_080E10EC
-func_080E10EC: @ 0x080E10EC
-	movs r0, #1
-	bx lr
