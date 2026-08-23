@@ -879,11 +879,7 @@ func_0804F160: @ 0x0804F160
 	bx r1
 	.align 2, 0
 
-	thumb_func_start func_0804F174
-func_0804F174: @ 0x0804F174
-	movs r0, #1
-	bx lr
-
+	.section .text.tail0804F178, "ax", %progbits
 	thumb_func_start func_0804F178
 func_0804F178: @ 0x0804F178
 	push {lr}
