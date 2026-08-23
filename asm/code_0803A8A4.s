@@ -2779,11 +2779,3 @@ func_0803BEFC: @ 0x0803BEFC
 	pop {r0}
 	bx r0
 
-	thumb_func_start func_0803BF08
-func_0803BF08: @ 0x0803BF08
-	push {lr}
-	ldr r0, [r0]
-	bl func_0803BDEC
-	pop {r0}
-	bx r0
-
