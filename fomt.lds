@@ -590,6 +590,7 @@ asm/code_0801DD78.o(.text);
         asm/code_080E41E8.o(.text);
         src/code_080E44E4.o(.text);
         asm/code_080E4510.o(.text);
+        src/code_080E59C0.o(.text);
 
         *(.gnu.linkonce.d.__vt_6AScene);
         *(.gnu.linkonce.d.__vt_13AUnk_0800080C);
