@@ -2770,12 +2770,3 @@ func_0803BEF4: @ 0x0803BEF4
 	movs r1, #2
 	ldrsh r0, [r0, r1]
 	bx lr
-
-	thumb_func_start func_0803BEFC
-func_0803BEFC: @ 0x0803BEFC
-	push {lr}
-	ldr r0, [r0]
-	bl func_0803BDE4
-	pop {r0}
-	bx r0
-
