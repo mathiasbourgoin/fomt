@@ -1526,29 +1526,7 @@ func_080D782C: @ 0x080D782C
 	bx r1
 	.align 2, 0
 
-	thumb_func_start func_080D7868
-func_080D7868: @ 0x080D7868
-	push {lr}
-	bl func_080098AC
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080D7874
-func_080D7874: @ 0x080D7874
-	push {lr}
-	bl func_080098AC
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080D7880
-func_080D7880: @ 0x080D7880
-	push {lr}
-	bl func_080098AC
-	pop {r0}
-	bx r0
-	.align 2, 0
+	.section .text.tail080D788C, "ax", %progbits
 .L080D788C:
 	.byte 0x70, 0xB5, 0x81, 0xB0
 	.byte 0x06, 0x1C, 0x6D, 0x46, 0x01, 0x24, 0x01, 0x20, 0x28, 0xF7, 0x46, 0xFE, 0x04, 0x40, 0x2C, 0x80
@@ -1605,4 +1583,3 @@ func_080D78F8: @ 0x080D78F8
 .L080D7938: .4byte gUnk_03000410
 .L080D793C: .4byte vtable_unk_080E5B48
 .L080D7940: .4byte func_080D78E0
-

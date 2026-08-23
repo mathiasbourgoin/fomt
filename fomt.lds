@@ -843,6 +843,8 @@ asm/code_0801DD78.o(.text);
         asm/code_linkonce.o(.text.code_080D68C0);
         src/code_080D6D98.o(.text);
         asm/code_080D6DB8.o(.text);
+        src/code_080D7868.o(.text);
+        asm/code_080D6DB8.o(.text.tail080D788C);
         src/code_080D7944.o(.text);
         asm/code_080D7990.o(.text);
         src/code_080D79CC.o(.text);
