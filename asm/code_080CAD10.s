@@ -3451,13 +3451,7 @@ func_080CC70C: @ 0x080CC70C
 	bx lr
 	.align 2, 0
 
-	thumb_func_start func_080CC720
-func_080CC720: @ 0x080CC720
-	movs r1, #0xa0
-	lsls r1, r1, #2
-	adds r0, r0, r1
-	bx lr
-
+	.section .text.tail080CC728, "ax", %progbits
 	thumb_func_start func_080CC728
 func_080CC728: @ 0x080CC728
 	push {r4, r5, r6, r7, lr}
