@@ -3205,6 +3205,7 @@ func_0805039C: @ 0x0805039C
 	pop {r0}
 	bx r0
 
+	.if 0
 	thumb_func_start func_080503E4
 func_080503E4: @ 0x080503E4
 	push {r4, lr}
@@ -3218,7 +3219,11 @@ func_080503E4: @ 0x080503E4
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
 
+	.section .text.tail080503FC, "ax", %progbits
+
+	.if 0
 	thumb_func_start func_080503FC
 func_080503FC: @ 0x080503FC
 	push {lr}
@@ -3232,6 +3237,9 @@ func_080503FC: @ 0x080503FC
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
+
+	.section .text.tail08050410, "ax", %progbits
 
 	thumb_func_start func_08050410
 func_08050410: @ 0x08050410
