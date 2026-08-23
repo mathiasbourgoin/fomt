@@ -184,6 +184,7 @@ SECTIONS
         asm/more_items.o(.text);
         src/code_0800FFD0.o(.text);
         src/code_0800FFD4.o(.text);
+        src/code_0800FFD8.o(.text);
         asm/more_items_tail.o(.text);
         asm/game_scene.o(.text);
         src/code_080100F0.o(.text);

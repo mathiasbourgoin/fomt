@@ -1,13 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_0800FFD8
-func_0800FFD8: @ 0x0800FFD8
-    ldr r1, [r0]
-    adds r1, #4
-    adds r0, r0, r1
-    bx lr
-
     thumb_func_start func_0800FFE0
 func_0800FFE0: @ 0x0800FFE0
     push {r4, lr}
