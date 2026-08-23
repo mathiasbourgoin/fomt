@@ -760,6 +760,8 @@ asm/code_0801DD78.o(.text);
         asm/code_08085568.o(.text);
 		src/code_vtable_wrappers.o(.text.func_0808562C);
 		asm/code_08085568.o(.text.tail08085640);
+		src/code_08085EEC.o(.text);
+		asm/code_08085568.o(.text.tail08085F08);
         src/code_08088168.o(.text);
         src/code_080881AC.o(.text);
         asm/code_080881EC.o(.text);
