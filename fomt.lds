@@ -744,6 +744,8 @@ asm/code_0801DD78.o(.text);
         asm/code_0809C32C.o(.text.tail0809CE24);
         src/code_0809CE24.o(.text);
         asm/code_0809C32C.o(.text.tail0809CE30);
+        src/code_0809CE7C.o(.text);
+        asm/code_0809C32C.o(.text.tail0809CE8C);
         src/code_0809D8A0.o(.text);
         asm/code_0809C32C.o(.text.tail0809D8A4);
         src/npc.o(.text);
