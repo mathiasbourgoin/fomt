@@ -880,10 +880,3 @@ func_080088B8: @ 0x080088B8
     bl func_08009268
     pop {r0}
     bx r0
-
-    thumb_func_start func_080088C4
-func_080088C4: @ 0x080088C4
-    ldr r0, [r0]
-    ldrh r0, [r0]
-    bx lr
-    .align 2, 0
