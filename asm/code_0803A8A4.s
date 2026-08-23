@@ -2716,11 +2716,3 @@ func_0803BE9C: @ 0x0803BE9C
 	orrs r0, r2
 	bx lr
 	.align 2, 0
-
-	thumb_func_start func_0803BEB0
-func_0803BEB0: @ 0x0803BEB0
-	push {lr}
-	ldr r0, [r0]
-	bl func_0803BAAC
-	pop {r1}
-	bx r1
