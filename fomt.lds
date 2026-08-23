@@ -444,6 +444,8 @@ asm/code_0801DD78.o(.text);
         asm/code_08036E2C.o(.text.tail08037250);
         src/code_08037430.o(.text);
         asm/code_08036E2C.o(.text.tail08037434);
+		src/code_0803745C.o(.text);
+		asm/code_08036E2C.o(.text.tail08037470);
         src/code_0803753C.o(.text);
         asm/code_08037568.o(.text);
         src/code_08037618.o(.text);

@@ -753,7 +753,8 @@ func_08037434: @ 0x08037434
     bx r0
     .align 2, 0
 
-    thumb_func_start func_0803745C
+	.if 0
+	thumb_func_start func_0803745C
 func_0803745C: @ 0x0803745C
     push {r4, lr}
     adds r4, r0, #0
@@ -762,10 +763,13 @@ func_0803745C: @ 0x0803745C
     movs r0, #0
     strb r0, [r4]
     pop {r4}
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
 
-    thumb_func_start func_08037470
+	.section .text.tail08037470, "ax", %progbits
+
+	thumb_func_start func_08037470
 func_08037470: @ 0x08037470
     push {r4, lr}
     movs r3, #0xa
