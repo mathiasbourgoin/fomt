@@ -5137,22 +5137,7 @@ func_080E39EC: @ 0x080E39EC
 	pop {r1}
 	bx r1
 
-	thumb_func_start func_080E3A44
-func_080E3A44: @ 0x080E3A44
-	push {lr}
-	bl func_080D06A8
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E3A50
-func_080E3A50: @ 0x080E3A50
-	push {lr}
-	bl func_080D0678
-	pop {r1}
-	bx r1
-	.align 2, 0
-
+	.section .text.tail080E3A5C, "ax", %progbits
 	thumb_func_start func_080E3A5C
 func_080E3A5C: @ 0x080E3A5C
 	push {lr}

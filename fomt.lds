@@ -907,6 +907,8 @@ asm/code_0801DD78.o(.text);
         src/code_080E3910.o(.text);
         asm/code_080E10F8.o(.text.tail080E3914);
         asm/code_080E10F8.o(.text.tail080E3938);
+        src/code_080E3A44.o(.text);
+        asm/code_080E10F8.o(.text.tail080E3A5C);
         src/code_080E4190.o(.text);
         src/code_080E41B0.o(.text);
         src/code_080E41E8.o(.text);
