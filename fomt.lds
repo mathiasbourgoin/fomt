@@ -196,6 +196,7 @@ SECTIONS
         src/code_080100F0.o(.text);
         src/code_08010158.o(.text);
         asm/code_080101A0.o(.text);
+        src/code_08010348.o(.text);
         asm/game_state.o(.text);
         src/code_08010F04.o(.text);
         src/code_08010F0C.o(.text);

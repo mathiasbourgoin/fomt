@@ -1,17 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_08010348
-func_08010348: @ 0x08010348
-    push {lr}
-.L0801034A:
-    bl rand
-    cmp r0, #0
-    beq .L0801034A
-    pop {r1}
-    bx r1
-    .align 2, 0
-
     thumb_func_start func_08010358
 func_08010358: @ 0x08010358
     push {r4, r5, r6, r7, lr}
@@ -1457,4 +1446,3 @@ func_08010E68: @ 0x08010E68
     pop {r1}
     bx r1
     .align 2, 0
-
