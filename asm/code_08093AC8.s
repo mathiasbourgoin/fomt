@@ -309,6 +309,7 @@ func_08093F48: @ 0x08093F48
 	.align 2, 0
 .L08093FAC: .4byte gUnk_081007D4
 
+	.if 0
 	thumb_func_start func_08093FB0
 func_08093FB0: @ 0x08093FB0
 	push {lr}
@@ -320,6 +321,9 @@ func_08093FB0: @ 0x08093FB0
 	bl _call_via_r3
 	pop {r0}
 	bx r0
+	.endif
+
+	.section .text.tail08093FC4, "ax", %progbits
 
 	thumb_func_start func_08093FC4
 func_08093FC4: @ 0x08093FC4
