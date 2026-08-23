@@ -98,7 +98,7 @@ SECTIONS
         src/code_08007D4C.o(.text);
         asm/code_08007DB8.o(.text);
         src/code_08008928.o(.text);
-        asm/code_08008940.o(.text);
+        src/code_08008940.o(.text);
         src/code_08008960.o(.text);
         src/code_08008980.o(.text);
         src/code_08008A68.o(.text);
