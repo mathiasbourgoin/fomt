@@ -757,15 +757,7 @@ func_08011524: @ 0x08011524
     .align 2, 0
 
     .section .text.tail08011544, "ax", %progbits
-    thumb_func_start func_08011544
-func_08011544: @ 0x08011544
-    ldr r1, [r0]
-    str r1, [r0, #4]
-    movs r1, #2
-    strb r1, [r0, #8]
-    bx lr
-    .align 2, 0
-
+    .section .text.tail08011550, "ax", %progbits
     thumb_func_start func_08011550
 func_08011550: @ 0x08011550
     push {lr}
