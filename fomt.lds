@@ -233,6 +233,7 @@ asm/code_0801DD78.o(.text);
         src/code_080222A8.o(.text);
         asm/code_08022320_prefix.o(.text);
         src/code_08022320.o(.text);
+        src/code_08022334.o(.text);
         asm/code_08022320.o(.text);
         src/entity_actor.o(.text);
         asm/code_entities_080320DC.o(.text);
