@@ -88,8 +88,9 @@ func_08037568: @ 0x08037568
     bx r0
     .align 2, 0
 
-    .section .text.tail08037628, "ax", %progbits
-    thumb_func_start func_08037628
+	.section .text.tail08037628, "ax", %progbits
+	.if 0
+	thumb_func_start func_08037628
 func_08037628: @ 0x08037628
     push {lr}
     cmp r1, #1
@@ -101,10 +102,13 @@ func_08037628: @ 0x08037628
     lsls r0, r0, #8
 .L08037636:
     pop {r1}
-    bx r1
-    .align 2, 0
+	bx r1
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_0803763C
+	.section .text.tail0803763C, "ax", %progbits
+
+	thumb_func_start func_0803763C
 func_0803763C: @ 0x0803763C
     push {r4, r5, r6, r7, lr}
     adds r6, r0, #0
