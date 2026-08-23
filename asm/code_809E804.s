@@ -6052,11 +6052,7 @@ func_080A19EC: @ 0x080A19EC
 	.align 2, 0
 .L080A1A44: .4byte 0xFFFFFC00
 
-	thumb_func_start func_080A1A48
-func_080A1A48: @ 0x080A1A48
-	bx lr
-	.align 2, 0
-
+	.section .text.tail080A1A4C, "ax", %progbits
 	thumb_func_start func_080A1A4C
 func_080A1A4C: @ 0x080A1A4C
 	push {r4, r5, r6, r7, lr}
