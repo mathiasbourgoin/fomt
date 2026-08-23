@@ -2748,11 +2748,3 @@ func_0803BED4: @ 0x0803BED4
 	bl func_0803BD88
 	pop {r0}
 	bx r0
-
-	thumb_func_start func_0803BEE0
-func_0803BEE0: @ 0x0803BEE0
-	push {lr}
-	ldr r0, [r0]
-	bl func_0803BDB8
-	pop {r0}
-	bx r0
