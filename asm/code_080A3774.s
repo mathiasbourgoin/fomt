@@ -4877,6 +4877,7 @@ func_080A5DFC: @ 0x080A5DFC
 .L080A5E98: .4byte 0xFFFF0000
 .L080A5E9C: .4byte func_03000C2C
 
+	.if 0
 	thumb_func_start func_080A5EA0
 func_080A5EA0: @ 0x080A5EA0
 	push {lr}
@@ -4889,6 +4890,9 @@ func_080A5EA0: @ 0x080A5EA0
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
+
+	.section .text.tail080A5EB8, "ax", %progbits
 
 	thumb_func_start func_080A5EB8
 func_080A5EB8: @ 0x080A5EB8
