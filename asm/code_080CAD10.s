@@ -69,13 +69,7 @@ func_080CAD18: @ 0x080CAD18
 	.align 2, 0
 .L080CAD9C: .4byte vtable_unk_080E5A28
 
-	thumb_func_start func_080CADA0
-func_080CADA0: @ 0x080CADA0
-	str r1, [r0, #4]
-	str r2, [r0, #8]
-	str r3, [r0]
-	bx lr
-
+	.section .text.tail080CADA8, "ax", %progbits
 	thumb_func_start func_080CADA8
 func_080CADA8: @ 0x080CADA8
 	movs r1, #0
