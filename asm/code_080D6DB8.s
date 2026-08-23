@@ -119,6 +119,7 @@ func_080D6DB8: @ 0x080D6DB8
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080D6E98
 func_080D6E98: @ 0x080D6E98
 	movs r1, #1
@@ -131,6 +132,9 @@ func_080D6E98: @ 0x080D6E98
 	strb r2, [r0, #1]
 	bx lr
 	.align 2, 0
+	.endif
+
+	.section .text.tail080D6EAC, "ax", %progbits
 
 	thumb_func_start func_080D6EAC
 func_080D6EAC: @ 0x080D6EAC
