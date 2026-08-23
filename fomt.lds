@@ -180,6 +180,8 @@ SECTIONS
         asm/code_08008F60.o(.text.tail08009140);
         src/code_08009154.o(.text);
         asm/code_08008F60.o(.text.tail08009158);
+		src/code_08009158.o(.text);
+		asm/code_08008F60.o(.text.tail08009168);
         src/code_080092FC.o(.text);
         asm/code_08008F60.o(.text.tail08009300);
         src/code_08009344.o(.text);
