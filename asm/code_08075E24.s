@@ -1737,6 +1737,7 @@ func_08076B94: @ 0x08076B94
 	.align 2, 0
 .L08076BDC: .4byte 0x000005B4
 
+	.if 0
 	thumb_func_start func_08076BE0
 func_08076BE0: @ 0x08076BE0
 	ldr r0, [r0, #8]
@@ -1757,6 +1758,8 @@ func_08076BEC: @ 0x08076BEC
 	bx lr
 	.align 2, 0
 
+	.endif
+	.section .text.tail08076BFC, "ax", %progbits
 	thumb_func_start func_08076BFC
 func_08076BFC: @ 0x08076BFC
 	push {r4, r5, r6, r7, lr}
