@@ -853,8 +853,10 @@ asm/code_0801DD78.o(.text);
         src/code_080D06D0.o(.text);
         asm/code_080CAD10.o(.text.tail080D06DC);
         src/code_080D0C68.o(.text);
-        src/code_080D0CD4.o(.text);
-        asm/code_080D0CD4.o(.text);
+		src/code_080D0CD4.o(.text);
+		asm/code_080D0CD4.o(.text);
+		src/code_080D100C.o(.text);
+		asm/code_080D0CD4.o(.text.tail080D102C);
 
         src/m4a_1.o(.text);
         src/m4a.o(.text);

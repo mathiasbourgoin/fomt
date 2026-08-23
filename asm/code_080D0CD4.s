@@ -413,6 +413,7 @@ sub_080D0FDC: @ 0x080D0FDC
 	bx lr
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080D100C
 func_080D100C: @ 0x080D100C
 	ldr r2, .L080D1018 @ =gUnk_03000450
@@ -435,6 +436,8 @@ func_080D101C: @ 0x080D101C
 	.align 2, 0
 .L080D1028: .4byte gUnk_03000430
 
+	.endif
+	.section .text.tail080D102C, "ax", %progbits
 	thumb_func_start Unpack
 Unpack: @ 0x080D102C
 	push {r4, r5, r6, r7, lr}
