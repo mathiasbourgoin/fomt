@@ -11217,11 +11217,7 @@ func_080D02CC: @ 0x080D02CC
 	.align 2, 0
 .L080D02E8: .4byte gUnk_03000420
 
-	thumb_func_start func_080D02EC
-func_080D02EC: @ 0x080D02EC
-	bx lr
-	.align 2, 0
-
+	.section .text.tail080D02F0, "ax", %progbits
 	thumb_func_start func_080D02F0
 func_080D02F0: @ 0x080D02F0
 	push {lr}
