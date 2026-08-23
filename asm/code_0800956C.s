@@ -261,15 +261,3 @@ func_08009744: @ 0x08009744
     bx r1
     .align 2, 0
 .L08009778: .4byte 0x00000404
-
-    thumb_func_start func_0800977C
-func_0800977C: @ 0x0800977C
-    push {lr}
-    adds r0, #4
-    movs r1, #0xe0
-    lsls r1, r1, #0x13
-    movs r2, #0x80
-    lsls r2, r2, #3
-    bl func_08008E64
-    pop {r0}
-    bx r0
