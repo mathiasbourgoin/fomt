@@ -211,3 +211,49 @@ EC void func_080073E0(void *, unsigned int token)
     register u16 *active asm("r1") = &h->unk_48;
     (*active)--;
 }
+
+EC unsigned int func_0800745C(void *, unsigned int token)
+{
+    register unsigned int saved_token asm("r3") = token;
+    register Unk_hardware_03000404 *h asm("r2") = gUnk_03000404;
+    if (saved_token == 0)
+        return 0;
+
+    register unsigned int shifted asm("r0") = saved_token << 28;
+    register unsigned int index asm("r1") = shifted >> 28;
+    register unsigned int saved_index asm("r4") = index;
+    register unsigned int allocated asm("r0") = 0;
+    if (index <= 0xf) {
+        allocated = 1;
+        allocated <<= index;
+        index = h->unk_44;
+        index &= allocated;
+        allocated = ((0u - index) | index) >> 31;
+    }
+    if (allocated == 0)
+        return 0;
+
+    register unsigned int offset asm("r0") = saved_index << 2;
+    offset += 4;
+    register Unk_hardware_ent_080D6D98 *entry asm("r1") = (Unk_hardware_ent_080D6D98 *)((u8 *)h + offset);
+    register unsigned int matching asm("r2") = 0;
+    register unsigned int generation asm("r0") = (saved_token << 12) >> 16;
+    saved_index = entry->params.unk_02;
+    if (generation == saved_index)
+        matching = 1;
+    if (matching == 0)
+        return 0;
+
+    matching = entry->params.unk_00;
+    register unsigned int next asm("r0") = matching + 1;
+    entry->params.unk_00 = next;
+    next <<= 16;
+    register unsigned int result asm("r0");
+    if (next != 0) {
+        result = saved_token;
+    } else {
+        entry->params.unk_00 = matching;
+        result = 0;
+    }
+    return result;
+}
