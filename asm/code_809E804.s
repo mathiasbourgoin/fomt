@@ -4318,16 +4318,7 @@ func_080A0AF4: @ 0x080A0AF4
 	pop {r1}
 	bx r1
 
-	thumb_func_start func_080A0B10
-func_080A0B10: @ 0x080A0B10
-	adds r0, #0x60
-	bx lr
-
-	thumb_func_start func_080A0B14
-func_080A0B14: @ 0x080A0B14
-	adds r0, #0x68
-	bx lr
-
+	.section .text.tail080A0B18, "ax", %progbits
 	thumb_func_start func_080A0B18
 func_080A0B18: @ 0x080A0B18
 	push {r4, r5, r6, r7, lr}
