@@ -22,3 +22,11 @@ EC u32 func_080167CC(u8 *self)
 {
     return func_08008CD0(*(u8 **)(self + 4) + 0xbc);
 }
+
+EC void func_08012BAC(u8 *, u16) __attribute__((section(".text.func_08012BAC")));
+EC void func_08012BAC(u8 *self, u16 value)
+{
+    u8 *data = *(u8 **)(self + 4);
+    *(u16 *)(data + 0xe0) = value;
+    *(u32 *)(data + 0x9c) = 0x15;
+}
