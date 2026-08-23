@@ -369,15 +369,7 @@ func_0809EA6C: @ 0x0809EA6C
 	.section .text.tail0809EAD0, "ax", %progbits
 	.section .text.tail0809EAD8, "ax", %progbits
 	.section .text.tail0809EAE0, "ax", %progbits
-	thumb_func_start func_0809EAE0
-func_0809EAE0: @ 0x0809EAE0
-	adds r0, #0x26
-	ldrb r0, [r0]
-	lsls r0, r0, #0x1f
-	lsrs r0, r0, #0x1f
-	bx lr
-	.align 2, 0
-
+	.section .text.tail0809EAEC, "ax", %progbits
 	thumb_func_start func_0809EAEC
 func_0809EAEC: @ 0x0809EAEC
 	adds r0, #0x26
