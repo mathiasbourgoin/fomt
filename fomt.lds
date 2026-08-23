@@ -650,6 +650,7 @@ asm/code_0801DD78.o(.text);
         asm/code_linkonce.o(.text.code_080D7CFC);
         src/code_080E09B0.o(.text);
         src/code_080E09BC.o(.text);
+        src/code_080E09E4.o(.text);
         asm/code_080E09BC.o(.text);
         *(.gnu.linkonce.t.__lower_bound__H4ZPC12JumpTableEntZiZ28ScriptJumpTableSearchCompareZl_X01T0RCX11X21PX31_X01);
         asm/code_linkonce.o(.text.code_080E0EF0);
