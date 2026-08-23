@@ -1688,6 +1688,7 @@ func_080E5324: @ 0x080E5324
 	bx r0
 	.align 2, 0
 
+	.if 0
 	thumb_func_start func_080E5418
 func_080E5418: @ 0x080E5418
 	push {lr}
@@ -1700,6 +1701,8 @@ func_080E5418: @ 0x080E5418
 	.align 2, 0
 .L080E5428: .4byte gUnk_03000414
 
+	.endif
+	.section .text.tail080E542C, "ax", %progbits
 	thumb_func_start func_080E542C
 func_080E542C: @ 0x080E542C
 	push {r4, r5, lr}

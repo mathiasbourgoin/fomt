@@ -1050,6 +1050,8 @@ asm/code_0801DD78.o(.text);
         src/code_080E4510.o(.text);
         src/code_080E4544.o(.text);
         asm/code_080E4510.o(.text);
+		src/code_080E5418.o(.text);
+		asm/code_080E4510.o(.text.tail080E542C);
         src/code_080E59C0.o(.text);
 
         *(.gnu.linkonce.d.__vt_6AScene);
