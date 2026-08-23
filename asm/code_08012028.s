@@ -19997,11 +19997,3 @@ func_0801DD18: @ 0x0801DD18
     bl func_080A6138
     pop {r0}
     bx r0
-
-    thumb_func_start func_0801DD24
-func_0801DD24: @ 0x0801DD24
-    push {lr}
-    ldr r0, [r0, #4]
-    bl func_080A6194
-    pop {r0}
-    bx r0
