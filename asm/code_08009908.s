@@ -55,21 +55,3 @@ func_08009940: @ 0x08009940
     pop {r0}
     bx r0
     .align 2, 0
-
-    thumb_func_start func_08009968
-func_08009968: @ 0x08009968
-    push {lr}
-    ldr r2, [r1]
-    cmp r2, #0
-    beq .L0800997E
-    ldr r0, [r1, #4]
-    str r0, [r2]
-    ldr r0, [r1, #4]
-    str r2, [r0]
-    movs r0, #0
-    str r0, [r1]
-    str r0, [r1, #4]
-.L0800997E:
-    pop {r0}
-    bx r0
-    .align 2, 0
