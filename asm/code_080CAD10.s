@@ -3426,6 +3426,7 @@ func_080CC58C: @ 0x080CC58C
 .L080CC704: .4byte 0xFFFFFF00
 .L080CC708: .4byte gUnk_0811785C
 
+	.if 0
 	thumb_func_start func_080CC70C
 func_080CC70C: @ 0x080CC70C
 	adds r2, r0, #0
@@ -3438,6 +3439,7 @@ func_080CC70C: @ 0x080CC70C
 	adds r0, r0, r1
 	bx lr
 	.align 2, 0
+	.endif
 
 	.section .text.tail080CC728, "ax", %progbits
 	thumb_func_start func_080CC728
