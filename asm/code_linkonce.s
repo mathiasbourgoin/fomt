@@ -23479,6 +23479,7 @@ func_080E0908: @ 0x080E0908
 
 	.section ".text.code_080E0EF0"
 
+	.if 0
 	thumb_func_start func_080E0EF0
 func_080E0EF0: @ 0x080E0EF0
 	push {lr}
@@ -23487,6 +23488,8 @@ func_080E0EF0: @ 0x080E0EF0
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080E0EFC"
 	thumb_func_start func_080E0EFC
 func_080E0EFC: @ 0x080E0EFC
 	push {r4, r5, lr}
