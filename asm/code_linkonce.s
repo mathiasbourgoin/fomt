@@ -23710,11 +23710,3 @@ func_080E105C: @ 0x080E105C
 	bx r0
 	.align 2, 0
 .L080E10DC: .4byte vtable_unk_080E7908
-
-	thumb_func_start func_080E10E0
-func_080E10E0: @ 0x080E10E0
-	push {lr}
-	bl func_080098AC
-	pop {r0}
-	bx r0
-	.align 2, 0
