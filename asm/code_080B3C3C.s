@@ -12977,26 +12977,7 @@ func_080BA1A4: @ 0x080BA1A4
 	bx r0
 	.align 2, 0
 
-	thumb_func_start func_080BA1F4
-func_080BA1F4: @ 0x080BA1F4
-	bx lr
-	.align 2, 0
-
-	thumb_func_start func_080BA1F8
-func_080BA1F8: @ 0x080BA1F8
-	bx lr
-	.align 2, 0
-
-	thumb_func_start func_080BA1FC
-func_080BA1FC: @ 0x080BA1FC
-	bx lr
-	.align 2, 0
-
-	thumb_func_start func_080BA200
-func_080BA200: @ 0x080BA200
-	bx lr
-	.align 2, 0
-
+	.section .text.tail080BA204, "ax", %progbits
 	thumb_func_start func_080BA204
 func_080BA204: @ 0x080BA204
 	push {lr}
