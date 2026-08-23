@@ -73,30 +73,3 @@ func_08009968: @ 0x08009968
     pop {r0}
     bx r0
     .align 2, 0
-
-    thumb_func_start func_08009984
-func_08009984: @ 0x08009984
-    push {r4, lr}
-    adds r2, r0, #0
-    ldr r1, [r2, #0xc]
-    adds r3, r2, #0
-    adds r3, #0x10
-    cmp r1, r3
-    beq .L080099A0
-    movs r4, #0
-.L08009994:
-    adds r0, r1, #0
-    ldr r1, [r1, #4]
-    str r4, [r0]
-    str r4, [r0, #4]
-    cmp r1, r3
-    bne .L08009994
-.L080099A0:
-    adds r0, r2, #0
-    adds r0, #0x10
-    str r0, [r2, #0xc]
-    subs r0, #4
-    str r0, [r2, #0x10]
-    pop {r4}
-    pop {r0}
-    bx r0
