@@ -2756,10 +2756,3 @@ func_0803BEE0: @ 0x0803BEE0
 	bl func_0803BDB8
 	pop {r0}
 	bx r0
-
-	thumb_func_start func_0803BEEC
-func_0803BEEC: @ 0x0803BEEC
-	ldr r0, [r0]
-	movs r1, #0
-	ldrsh r0, [r0, r1]
-	bx lr
