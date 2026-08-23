@@ -1,46 +1,5 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
-	thumb_func_start func_080ADBB4
-func_080ADBB4: @ 0x080ADBB4
-	push {r4, lr}
-	sub sp, #8
-	ldrb r2, [r0]
-	lsls r1, r2, #0x1e
-	lsrs r1, r1, #0x1e
-	lsls r2, r2, #0x19
-	lsrs r2, r2, #0x1b
-	lsls r0, r1, #4
-	subs r0, r0, r1
-	lsls r0, r0, #1
-	adds r0, r0, r2
-	str r0, [sp, #4]
-	ldr r0, .L080ADBFC @ =gUnk_081074F6
-	adds r4, r0, #0
-	adds r4, #0x1b
-	movs r1, #0
-	str r1, [sp]
-	adds r1, r4, #0
-	add r2, sp, #4
-	movs r3, #0
-	bl func_080E0E80
-	adds r1, r0, #0
-	movs r2, #0
-	cmp r1, r4
-	beq .L080ADBF2
-	ldr r0, [sp, #4]
-	ldrb r1, [r1]
-	cmp r0, r1
-	blo .L080ADBF2
-	movs r2, #1
-.L080ADBF2:
-	adds r0, r2, #0
-	add sp, #8
-	pop {r4}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L080ADBFC: .4byte gUnk_081074F6
-
 	thumb_func_start func_080ADC00
 func_080ADC00: @ 0x080ADC00
 	push {r4, lr}
