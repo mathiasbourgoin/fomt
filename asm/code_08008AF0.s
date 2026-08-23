@@ -1,15 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_08008AFC
-func_08008AFC: @ 0x08008AFC
-    push {lr}
-    bl m4aSoundInit
-    bl m4aSoundVSyncOff
-    pop {r0}
-    bx r0
-    .align 2, 0
-
     thumb_func_start func_08008B0C
 func_08008B0C: @ 0x08008B0C
     push {lr}
