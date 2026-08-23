@@ -2195,13 +2195,7 @@ func_08033B24: @ 0x08033B24
     pop {r1}
     bx r1
 
-    thumb_func_start func_08033B7C
-func_08033B7C: @ 0x08033B7C
-    adds r0, #0x41
-    movs r1, #0
-    strb r1, [r0]
-    bx lr
-
+    .section .text.tail08033B84, "ax", %progbits
     thumb_func_start func_08033B84
 func_08033B84: @ 0x08033B84
     push {lr}
