@@ -17,6 +17,8 @@ See [INSTALL.md](./INSTALL.md).
 Please do. Feel free to yell at me if you need naming/style/formatting guidelines.
 
 If you're looking for things that need to be done, check out [TODO.md](./TODO.md).
+For the active matching workflow and component layout, see
+[Active decompilation](./docs/ACTIVE_DECOMPILATION.md).
 
 ## Contact
 
