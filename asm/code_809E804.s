@@ -5369,11 +5369,7 @@ func_080A1478: @ 0x080A1478
 	bx lr
 	.align 2, 0
 
-	thumb_func_start func_080A1480
-func_080A1480: @ 0x080A1480
-	adds r0, #0x2c
-	bx lr
-
+	.section .text.tail080A1484, "ax", %progbits
 	thumb_func_start func_080A1484
 func_080A1484: @ 0x080A1484
 	push {r4, r5, r6, lr}
