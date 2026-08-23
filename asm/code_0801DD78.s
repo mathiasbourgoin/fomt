@@ -58,11 +58,3 @@ func_0801DDF8: @ 0x0801DDF8
     .align 2, 0
 .L0801DE1C: .4byte 0x00001038
 .L0801DE20: .4byte 0x000034D8
-
-    thumb_func_start func_0801DE24
-func_0801DE24: @ 0x0801DE24
-    push {lr}
-    ldr r0, [r0, #4]
-    bl func_080A63B8
-    pop {r0}
-    bx r0
