@@ -864,11 +864,7 @@ func_0804F0E0: @ 0x0804F0E0
 	bx r0
 	.align 2, 0
 
-	thumb_func_start func_0804F15C
-func_0804F15C: @ 0x0804F15C
-	ldrb r0, [r0, #0x19]
-	bx lr
-
+	.section .text.tail0804F160, "ax", %progbits
 	thumb_func_start func_0804F160
 func_0804F160: @ 0x0804F160
 	push {lr}
