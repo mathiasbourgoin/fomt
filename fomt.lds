@@ -667,6 +667,8 @@ asm/code_0801DD78.o(.text);
         src/harvest_sprite.o(.text);
 
         asm/code_809E804.o(.text);
+        src/code_0809E988.o(.text);
+        asm/code_809E804.o(.text.tail0809E994);
         src/code_0809EACC.o(.text);
         asm/code_809E804.o(.text.tail0809EAD0);
         src/code_0809EAD0.o(.text);

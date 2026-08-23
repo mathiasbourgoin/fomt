@@ -198,15 +198,7 @@ func_0809E968: @ 0x0809E968
 	bx r1
 	.align 2, 0
 
-	thumb_func_start func_0809E988
-func_0809E988: @ 0x0809E988
-	lsls r1, r1, #3
-	adds r1, r1, r0
-	ldm r2!, {r0, r3}
-	stm r1!, {r0, r3}
-	bx lr
-	.align 2, 0
-
+	.section .text.tail0809E994, "ax", %progbits
 	thumb_func_start func_0809E994
 func_0809E994: @ 0x0809E994
 	push {r4, lr}
