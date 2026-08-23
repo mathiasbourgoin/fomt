@@ -2715,6 +2715,7 @@ func_0801F924: @ 0x0801F924
 .L0801FAA0: .4byte 0x00002192
 .L0801FAA4: .4byte 0x00000342
 
+    .if 0
     thumb_func_start func_0801FAA8
 func_0801FAA8: @ 0x0801FAA8
     push {lr}
@@ -2735,6 +2736,8 @@ func_0801FAB8: @ 0x0801FAB8
     bx r1
     .align 2, 0
 
+    .endif
+    .section .text.tail0801FAC8, "ax", %progbits
     thumb_func_start func_0801FAC8
 func_0801FAC8: @ 0x0801FAC8
     push {r4, r5, r6, r7, lr}
