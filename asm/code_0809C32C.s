@@ -2623,6 +2623,7 @@ func_0809D8A4: @ 0x0809D8A4
 	.endif
 
 	.section .text.tail0809D8B8, "ax", %progbits
+	.if 0
 
 	thumb_func_start func_0809D8B8
 func_0809D8B8: @ 0x0809D8B8
@@ -2640,10 +2641,13 @@ func_0809D8B8: @ 0x0809D8B8
 .L0809D8CC:
     adds r0, r1, #0
     pop {r1}
-    bx r1
-    .align 2, 0
+	bx r1
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_0809D8D4
+	.section .text.tail0809D8D4, "ax", %progbits
+
+	thumb_func_start func_0809D8D4
 func_0809D8D4: @ 0x0809D8D4
     lsls r1, r1, #1
     lsls r3, r2, #3
