@@ -14091,3 +14091,28 @@ candidats-preuves et le rapport reproductible sont conservés sous
 
 **12/13.** `func_0805E99C` reste non matchée ; la prochaine expérience utile
 doit instrumenter l'émission reload/global-alloc, pas permuter la syntaxe C.
+
+## Round w108 (worktree isolé `fomt-e99c-round108`, branche
+`codex/e99c-round108`)
+
+Le curseur de boucle local résout l'ordre des copies ABI du prologue. La
+matérialisation séparée de `(u8)y` et `0xFFFFFF00` résout ensuite le dernier
+écart structurel du bloc final. Enfin, restaurer les quatre écritures `u16`
+dans une vraie `AffineSet` améliore le bloc coefficients sans les alias de
+masques diagnostiques du round précédent.
+
+Résultat vérifié avec le harness w106/w107 : taille 648/648, 303/303
+instructions, **303/303 structurellement alignées** et **556/648 octets
+identiques**, contre 301/303 et 542/648 pour le meilleur w107. Les champs de
+bits OAM directs sont falsifiés (spill supplémentaire, corps de 660 octets),
+de même que les variantes d'ordre/RMW ciblées du premier attribut final.
+
+Aucun changement dans `src/`, `asm/` ou `fomt.lds` : le candidat contient
+encore des alias de registres diagnostiques et n'est pas intégrable. Le rapport
+et le candidat reproductible sont dans `analysis/e99c_round108/`.
+
+### Compteur
+
+**12/13.** `func_0805E99C` reste non matchée ; le prochain test utile doit
+tracer `local-alloc` pour les quantités du flip à `0x90` et de l'accumulateur
+final à `0x1b0`, plutôt que reprendre les permutations syntaxiques.
