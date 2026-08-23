@@ -636,13 +636,7 @@ func_0809EC90: @ 0x0809EC90
 	.align 2, 0
 .L0809ECD4: .4byte 0xFFFFFE3F
 
-	thumb_func_start func_0809ECD8
-func_0809ECD8: @ 0x0809ECD8
-	ldrb r0, [r0, #0x14]
-	lsls r0, r0, #0x1a
-	lsrs r0, r0, #0x1a
-	bx lr
-
+	.section .text.tail0809ECE0, "ax", %progbits
 	thumb_func_start func_0809ECE0
 func_0809ECE0: @ 0x0809ECE0
 	push {lr}
