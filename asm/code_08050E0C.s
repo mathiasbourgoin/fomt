@@ -21,21 +21,3 @@ func_08050E0C: @ 0x08050E0C
 	bx r0
 	.align 2, 0
 
-	thumb_func_start func_08050E30
-func_08050E30: @ 0x08050E30
-	push {r4, r5, r6, lr}
-	sub sp, #0xc
-	ldr r4, [sp, #0x1c]
-	ldr r5, [sp, #0x20]
-	ldr r6, [sp, #0x24]
-	ldr r0, [r0]
-	str r4, [sp]
-	str r5, [sp, #4]
-	str r6, [sp, #8]
-	bl func_08050664
-	add sp, #0xc
-	pop {r4, r5, r6}
-	pop {r0}
-	bx r0
-	.align 2, 0
-
