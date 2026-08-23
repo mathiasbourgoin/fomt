@@ -904,6 +904,8 @@ asm/code_0801DD78.o(.text);
 		asm/code_linkonce.o(.text.code_080DCB28);
 		src/code_080DE050.o(.text);
 		asm/code_linkonce.o(.text.code_080DE05C);
+		src/code_080DE280.o(.text);
+		asm/code_linkonce.o(.text.code_080DE28C);
         src/code_080E09B0.o(.text);
         src/code_080E09BC.o(.text);
         src/code_080E09E4.o(.text);
