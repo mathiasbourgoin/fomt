@@ -1,34 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-    thumb_func_start func_08036590
-func_08036590: @ 0x08036590
-    push {r4, lr}
-    sub sp, #0x10
-    adds r4, r0, #0
-    ldr r0, .L080365BC @ =gUnk_080F5D94
-    str r0, [sp]
-    ldr r0, .L080365C0 @ =0x00000884
-    str r0, [sp, #4]
-    adds r0, #4
-    str r0, [sp, #8]
-    ldr r0, .L080365C4 @ =0x000003FA
-    str r0, [sp, #0xc]
-    adds r0, r4, #0
-    bl __10ANpcEntityP10GameObjectP3NpcUiPCvUiUiUi
-    ldr r0, .L080365C8 @ =vtable_unk_080E6C98
-    str r0, [r4, #0x14]
-    adds r0, r4, #0
-    add sp, #0x10
-    pop {r4}
-    pop {r1}
-    bx r1
-    .align 2, 0
-.L080365BC: .4byte gUnk_080F5D94
-.L080365C0: .4byte 0x00000884
-.L080365C4: .4byte 0x000003FA
-.L080365C8: .4byte vtable_unk_080E6C98
-
     thumb_func_start func_080365CC
 func_080365CC: @ 0x080365CC
     push {r4, r5, r6, r7, lr}
@@ -125,4 +97,3 @@ func_08036680: @ 0x08036680
     pop {r0}
     bx r0
     .align 2, 0
-
