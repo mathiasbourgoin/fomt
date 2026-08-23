@@ -617,6 +617,7 @@ asm/code_0801DD78.o(.text);
         src/code_0809C32C.o(.text);
         src/code_0809C38C.o(.text);
         src/code_0809C3BC.o(.text);
+        src/code_0809C3E0.o(.text);
         asm/code_0809C32C.o(.text);
         src/npc.o(.text);
         src/bachelorette.o(.text);
