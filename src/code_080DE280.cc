@@ -6,3 +6,8 @@ EC void func_080DE280(u8 *self)
 {
     func_080E0908(self - 4);
 }
+
+EC void func_080DE28C(u8 *self)
+{
+    func_080E0908(self - 0xc);
+}

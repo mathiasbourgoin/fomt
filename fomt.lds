@@ -950,7 +950,7 @@ asm/code_0801DD78.o(.text);
 		src/code_080DD404.o(.text.func_080DE128);
 		asm/code_linkonce.o(.text.code_080DE134);
 		src/code_080DE280.o(.text);
-		asm/code_linkonce.o(.text.code_080DE28C);
+		asm/code_linkonce.o(.text.code_080DE298);
         src/code_080E09B0.o(.text);
         src/code_080E09BC.o(.text);
         src/code_080E09E4.o(.text);

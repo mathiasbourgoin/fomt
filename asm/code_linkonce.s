@@ -18629,6 +18629,7 @@ func_080DE280: @ 0x080DE280
 
 	.endif
 	.section ".text.code_080DE28C"
+	.if 0
 	thumb_func_start func_080DE28C
 func_080DE28C: @ 0x080DE28C
 	push {lr}
@@ -18637,6 +18638,8 @@ func_080DE28C: @ 0x080DE28C
 	pop {r0}
 	bx r0
 
+	.endif
+	.section ".text.code_080DE298"
 	thumb_func_start func_080DE298
 func_080DE298: @ 0x080DE298
 	push {r4, r5, r6, r7, lr}
