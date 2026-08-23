@@ -4791,11 +4791,7 @@ func_080E36B4: @ 0x080E36B4
 	pop {r1}
 	bx r1
 
-	thumb_func_start func_080E3730
-func_080E3730: @ 0x080E3730
-	bx lr
-	.align 2, 0
-
+	.section .text.tail080E3734, "ax", %progbits
 	thumb_func_start func_080E3734
 func_080E3734: @ 0x080E3734
 	push {r4, lr}
