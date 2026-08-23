@@ -901,7 +901,7 @@ asm/code_0801DD78.o(.text);
         *(.gnu.linkonce.t.push_front__t8FixedVec2Z9ToolStackUl8G9ToolStack);
         asm/code_linkonce.o(.text.code_080D7CFC);
 		src/code_080DCA2C.o(.text);
-		asm/code_linkonce.o(.text.code_080DCB28);
+		asm/code_linkonce.o(.text.code_080DCB7C);
 		src/code_080DE050.o(.text);
 		asm/code_linkonce.o(.text.code_080DE05C);
 		src/code_080DE280.o(.text);

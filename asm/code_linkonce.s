@@ -15477,6 +15477,7 @@ func_080DCB1C: @ 0x080DCB1C
 
 	.endif
 	.section ".text.code_080DCB28"
+	.if 0
 	thumb_func_start func_080DCB28
 func_080DCB28: @ 0x080DCB28
 	push {lr}
@@ -15533,6 +15534,8 @@ func_080DCB70: @ 0x080DCB70
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080DCB7C"
 	thumb_func_start func_080DCB7C
 func_080DCB7C: @ 0x080DCB7C
 	push {r4, r5, r6, r7, lr}
