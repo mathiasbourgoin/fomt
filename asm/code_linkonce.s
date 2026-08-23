@@ -23643,6 +23643,7 @@ func_080E0F90: @ 0x080E0F90
 	.align 2, 0
 .L080E1014: .4byte 0x06010000
 
+	.if 0
 	thumb_func_start func_080E1018
 func_080E1018: @ 0x080E1018
 	push {lr}
@@ -23667,6 +23668,8 @@ func_080E1030: @ 0x080E1030
 	bx r0
 	.align 2, 0
 
+	.endif
+	.section ".text.code_080E103C"
 	thumb_func_start func_080E103C
 func_080E103C: @ 0x080E103C
 	push {lr}
