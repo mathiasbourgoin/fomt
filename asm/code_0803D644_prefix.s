@@ -633,6 +633,7 @@ func_0803C028: @ 0x0803C028
 	pop {r1}
 	bx r1
 
+	.if 0
 	thumb_func_start func_0803C518
 func_0803C518: @ 0x0803C518
 	push {r4, lr}
@@ -656,6 +657,7 @@ func_0803C52C: @ 0x0803C52C
 	pop {r4}
 	pop {r0}
 	bx r0
+	.endif
 
 	.section .text.tail0803C54C, "ax", %progbits
 	thumb_func_start func_0803C54C

@@ -543,6 +543,7 @@ asm/code_0801DD78.o(.text);
         asm/code_0803BFC8_prefix.o(.text);
         src/code_0803C00C.o(.text);
         asm/code_0803D644_prefix.o(.text);
+		src/code_0803C518.o(.text);
         src/code_0803C540.o(.text);
         src/code_0803C544.o(.text);
         asm/code_0803D644_prefix.o(.text.tail0803C54C);
