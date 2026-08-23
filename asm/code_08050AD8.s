@@ -302,21 +302,3 @@ func_08050D34: @ 0x08050D34
 	ldr r0, [r0, #8]
 	bx lr
 	.align 2, 0
-
-	thumb_func_start func_08050D3C
-func_08050D3C: @ 0x08050D3C
-	push {r4, r5, r6, lr}
-	sub sp, #0xc
-	ldr r4, [sp, #0x1c]
-	ldr r5, [sp, #0x20]
-	ldr r6, [sp, #0x24]
-	ldr r0, [r0]
-	str r4, [sp]
-	str r5, [sp, #4]
-	str r6, [sp, #8]
-	bl func_0804F7A4
-	add sp, #0xc
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
