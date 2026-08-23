@@ -1001,6 +1001,7 @@ func_080E1A48: @ 0x080E1A48
 
 	.endif
 	.section .text.tail080E1A54, "ax", %progbits
+	.if 0
 	thumb_func_start func_080E1A54
 func_080E1A54: @ 0x080E1A54
 	push {lr}
@@ -1014,6 +1015,9 @@ func_080E1A54: @ 0x080E1A54
 	.align 2, 0
 .L080E1A68: .4byte 0x000009C4
 .L080E1A6C: .4byte vtable_unk_080E5A28
+	.endif
+
+	.section .text.tail080E1A70, "ax", %progbits
 
 	thumb_func_start func_080E1A70
 func_080E1A70: @ 0x080E1A70
