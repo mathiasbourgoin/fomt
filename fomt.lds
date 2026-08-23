@@ -89,7 +89,7 @@ SECTIONS
         asm/code_08005A58.o(.text);
         src/code_08007078.o(.text);
         src/code_080070A4.o(.text);
-        asm/code_080070D4.o(.text);
+        src/code_080070D4.o(.text);
         src/code_08007110.o(.text);
         src/code_0800711C.o(.text);
         src/hardware.o(.text);
