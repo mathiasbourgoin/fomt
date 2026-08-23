@@ -837,14 +837,7 @@ func_080C12C4: @ 0x080C12C4
 .L080C14B4: .4byte 0x0000051C
 .L080C14B8: .4byte 0x00000814
 
-	thumb_func_start func_080C14BC
-func_080C14BC: @ 0x080C14BC
-	push {lr}
-	bl func_08008724
-	pop {r0}
-	bx r0
-	.align 2, 0
-
+	.section .text.tail080C14C8, "ax", %progbits
 	thumb_func_start func_080C14C8
 func_080C14C8: @ 0x080C14C8
 	push {r4, r5, lr}
