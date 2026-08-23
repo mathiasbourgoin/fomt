@@ -63,6 +63,7 @@ SECTIONS
         asm/main.o(.text);
         asm/sram_proxy_1.o(.text);
         asm/interrupt.o(.text);
+        src/code_08000568.o(.text);
         src/code_0800057C.o(.text);
         src/new.o(.text);
         src/pure_virtual.o(.text);
