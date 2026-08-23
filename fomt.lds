@@ -480,6 +480,7 @@ asm/code_0801DD78.o(.text);
         src/code_0807F5F0.o(.text);
         asm/code_0807F5F0_prefix.o(.text);
         src/code_0807F63C.o(.text);
+        src/code_0807F670.o(.text);
         asm/code_0807F5F0.o(.text);
         src/code_0808045C.o(.text);
         src/code_0808048C.o(.text);
