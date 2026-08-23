@@ -2703,16 +2703,3 @@ func_0803BE50: @ 0x0803BE50
 	bx r0
 	.align 2, 0
 .L0803BE98: .4byte vtable_unk_080E7778
-
-	thumb_func_start func_0803BE9C
-func_0803BE9C: @ 0x0803BE9C
-	ldr r0, [r0]
-	ldrb r2, [r0, #0xb]
-	lsrs r2, r2, #7
-	ldrb r0, [r0, #0xc]
-	movs r1, #0x7f
-	ands r0, r1
-	lsls r0, r0, #1
-	orrs r0, r2
-	bx lr
-	.align 2, 0
