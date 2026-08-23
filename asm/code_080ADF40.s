@@ -11522,6 +11522,7 @@ func_080B3990: @ 0x080B3990
 .L080B39B4: .4byte gUnk_08107882
 .L080B39B8: .4byte 0x00000844
 
+	.if 0
 	thumb_func_start func_080B39BC
 func_080B39BC: @ 0x080B39BC
 	ldr r2, .L080B39D4 @ =gUnk_0810788A
@@ -11537,6 +11538,9 @@ func_080B39BC: @ 0x080B39BC
 	bx lr
 	.align 2, 0
 .L080B39D4: .4byte gUnk_0810788A
+	.endif
+
+	.section .text.tail080B39D8, "ax", %progbits
 
 	thumb_func_start func_080B39D8
 func_080B39D8: @ 0x080B39D8
