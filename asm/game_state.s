@@ -1339,34 +1339,7 @@ func_08010358: @ 0x08010358
     bx r1
     .align 2, 0
 
-    thumb_func_start func_08010E48
-func_08010E48: @ 0x08010E48
-    ldrb r0, [r0]
-    lsls r0, r0, #0x1f
-    lsrs r0, r0, #0x1f
-    bx lr
-
-    thumb_func_start func_08010E50
-func_08010E50: @ 0x08010E50
-    ldrb r0, [r0]
-    lsls r0, r0, #0x1e
-    lsrs r0, r0, #0x1f
-    bx lr
-
-    thumb_func_start func_08010E58
-func_08010E58: @ 0x08010E58
-    ldrb r0, [r0]
-    lsls r0, r0, #0x1d
-    lsrs r0, r0, #0x1f
-    bx lr
-
-    thumb_func_start func_08010E60
-func_08010E60: @ 0x08010E60
-    ldrb r0, [r0]
-    lsls r0, r0, #0x1c
-    lsrs r0, r0, #0x1f
-    bx lr
-
+    .section .text.tail08010E68, "ax", %progbits
     thumb_func_start func_08010E68
 func_08010E68: @ 0x08010E68
     push {r4, r5, r6, r7, lr}
