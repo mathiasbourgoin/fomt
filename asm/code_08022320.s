@@ -13843,13 +13843,7 @@ func_0802A588: @ 0x0802A588
     bx r0
     .align 2, 0
 
-    thumb_func_start func_0802A7D8
-func_0802A7D8: @ 0x0802A7D8
-    adds r0, #0x88
-    movs r1, #0
-    strb r1, [r0]
-    bx lr
-
+    .section .text.tail0802A7E0, "ax", %progbits
     thumb_func_start func_0802A7E0
 func_0802A7E0: @ 0x0802A7E0
     push {r4, r5, r6, r7, lr}
