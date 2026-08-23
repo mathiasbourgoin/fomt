@@ -484,6 +484,7 @@ asm/code_0801DD78.o(.text);
         src/code_080804CC.o(.text);
         asm/code_080804CC_prefix.o(.text);
         src/code_080804F8.o(.text);
+        src/code_0808052C.o(.text);
         asm/code_080804CC.o(.text);
         src/code_08080D94.o(.text);
         src/code_08080DC4.o(.text);
