@@ -894,10 +894,3 @@ func_080088CC: @ 0x080088CC
     ldrh r0, [r0, #4]
     bx lr
     .align 2, 0
-
-    thumb_func_start func_080088D4
-func_080088D4: @ 0x080088D4
-    ldr r0, [r0]
-    ldrh r0, [r0, #8]
-    bx lr
-    .align 2, 0
