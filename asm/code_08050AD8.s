@@ -320,11 +320,3 @@ func_08050D3C: @ 0x08050D3C
 	pop {r1}
 	bx r1
 	.align 2, 0
-
-	thumb_func_start func_08050D5C
-func_08050D5C: @ 0x08050D5C
-	push {lr}
-	ldr r0, [r0]
-	bl func_0805039C
-	pop {r0}
-	bx r0
