@@ -852,16 +852,7 @@ func_08094388: @ 0x08094388
 	bx r0
 	.align 2, 0
 
-	thumb_func_start func_080943BC
-func_080943BC: @ 0x080943BC
-	ldrb r0, [r0, #0xd]
-	bx lr
-
-	thumb_func_start func_080943C0
-func_080943C0: @ 0x080943C0
-	ldr r0, [r0, #0x10]
-	bx lr
-
+	.section .text.tail080943C4, "ax", %progbits
 	thumb_func_start func_080943C4
 func_080943C4: @ 0x080943C4
 	push {r4, lr}
