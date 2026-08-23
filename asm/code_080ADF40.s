@@ -657,15 +657,7 @@ func_080ADF6C: @ 0x080ADF6C
 .L080AE4D0: .4byte vtable_unk_080E5B60
 .L080AE4D4: .4byte 0x00000888
 
-	thumb_func_start func_080AE4D8
-func_080AE4D8: @ 0x080AE4D8
-	ldr r1, .L080AE4E0 @ =0x0000092C
-	adds r0, r0, r1
-	ldrb r0, [r0]
-	bx lr
-	.align 2, 0
-.L080AE4E0: .4byte 0x0000092C
-
+	.section .text.tail080AE4E4, "ax", %progbits
 	thumb_func_start func_080AE4E4
 func_080AE4E4: @ 0x080AE4E4
 	push {r4, r5, r6, r7, lr}
