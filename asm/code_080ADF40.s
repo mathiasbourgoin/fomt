@@ -11570,6 +11570,7 @@ func_080B39F4: @ 0x080B39F4
 .L080B3A08: .4byte gUnk_0810789A
 .L080B3A0C: .4byte 0x0000085C
 
+	.if 0
 	thumb_func_start func_080B3A10
 func_080B3A10: @ 0x080B3A10
 	ldr r1, .L080B3A20 @ =gUnk_081078A0
@@ -11584,6 +11585,8 @@ func_080B3A10: @ 0x080B3A10
 .L080B3A20: .4byte gUnk_081078A0
 .L080B3A24: .4byte 0x00000934
 
+	.endif
+	.section .text.tail080B3A28, "ax", %progbits
 	thumb_func_start func_080B3A28
 func_080B3A28: @ 0x080B3A28
 	push {r4, r5, r6, r7, lr}
