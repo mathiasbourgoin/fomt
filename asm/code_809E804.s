@@ -5362,13 +5362,6 @@ func_080A0B18: @ 0x080A0B18
 .L080A1470: .4byte 0xFFFFFE3F
 .L080A1474: .4byte gUnk_08104122
 
-	thumb_func_start func_080A1478
-func_080A1478: @ 0x080A1478
-	ldr r1, [r1]
-	str r1, [r0, #0x2c]
-	bx lr
-	.align 2, 0
-
 	.section .text.tail080A1484, "ax", %progbits
 	thumb_func_start func_080A1484
 func_080A1484: @ 0x080A1484
