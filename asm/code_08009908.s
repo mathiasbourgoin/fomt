@@ -100,24 +100,3 @@ func_08009984: @ 0x08009984
     pop {r4}
     pop {r0}
     bx r0
-
-    thumb_func_start func_080099B0
-func_080099B0: @ 0x080099B0
-    adds r3, r1, #0
-    ldr r2, [r0, #0x10]
-    ldr r1, [r3, #0xc]
-    str r1, [r2]
-    ldr r1, [r3, #0xc]
-    str r2, [r1]
-    ldr r2, [r3, #0x10]
-    adds r1, r0, #0
-    adds r1, #0x10
-    str r1, [r2]
-    str r2, [r0, #0x10]
-    adds r0, r3, #0
-    adds r0, #0x10
-    str r0, [r3, #0xc]
-    subs r0, #4
-    str r0, [r3, #0x10]
-    bx lr
-    .align 2, 0
