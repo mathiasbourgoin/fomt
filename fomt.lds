@@ -77,6 +77,7 @@ SECTIONS
         asm/sram_proxy_2_prefix.o(.text);
         src/code_080006A4.o(.text);
         src/code_080006E4.o(.text);
+        src/code_08000714.o(.text);
         asm/sram_proxy_2.o(.text);
         src/scene.o(.text);
         asm/scene.o(.text);
