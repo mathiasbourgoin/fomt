@@ -1464,11 +1464,3 @@ func_08094844: @ 0x08094844
 .L080948D4: .4byte 0x00001BD8
 .L080948D8: .4byte 0x00001CD4
 .L080948DC: .4byte 0x000021DC
-
-	thumb_func_start func_080948E0
-func_080948E0: @ 0x080948E0
-	ldr r0, .L080948E8 @ =gUnk_08100A98
-	ldr r0, [r0]
-	bx lr
-	.align 2, 0
-.L080948E8: .4byte gUnk_08100A98
