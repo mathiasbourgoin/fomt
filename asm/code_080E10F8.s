@@ -5060,11 +5060,7 @@ func_080E38E0: @ 0x080E38E0
 	pop {r1}
 	bx r1
 
-	thumb_func_start func_080E3910
-func_080E3910: @ 0x080E3910
-	movs r0, #1
-	bx lr
-
+	.section .text.tail080E3914, "ax", %progbits
 	thumb_func_start func_080E3914
 func_080E3914: @ 0x080E3914
 	push {lr}
