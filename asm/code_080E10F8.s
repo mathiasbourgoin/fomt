@@ -1422,54 +1422,7 @@ func_080E1D54: @ 0x080E1D54
 .L080E1D84: .4byte 0x00002164
 .L080E1D88: .4byte 0x00002168
 
-	thumb_func_start func_080E1D8C
-func_080E1D8C: @ 0x080E1D8C
-	push {lr}
-	bl func_08076E0C
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E1D98
-func_080E1D98: @ 0x080E1D98
-	push {lr}
-	bl func_08076E0C
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E1DA4
-func_080E1DA4: @ 0x080E1DA4
-	push {lr}
-	bl func_08076E0C
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E1DB0
-func_080E1DB0: @ 0x080E1DB0
-	push {lr}
-	bl func_08076E0C
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E1DBC
-func_080E1DBC: @ 0x080E1DBC
-	push {lr}
-	bl func_08076EA8
-	movs r0, #1
-	pop {r1}
-	bx r1
-
-	thumb_func_start func_080E1DC8
-func_080E1DC8: @ 0x080E1DC8
-	push {lr}
-	bl func_08076E0C
-	pop {r0}
-	bx r0
-	.align 2, 0
-
+	.section .text.tail080E1DD4, "ax", %progbits
 	thumb_func_start func_080E1DD4
 func_080E1DD4: @ 0x080E1DD4
 	push {r4, r5, lr}
