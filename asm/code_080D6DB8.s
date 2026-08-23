@@ -183,6 +183,7 @@ func_080D6EEC: @ 0x080D6EEC
 	pop {r0}
 	bx r0
 
+	.if 0
 	thumb_func_start func_080D6F0C
 func_080D6F0C: @ 0x080D6F0C
 	movs r1, #0
@@ -194,6 +195,8 @@ func_080D6F0C: @ 0x080D6F0C
 	bx lr
 	.align 2, 0
 
+	.endif
+	.section .text.tail080D6F1C, "ax", %progbits
 	thumb_func_start func_080D6F1C
 func_080D6F1C: @ 0x080D6F1C
 	push {r4, lr}

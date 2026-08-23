@@ -10174,6 +10174,7 @@ func_08016D80: @ 0x08016D80
     .align 2, 0
 .L08016D98: .4byte gUnk_0300040C
 
+    .if 0
     thumb_func_start func_08016D9C
 func_08016D9C: @ 0x08016D9C
     ldr r0, .L08016DAC @ =gUnk_0300040C
@@ -10186,6 +10187,8 @@ func_08016D9C: @ 0x08016D9C
     .align 2, 0
 .L08016DAC: .4byte gUnk_0300040C
 
+    .endif
+    .section .text.tail08016DB0, "ax", %progbits
     thumb_func_start func_08016DB0
 func_08016DB0: @ 0x08016DB0
     push {r4, r5, r6, r7, lr}

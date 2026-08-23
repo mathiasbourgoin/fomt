@@ -37,3 +37,52 @@ EC i32 func_080093A0(u8 **self, u16 value)
     *(u16 *)(state + 4) = value;
     return (i16)old;
 }
+
+extern u32 gUnk_0811783C[];
+
+EC void func_080CC134(u32 *, u32, u32) IN_SECTION(080CC134);
+EC void func_080CC134(u32 *out, u32, u32 index)
+{
+    register u32 offset asm("r2") = index << 2;
+    asm("" : "+r"(offset));
+    register u32 table asm("r1") = (u32)gUnk_0811783C;
+    register u32 address asm("r2") = offset + table;
+    register u32 value asm("r1") = *(u32 *)address;
+    *out = value;
+}
+
+extern u8 *gUnk_0300040C;
+
+EC u32 func_08016D9C() IN_SECTION(08016D9C);
+EC u32 func_08016D9C()
+{
+    register u8 *entry asm("r0") = gUnk_0300040C;
+    entry += 0x36c;
+    asm("" : "+r"(entry));
+    return *(u32 *)(entry + 4);
+}
+
+EC void func_080D6F0C(u8 *) IN_SECTION(080D6F0C);
+EC void func_080D6F0C(u8 *self)
+{
+    *(u32 *)(self + 8) = 0;
+    *(u32 *)(self + 4) = 0;
+    self[0] = 0;
+    self[1] = 1;
+}
+
+EC void func_080522D8(u8 *, u8 *, u32) IN_SECTION(080522D8);
+EC void func_080522D8(u8 *array, u8 *out, u32 index)
+{
+    u8 *entry = array + index * 4;
+    out[0] = entry[0];
+    *(u16 *)(out + 2) = *(u16 *)(entry + 2);
+}
+
+EC void func_080522E8(u8 *, u8 *, u32) IN_SECTION(080522E8);
+EC void func_080522E8(u8 *array, u8 *value, u32 index)
+{
+    u8 *entry = array + index * 4;
+    entry[0] = value[0];
+    *(u16 *)(entry + 2) = *(u16 *)(value + 2);
+}

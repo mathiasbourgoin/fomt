@@ -88,6 +88,7 @@ func_08052230: @ 0x08052230
 	.align 2, 0
 .L080522D4: .4byte gUnk_080FA174
 
+	.if 0
 	thumb_func_start func_080522D8
 func_080522D8: @ 0x080522D8
 	lsls r2, r2, #2
@@ -110,6 +111,8 @@ func_080522E8: @ 0x080522E8
 	bx lr
 	.align 2, 0
 
+	.endif
+	.section .text.tail080522F8, "ax", %progbits
 	thumb_func_start func_080522F8
 func_080522F8: @ 0x080522F8
 	push {r4, r5, r6, r7, lr}

@@ -2680,6 +2680,7 @@ func_080CC0B4: @ 0x080CC0B4
 .L080CC12C: .4byte 0x0600F000
 .L080CC130: .4byte 0x0600F080
 
+	.if 0
 	thumb_func_start func_080CC134
 func_080CC134: @ 0x080CC134
 	lsls r2, r2, #2
@@ -2691,6 +2692,7 @@ func_080CC134: @ 0x080CC134
 	.align 2, 0
 .L080CC140: .4byte gUnk_0811783C
 
+	.endif
 	.section .text.tail080CC15C, "ax", %progbits
 	thumb_func_start func_080CC15C
 func_080CC15C: @ 0x080CC15C
