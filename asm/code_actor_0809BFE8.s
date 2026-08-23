@@ -165,15 +165,3 @@ func_0809C22C: @ 0x0809C22C
     adds r0, r2, #0
     pop {r1}
     bx r1
-
-    thumb_func_start func_0809C304
-func_0809C304: @ 0x0809C304
-    push {r4, lr}
-    adds r4, r0, #0
-    bl func_0809C22C
-    adds r4, r4, r0
-    ldrb r0, [r4]
-    pop {r4}
-    pop {r1}
-    bx r1
-    .align 2, 0

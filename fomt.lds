@@ -504,6 +504,7 @@ asm/code_0801DD78.o(.text);
         src/code_0809C0BC.o(.text);
         src/code_0809C0C8.o(.text);
         asm/code_actor_0809BFE8.o(.text);
+        src/code_0809C304.o(.text);
         src/code_0809C318.o(.text);
         asm/code_0809C32C.o(.text);
         src/npc.o(.text);
