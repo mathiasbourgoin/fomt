@@ -14,3 +14,9 @@ EC void func_080503FC(u8 *self)
     if (*(u32 *)(self + 8))
         *(u32 *)(self + 8) = 2;
 }
+
+EC void func_08050410(u8 *self)
+{
+    if (*(u32 *)(self + 8))
+        *(u32 *)(self + 8) = 0;
+}

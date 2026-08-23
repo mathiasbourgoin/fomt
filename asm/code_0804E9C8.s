@@ -3240,6 +3240,7 @@ func_080503FC: @ 0x080503FC
 	.endif
 
 	.section .text.tail08050410, "ax", %progbits
+	.if 0
 
 	thumb_func_start func_08050410
 func_08050410: @ 0x08050410
@@ -3254,6 +3255,9 @@ func_08050410: @ 0x08050410
 	pop {r0}
 	bx r0
 	.align 2, 0
+	.endif
+
+	.section .text.tail08050424, "ax", %progbits
 
 	thumb_func_start func_08050424
 func_08050424: @ 0x08050424
