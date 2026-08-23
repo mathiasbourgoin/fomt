@@ -367,13 +367,7 @@ func_0809EA6C: @ 0x0809EA6C
 .L0809EAC8: .4byte gUnk_08104108
 
 	.section .text.tail0809EAD0, "ax", %progbits
-	thumb_func_start func_0809EAD0
-func_0809EAD0: @ 0x0809EAD0
-	adds r0, #0x24
-	ldrb r0, [r0]
-	bx lr
-	.align 2, 0
-
+	.section .text.tail0809EAD8, "ax", %progbits
 	thumb_func_start func_0809EAD8
 func_0809EAD8: @ 0x0809EAD8
 	adds r0, #0x25
