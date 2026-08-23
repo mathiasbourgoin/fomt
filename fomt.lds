@@ -73,7 +73,7 @@ SECTIONS
         asm/intro_scene.o(.text);
         src/code_080036F8.o(.text);
         src/code_0800371C.o(.text);
-        asm/code_0800374C.o(.text);
+        src/code_0800374C.o(.text);
         asm/new_game.o(.text);
         src/code_08004B58.o(.text);
         src/code_08004B94.o(.text);
