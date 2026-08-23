@@ -2606,17 +2606,7 @@ func_0803BDB8: @ 0x0803BDB8
 	bx r0
 
 	.section .text.tail0803BDEC, "ax", %progbits
-	thumb_func_start func_0803BDEC
-func_0803BDEC: @ 0x0803BDEC
-	ldrh r3, [r0]
-	adds r3, r3, r1
-	strh r3, [r0]
-	ldrh r1, [r0, #2]
-	adds r1, r1, r2
-	strh r1, [r0, #2]
-	bx lr
-	.align 2, 0
-
+	.section .text.tail0803BDFC, "ax", %progbits
 	thumb_func_start func_0803BDFC
 func_0803BDFC: @ 0x0803BDFC
 	push {r4, r5, r6, r7, lr}
