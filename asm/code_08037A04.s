@@ -2783,14 +2783,7 @@ func_08038EE0: @ 0x08038EE0
     .align 2, 0
 .L080390CC: .4byte vtable_unk_080E681C
 
-    thumb_func_start func_080390D0
-func_080390D0: @ 0x080390D0
-    ldr r1, [r0, #0x10]
-    rsbs r0, r1, #0
-    orrs r0, r1
-    lsrs r0, r0, #0x1f
-    bx lr
-    .align 2, 0
+    .section .text.tail080390DC, "ax", %progbits
 .L080390DC:
     .byte 0x10, 0xB5, 0x04, 0x1C
     .byte 0x30, 0x30, 0x25, 0xF0, 0xBD, 0xFB, 0x20, 0x1C, 0x44, 0x30, 0x00, 0x22, 0x01, 0x21, 0x01, 0x70
