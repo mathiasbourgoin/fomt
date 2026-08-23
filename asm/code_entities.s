@@ -329,15 +329,7 @@ func_080202A0: @ 0x080202A0
     bx r2
     .align 2, 0
 
-    thumb_func_start func_080202C4
-func_080202C4: @ 0x080202C4
-    bx lr
-    .align 2, 0
-
-    thumb_func_start func_080202C8
-func_080202C8: @ 0x080202C8
-    bx lr
-    .align 2, 0
+	.section .text.tail080202CC, "ax", %progbits
 .L080202CC:
     .byte 0x00, 0x20, 0x70, 0x47
     .byte 0x00, 0x20, 0x70, 0x47, 0x00, 0x20, 0x70, 0x47, 0x00, 0x20, 0x70, 0x47, 0x00, 0x20, 0x70, 0x47
