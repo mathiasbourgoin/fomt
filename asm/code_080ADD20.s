@@ -48,9 +48,3 @@ func_080ADD5C: @ 0x080ADD5C
 	strh r3, [r0, #6]
 	bx lr
 	.align 2, 0
-
-	thumb_func_start func_080ADD74
-func_080ADD74: @ 0x080ADD74
-	strh r1, [r0, #4]
-	bx lr
-
