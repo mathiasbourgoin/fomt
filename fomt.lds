@@ -1010,6 +1010,7 @@ asm/code_0801DD78.o(.text);
         asm/code_080CAD10.o(.text.tail080CADA8);
         src/code_080CADA8.o(.text);
         asm/code_080CAD10.o(.text.tail080CADB4);
+		src/code_080CB2E8.o(.text);
         src/code_080CB2FC.o(.text);
         asm/code_080CAD10.o(.text.tail080CB304);
 		src/code_simple_short.o(.text.func_080CC134);

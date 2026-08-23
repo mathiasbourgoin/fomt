@@ -760,6 +760,7 @@ func_080CB090: @ 0x080CB090
 	.align 2, 0
 .L080CB2E4: .4byte 0x0600F00C
 
+	.if 0
 	thumb_func_start func_080CB2E8
 func_080CB2E8: @ 0x080CB2E8
 	adds r2, r0, #0
@@ -772,6 +773,7 @@ func_080CB2E8: @ 0x080CB2E8
 	adds r0, r0, r1
 	bx lr
 	.align 2, 0
+	.endif
 
 	.section .text.tail080CB304, "ax", %progbits
 	thumb_func_start func_080CB304
