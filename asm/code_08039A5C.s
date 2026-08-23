@@ -367,16 +367,7 @@ func_08039A60: @ 0x08039A60
     pop {r0}
     bx r0
 
-    thumb_func_start func_08039D4C
-func_08039D4C: @ 0x08039D4C
-    ldr r0, .L08039D58 @ =gUnk_080F16AE
-    lsls r1, r1, #1
-    adds r1, r1, r0
-    ldrh r0, [r1]
-    bx lr
-    .align 2, 0
-.L08039D58: .4byte gUnk_080F16AE
-
+    .section .text.tail08039D5C, "ax", %progbits
     thumb_func_start func_08039D5C
 func_08039D5C: @ 0x08039D5C
     push {lr}
