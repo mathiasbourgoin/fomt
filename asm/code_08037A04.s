@@ -1022,7 +1022,8 @@ func_08038300: @ 0x08038300
     pop {r0}
     bx r0
 
-    thumb_func_start func_08038320
+	.if 0
+	thumb_func_start func_08038320
 func_08038320: @ 0x08038320
     push {r4, lr}
     adds r4, r0, #0
@@ -1030,10 +1031,13 @@ func_08038320: @ 0x08038320
     adds r0, r4, #0
     bl func_08038110
     pop {r4}
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
 
-    thumb_func_start func_08038334
+	.section .text.tail08038334, "ax", %progbits
+
+	thumb_func_start func_08038334
 func_08038334: @ 0x08038334
     push {r4, lr}
     adds r4, r0, #0

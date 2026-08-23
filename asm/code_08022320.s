@@ -2338,7 +2338,8 @@ func_08024B9C: @ 0x08024B9C
     .align 2, 0
 .L08024BE4: .4byte 0x00002171
 
-    thumb_func_start func_08024BE8
+	.if 0
+	thumb_func_start func_08024BE8
 func_08024BE8: @ 0x08024BE8
     push {r4, lr}
     adds r4, r0, #0
@@ -2346,10 +2347,13 @@ func_08024BE8: @ 0x08024BE8
     adds r0, r4, #0
     bl func_0802A588
     pop {r4}
-    pop {r0}
-    bx r0
+	pop {r0}
+	bx r0
+	.endif
 
-    thumb_func_start func_08024BFC
+	.section .text.tail08024BFC, "ax", %progbits
+
+	thumb_func_start func_08024BFC
 func_08024BFC: @ 0x08024BFC
     push {r4, r5, lr}
     sub sp, #0x10
