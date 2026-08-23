@@ -79,32 +79,3 @@ func_080097A4: @ 0x080097A4
     .align 2, 0
 .L0800982C: .4byte 0x00000FFF
 .L08009830: .4byte 0x07000400
-
-    thumb_func_start func_08009834
-func_08009834: @ 0x08009834
-    push {r4, lr}
-    adds r2, r0, #0
-    ldrb r4, [r2]
-    ldrb r3, [r2, #1]
-    cmp r4, r3
-    bls .L08009856
-    lsls r0, r3, #3
-    adds r0, #4
-    adds r1, r2, r0
-    lsls r0, r4, #3
-    adds r0, #4
-    adds r0, r2, r0
-    movs r4, #2
-.L0800984E:
-    strb r4, [r1, #1]
-    adds r1, #8
-    cmp r1, r0
-    bne .L0800984E
-.L08009856:
-    strb r3, [r2]
-    ldrb r0, [r2, #3]
-    strb r0, [r2, #2]
-    pop {r4}
-    pop {r0}
-    bx r0
-    .align 2, 0
