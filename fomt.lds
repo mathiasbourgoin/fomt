@@ -391,6 +391,8 @@ asm/code_0801DD78.o(.text);
         asm/code_0803BFC8_prefix.o(.text);
         src/code_0803C00C.o(.text);
         asm/code_0803D644_prefix.o(.text);
+        src/code_0803C544.o(.text);
+        asm/code_0803D644_prefix.o(.text.tail0803C54C);
         src/code_0803D644.o(.text);
         asm/code_0803BFC8.o(.text);
         src/script_engine.o(.text);
