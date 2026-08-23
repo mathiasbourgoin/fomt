@@ -2440,13 +2440,7 @@ func_08024C88: @ 0x08024C88
     strb r1, [r0]
     bx lr
 
-    thumb_func_start func_08024C98
-func_08024C98: @ 0x08024C98
-    adds r0, #0x3c
-    movs r1, #0
-    strb r1, [r0]
-    bx lr
-
+    .section .text.tail08024CA0, "ax", %progbits
     thumb_func_start func_08024CA0
 func_08024CA0: @ 0x08024CA0
     push {r4, lr}

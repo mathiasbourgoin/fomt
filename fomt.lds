@@ -270,6 +270,8 @@ asm/code_0801DD78.o(.text);
         asm/code_08022320.o(.text);
         src/code_08022B58.o(.text);
         asm/code_08022320.o(.text.tail08022B5C);
+        src/code_08024C98.o(.text);
+        asm/code_08022320.o(.text.tail08024CA0);
         src/code_0802C2DC.o(.text);
         asm/code_08022320.o(.text.tail0802C2E0);
         src/entity_actor.o(.text);
