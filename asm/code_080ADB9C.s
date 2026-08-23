@@ -1,30 +1,5 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
-	thumb_func_start func_080ADC00
-func_080ADC00: @ 0x080ADC00
-	push {r4, lr}
-	adds r4, r0, #0
-	movs r0, #0x20
-	bl __builtin_new
-	adds r2, r0, #0
-	movs r0, #0
-	str r0, [r2]
-	strh r0, [r2, #4]
-	adds r1, r2, #0
-	adds r1, #8
-	str r0, [r2, #8]
-	strh r0, [r1, #4]
-	adds r1, #8
-	str r0, [r2, #0x10]
-	strh r0, [r1, #4]
-	adds r1, #8
-	str r0, [r2, #0x18]
-	strh r0, [r1, #4]
-	str r2, [r4]
-	adds r0, r4, #0
-	pop {r4}
-	pop {r1}
-	bx r1
 .L080ADC30:
 	.byte 0x70, 0xB5, 0x46, 0x46, 0x40, 0xB4, 0x8E, 0xB0, 0x80, 0x46, 0x0D, 0x1C, 0x20, 0x20, 0x52, 0xF7
 	.byte 0xC9, 0xFC, 0x06, 0x1C, 0x0D, 0x49, 0x68, 0x46, 0xB0, 0xF7, 0x40, 0xFD, 0x00, 0x9C, 0x0C, 0xA8
