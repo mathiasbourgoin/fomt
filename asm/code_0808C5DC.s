@@ -1,49 +1,6 @@
 .INCLUDE "asm/macro.inc"
 .SYNTAX UNIFIED
 
-	thumb_func_start func_0808C5F8
-func_0808C5F8: @ 0x0808C5F8
-	push {r4, r5, r6, lr}
-	adds r6, r0, #0
-	bl func_080CE19C
-	ldr r0, .L0808C648 @ =vtable_unk_080E7D84
-	str r0, [r6, #4]
-	adds r0, r6, #0
-	adds r0, #0x98
-	movs r5, #0
-	strb r5, [r0]
-	adds r2, r6, #0
-	adds r2, #0xfc
-	ldr r0, [r6, #8]
-	ldr r3, .L0808C64C @ =0x00001C2C
-	adds r1, r0, r3
-	str r1, [r2]
-	movs r1, #0x80
-	lsls r1, r1, #1
-	adds r2, r6, r1
-	adds r3, #0xc
-	adds r1, r0, r3
-	str r1, [r2]
-	movs r1, #0x82
-	lsls r1, r1, #1
-	adds r4, r6, r1
-	movs r3, #0xfa
-	lsls r3, r3, #1
-	adds r0, r0, r3
-	bl GetShelf__9FarmHouse
-	str r0, [r4]
-	movs r1, #0x84
-	lsls r1, r1, #1
-	adds r0, r6, r1
-	str r5, [r0]
-	adds r0, r6, #0
-	pop {r4, r5, r6}
-	pop {r1}
-	bx r1
-	.align 2, 0
-.L0808C648: .4byte vtable_unk_080E7D84
-.L0808C64C: .4byte 0x00001C2C
-
 	thumb_func_start func_0808C650
 func_0808C650: @ 0x0808C650
 	push {lr}
