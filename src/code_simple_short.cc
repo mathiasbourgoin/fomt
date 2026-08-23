@@ -71,6 +71,15 @@ EC void func_080D6F0C(u8 *self)
     self[1] = 1;
 }
 
+EC void func_080D6F1C(u8 *) IN_SECTION(080D6F1C);
+EC void func_080D6F1C(u8 *self)
+{
+    func_080D6F0C(self + 0x10);
+    func_080D6F0C(self + 4);
+    self[0] = 0;
+    self[1] = 1;
+}
+
 EC void func_080522D8(u8 *, u8 *, u32) IN_SECTION(080522D8);
 EC void func_080522D8(u8 *array, u8 *out, u32 index)
 {
