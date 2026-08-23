@@ -573,6 +573,7 @@ asm/code_0801DD78.o(.text);
         asm/code_080948FC.o(.text);
         src/code_0809A4D4.o(.text);
         src/code_0809A518.o(.text);
+        src/code_0809A558.o(.text);
         asm/code_0809A558.o(.text);
 
         src/actor.o(.text);
