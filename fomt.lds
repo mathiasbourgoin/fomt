@@ -62,6 +62,7 @@ SECTIONS
         src/crt0.o(.rom_header);
         asm/main.o(.text);
         asm/sram_proxy_1.o(.text);
+        src/code_080004C4.o(.text);
         asm/interrupt.o(.text);
         src/code_08000568.o(.text);
         src/code_0800057C.o(.text);
