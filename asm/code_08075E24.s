@@ -1,32 +1,5 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
-	thumb_func_start func_08075E24
-func_08075E24: @ 0x08075E24
-	push {r4, r5, lr}
-	adds r2, r0, #0
-	lsls r1, r1, #0x10
-	lsrs r4, r1, #0x10
-	asrs r1, r1, #0x10
-	ldrh r3, [r2, #4]
-	movs r5, #4
-	ldrsh r0, [r2, r5]
-	cmp r1, r0
-	bgt .L08075E3C
-	strh r4, [r2, #0xe]
-	b .L08075E3E
-.L08075E3C:
-	strh r3, [r2, #0xe]
-.L08075E3E:
-	movs r1, #0xe
-	ldrsh r0, [r2, r1]
-	cmp r0, #0x9f
-	bgt .L08075E4A
-	movs r0, #0xa0
-	strh r0, [r2, #0xe]
-.L08075E4A:
-	pop {r4, r5}
-	pop {r0}
-	bx r0
 .L08075E50:
 	.byte 0x70, 0xB5, 0x04, 0x9C, 0x05, 0x9D, 0x06, 0x9E, 0xC1, 0x60, 0x02, 0x61, 0x43, 0x61, 0x84, 0x61
 	.byte 0xC5, 0x61, 0x06, 0x62, 0x70, 0xBC, 0x01, 0xBC, 0x00, 0x47, 0x00, 0x00, 0x00, 0x21, 0x01, 0x60
@@ -3858,4 +3831,3 @@ func_08077A1C: @ 0x08077A1C
 	pop {r4, r5, r6, r7}
 	pop {r0}
 	bx r0
-
