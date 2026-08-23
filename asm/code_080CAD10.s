@@ -1,11 +1,6 @@
     .INCLUDE "asm/macro.inc"
     .SYNTAX UNIFIED
 
-	thumb_func_start func_080CAD10
-func_080CAD10: @ 0x080CAD10
-	str r1, [r0]
-	bx lr
-
 	thumb_func_start func_080CAD14
 func_080CAD14: @ 0x080CAD14
 	ldr r0, [r0]
