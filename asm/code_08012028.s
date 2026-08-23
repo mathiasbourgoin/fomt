@@ -4217,7 +4217,8 @@ func_08013F88: @ 0x08013F88
 .L0801402C: .4byte vtable_unk_080E5E74
 .L08014030: .4byte vtable_unk_080E5C64
 
-    thumb_func_start func_08014034
+	.if 0
+	thumb_func_start func_08014034
 func_08014034: @ 0x08014034
     push {lr}
     ldr r0, [r0, #4]
@@ -4339,11 +4340,14 @@ func_080140F4: @ 0x080140F4
     adds r1, #0x80
     ldr r1, [r1]
     bl _call_via_r1
-    pop {r0}
-    bx r0
-    .align 2, 0
+	pop {r0}
+	bx r0
+	.align 2, 0
+	.endif
 
-    thumb_func_start func_0801410C
+	.section .text.tail0801410C, "ax", %progbits
+
+	thumb_func_start func_0801410C
 func_0801410C: @ 0x0801410C
     push {lr}
     ldr r0, [r0, #4]
