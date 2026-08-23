@@ -850,17 +850,3 @@ func_08075DB8: @ 0x08075DB8
 	bx r0
 	.align 2, 0
 .L08075DD0: .4byte 0x0000FFFF
-
-	thumb_func_start func_08075DD4
-func_08075DD4: @ 0x08075DD4
-	push {lr}
-	ldr r1, [r0, #0x18]
-	ldr r2, [r0, #0x1c]
-	subs r2, r2, r1
-	asrs r2, r2, #6
-	lsls r2, r2, #6
-	adds r0, r1, #0
-	movs r1, #0xff
-	bl memset
-	pop {r0}
-	bx r0
