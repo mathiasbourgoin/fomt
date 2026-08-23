@@ -1820,30 +1820,7 @@ func_080E20C0: @ 0x080E20C0
 	pop {r0}
 	bx r0
 
-	thumb_func_start func_080E20F8
-func_080E20F8: @ 0x080E20F8
-	push {lr}
-	bl func_08070C88
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E2104
-func_080E2104: @ 0x080E2104
-	push {lr}
-	bl func_08070C88
-	pop {r0}
-	bx r0
-	.align 2, 0
-
-	thumb_func_start func_080E2110
-func_080E2110: @ 0x080E2110
-	push {lr}
-	bl func_08070C88
-	pop {r0}
-	bx r0
-	.align 2, 0
-
+	.section .text.tail080E211C, "ax", %progbits
 	thumb_func_start func_080E211C
 func_080E211C: @ 0x080E211C
 	push {r4, r5, lr}
