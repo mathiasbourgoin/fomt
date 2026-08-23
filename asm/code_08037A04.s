@@ -2493,6 +2493,7 @@ func_08038DF0: @ 0x08038DF0
     .align 2, 0
 .L08038E8C: .4byte vtable_unk_080E602C
 
+    .if 0
     thumb_func_start func_08038E90
 func_08038E90: @ 0x08038E90
     ldr r0, [r0, #0xc]
@@ -2504,6 +2505,8 @@ func_08038E90: @ 0x08038E90
     strb r1, [r0]
     bx lr
 
+    .endif
+    .section .text.tail08038EA0, "ax", %progbits
     thumb_func_start func_08038EA0
 func_08038EA0: @ 0x08038EA0
     push {lr}
