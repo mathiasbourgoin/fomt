@@ -16595,7 +16595,8 @@ func_0802BFE4: @ 0x0802BFE4
     .align 2, 0
 .L0802C20C: .4byte 0x0000FFFF
 
-    thumb_func_start func_0802C210
+	.if 0
+	thumb_func_start func_0802C210
 func_0802C210: @ 0x0802C210
     push {r4, lr}
     adds r4, r0, #0
@@ -16605,8 +16606,11 @@ func_0802C210: @ 0x0802C210
     bl func_0802B9C0
     pop {r4}
     pop {r1}
-    bx r1
-    .align 2, 0
+	bx r1
+	.align 2, 0
+	.endif
+
+	.section .text.tail0802C228, "ax", %progbits
 .L0802C228:
     .byte 0x30, 0xB5, 0x05, 0x1C, 0x0C, 0x1C, 0x28, 0x68
     .byte 0x00, 0x68, 0x01, 0x68, 0x49, 0x6E, 0xA7, 0xF0, 0x6B, 0xFB, 0x01, 0x1C, 0x28, 0x1C, 0xB4, 0x30
