@@ -162,3 +162,52 @@ none:
 done:
     return result;
 }
+
+EC void func_080073E0(void *, unsigned int token)
+{
+    register unsigned int saved_token asm("r4") = token;
+    register Unk_hardware_03000404 *h asm("r3") = gUnk_03000404;
+    if (saved_token == 0)
+        return;
+
+    register unsigned int shifted asm("r0") = saved_token << 28;
+    register unsigned int index asm("r2") = shifted >> 28;
+    register unsigned int saved_index asm("r5") = index;
+    register unsigned int allocated asm("r0") = 0;
+    if (index <= 0xf) {
+        allocated = 1;
+        allocated <<= index;
+        register unsigned int bits asm("r1") = h->unk_44;
+        bits &= allocated;
+        allocated = ((0u - bits) | bits) >> 31;
+    }
+    if (allocated == 0)
+        return;
+
+    register unsigned int offset asm("r0") = index << 2;
+    offset += 4;
+    register Unk_hardware_ent_080D6D98 *entry asm("r1") = (Unk_hardware_ent_080D6D98 *)((u8 *)h + offset);
+    register unsigned int matching asm("r2") = 0;
+    register unsigned int generation asm("r0") = (saved_token << 12) >> 16;
+    saved_token = entry->params.unk_02;
+    if (generation == saved_token)
+        matching = 1;
+    if (matching == 0)
+        return;
+
+    register unsigned int remaining asm("r0") = entry->params.unk_00;
+    remaining--;
+    entry->params.unk_00 = remaining;
+    remaining <<= 16;
+    remaining >>= 16;
+    if (remaining != 0)
+        return;
+
+    entry->params.unk_02 = remaining;
+    entry->next_free = h->unk_00;
+    h->unk_00 = entry;
+    if (saved_index <= 0xf)
+        h->unk_44 &= ~(1u << saved_index);
+    register u16 *active asm("r1") = &h->unk_48;
+    (*active)--;
+}
