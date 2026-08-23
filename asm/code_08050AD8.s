@@ -272,26 +272,3 @@ func_08050CC0: @ 0x08050CC0
 	bx r1
 	.align 2, 0
 .L08050D08: .4byte 0x00000554
-
-	thumb_func_start func_08050D0C
-func_08050D0C: @ 0x08050D0C
-	push {r4, r5, lr}
-	adds r4, r0, #0
-	adds r5, r1, #0
-	ldr r0, [r4]
-	cmp r0, #0
-	beq .L08050D1E
-	movs r1, #3
-	bl func_0804F69C
-.L08050D1E:
-	movs r0, #1
-	ands r0, r5
-	cmp r0, #0
-	beq .L08050D2C
-	adds r0, r4, #0
-	bl __builtin_delete
-.L08050D2C:
-	pop {r4, r5}
-	pop {r0}
-	bx r0
-	.align 2, 0
