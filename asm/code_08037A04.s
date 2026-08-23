@@ -1574,7 +1574,8 @@ func_080387A0: @ 0x080387A0
     bx r1
     .align 2, 0
 
-    thumb_func_start func_080387B8
+	.if 0
+	thumb_func_start func_080387B8
 func_080387B8: @ 0x080387B8
     push {lr}
     ldr r0, [r0, #0x10]
@@ -1596,7 +1597,9 @@ func_080387C8: @ 0x080387C8
     pop {r0}
     bx r0
 
-    thumb_func_start func_080387D8
+	.endif
+	.section .text.tail080387D8, "ax", %progbits
+	thumb_func_start func_080387D8
 func_080387D8: @ 0x080387D8
     push {lr}
     ldr r0, [r0, #0x10]
@@ -1610,7 +1613,8 @@ func_080387D8: @ 0x080387D8
     pop {r1}
     bx r1
 
-    thumb_func_start func_080387EC
+	.if 0
+	thumb_func_start func_080387EC
 func_080387EC: @ 0x080387EC
     push {lr}
     ldr r0, [r0, #0x10]
@@ -1632,7 +1636,9 @@ func_080387FC: @ 0x080387FC
     pop {r0}
     bx r0
 
-    thumb_func_start func_0803880C
+	.endif
+	.section .text.tail0803880C, "ax", %progbits
+	thumb_func_start func_0803880C
 func_0803880C: @ 0x0803880C
     push {lr}
     ldr r0, [r0, #0x10]
