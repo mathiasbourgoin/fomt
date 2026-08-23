@@ -6309,21 +6309,3 @@ func_080E40A0: @ 0x080E40A0
 .L080E4188: .4byte vtable_unk_080E76F8
 .L080E418C: .4byte vtable_unk_080E5A28
 
-	thumb_func_start func_080E4190
-func_080E4190: @ 0x080E4190
-	push {lr}
-	adds r2, r0, #0
-	ldr r0, .L080E41AC @ =vtable_unk_080E76F8
-	str r0, [r2]
-	movs r0, #1
-	ands r0, r1
-	cmp r0, #0
-	beq .L080E41A6
-	adds r0, r2, #0
-	bl __builtin_delete
-.L080E41A6:
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L080E41AC: .4byte vtable_unk_080E76F8
-
