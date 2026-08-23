@@ -4582,7 +4582,8 @@ func_08014290: @ 0x08014290
     bx r0
     .align 2, 0
 
-    thumb_func_start func_080142B8
+	.if 0
+	thumb_func_start func_080142B8
 func_080142B8: @ 0x080142B8
     push {lr}
     ldr r0, [r0, #4]
@@ -4610,12 +4611,13 @@ func_080142D4: @ 0x080142D4
     adds r1, r1, r2
     ldr r1, [r1]
     bl _call_via_r1
-    pop {r0}
-    bx r0
-    .align 2, 0
+	pop {r0}
+	bx r0
+	.align 2, 0
+	.endif
 
-    .if 0
-    thumb_func_start func_080142F0
+	.if 0
+	thumb_func_start func_080142F0
 func_080142F0: @ 0x080142F0
     ldr r0, [r0, #4]
     adds r0, #0x8c
