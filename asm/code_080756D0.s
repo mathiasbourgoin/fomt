@@ -834,19 +834,3 @@ func_08075C88: @ 0x08075C88
 	pop {r4, r5}
 	pop {r0}
 	bx r0
-
-	thumb_func_start func_08075DB8
-func_08075DB8: @ 0x08075DB8
-	push {lr}
-	ldr r2, .L08075DD0 @ =0x0000FFFF
-	strh r2, [r0, #6]
-	movs r2, #1
-	rsbs r2, r2, #0
-	strh r2, [r0, #0xa]
-	lsls r1, r1, #0x10
-	asrs r1, r1, #0x10
-	bl func_08075C88
-	pop {r0}
-	bx r0
-	.align 2, 0
-.L08075DD0: .4byte 0x0000FFFF
