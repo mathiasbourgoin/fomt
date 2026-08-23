@@ -452,6 +452,7 @@ asm/code_0801DD78.o(.text);
         src/sheep.o(.text);
         src/code_actor_0809BFE8.o(.text);
         src/code_0809C0A0.o(.text);
+        src/code_0809C0AC.o(.text);
         asm/code_actor_0809BFE8.o(.text);
         src/code_0809C318.o(.text);
         asm/code_0809C32C.o(.text);
