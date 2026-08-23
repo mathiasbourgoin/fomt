@@ -1,69 +1,6 @@
 	.INCLUDE "asm/macro.inc"
 	.SYNTAX UNIFIED
 
-	thumb_func_start func_080E0A08
-func_080E0A08: @ 0x080E0A08
-	push {r4, r5, lr}
-	adds r2, r0, #0
-	ldr r4, [r2, #0xc]
-	ldr r3, [r2, #0x10]
-	ldrb r0, [r2, #0x15]
-	cmp r0, #0
-	beq .L080E0A68
-	ldrb r0, [r2, #0x14]
-	lsls r0, r0, #5
-	adds r5, r3, r0
-	ldrb r0, [r2, #0x16]
-	movs r1, #1
-	eors r0, r1
-	strb r0, [r2, #0x16]
-	lsls r0, r0, #2
-	ldr r2, .L080E0A64 @ =0x0F0F0F0F
-	lsls r2, r0
-	mvns r1, r2
-.L080E0A2C:
-	ldm r4!, {r0}
-	ands r0, r2
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r1
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r2
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r1
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r2
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r1
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r2
-	stm r3!, {r0}
-	ldm r4!, {r0}
-	ands r0, r1
-	stm r3!, {r0}
-	cmp r3, r5
-	bne .L080E0A2C
-	movs r0, #1
-	b .L080E0A76
-	.align 2, 0
-.L080E0A64: .4byte 0x0F0F0F0F
-.L080E0A68:
-	ldrb r2, [r2, #0x14]
-	lsls r2, r2, #3
-	adds r0, r4, #0
-	adds r1, r3, #0
-	bl CpuFastSet
-	movs r0, #0
-.L080E0A76:
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-
 	thumb_func_start func_080E0A7C
 func_080E0A7C: @ 0x080E0A7C
 	push {lr}
