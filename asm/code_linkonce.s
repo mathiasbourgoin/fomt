@@ -4,29 +4,6 @@
 
 	.section ".text.code_080D3BC0"
 
-	thumb_func_start func_080D3BC0
-func_080D3BC0: @ 0x080D3BC0
-	push {r4, r5, lr}
-	adds r4, r0, #0
-	ldr r5, .L080D3BD0 @ =gUnk_03000CD4
-.L080D3BC6:
-	ldr r0, [r5]
-	cmp r0, #0
-	bne .L080D3BD4
-.L080D3BCC:
-	b .L080D3BCC
-	.align 2, 0
-.L080D3BD0: .4byte gUnk_03000CD4
-.L080D3BD4:
-	bl _call_via_r0
-	adds r0, r4, #0
-	bl malloc
-	cmp r0, #0
-	beq .L080D3BC6
-	pop {r4, r5}
-	pop {r1}
-	bx r1
-
 	thumb_func_start func_080D3BE8
 func_080D3BE8: @ 0x080D3BE8
 	push {r4, lr}

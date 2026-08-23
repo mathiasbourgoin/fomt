@@ -660,6 +660,7 @@ asm/code_0801DD78.o(.text);
         /* *libc.a:strlen.o(.text); */
         asm/code_libc_string.o(.text);
 
+        src/code_080D3BC0.o(.text);
         asm/code_linkonce.o(.text.code_080D3BC0);
         *(.gnu.linkonce.t.__as__6AnimalRC6Animal);
         asm/code_linkonce.o(.text.code_080D68C0);
