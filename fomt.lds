@@ -240,7 +240,7 @@ asm/code_0801DD78.o(.text);
         src/code_08036C80.o(.text);
         src/code_08036CAC.o(.text);
         src/code_08036CDC.o(.text);
-        asm/code_08036D0C.o(.text);
+        src/code_08036D0C.o(.text);
         src/code_08036D3C.o(.text);
         src/code_08036D68.o(.text);
         src/code_08036D98.o(.text);
