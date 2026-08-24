@@ -122,8 +122,8 @@ controller: it establishes the real, movement-time consumer of the shared
 input state and rules out the earlier UI-constructor callers.  The temporary
 host instrumentation, logs and frames are retained in
 `/tmp/fomt-player-recomp/` and are deliberately not part of the matching ROM
-tree.  The next step is to trace the `sub_080D8178` cases that consume the
-repeat result and separate field movement from script/menu cases.
+tree. The instruction-level differential below now separates the initial
+script transition from the steady directional-input and player-update paths.
 
 ### Differential EWRAM candidate generator
 
@@ -162,7 +162,10 @@ input edge from stable downstream state without fabricating an emulator state.
 `tools/trace_player_slice.py` clones the deterministic frame-57340 state and
 steps an idle window and a Right-held window instruction by instruction. It
 records visits to `sub_080D8178`, direct calls out of that function, indirect
-register-call targets, and the arguments passed to `func_08050D3C`:
+register-call targets, script VM dispatches, directional-controller entries,
+player-update calls, and writes to the bounded EWRAM candidates. The optional
+`--pre-frames` argument reaches a later walk or wall checkpoint quickly before
+instruction stepping begins:
 
 ```sh
 python3 tools/trace_player_slice.py baserom.gba \
@@ -182,6 +185,39 @@ logic.
 The generated JSON remains under `/tmp/fomt-player-recomp/` as a trace
 artifact. The matching tree keeps the recorder and this explanation, so the
 experiment can be regenerated instead of committing emulator state.
+
+The `AScriptEngine::method_0803EFD8` boundary is now classified more narrowly.
+On the first Right-held window it executes one VM opcode `0x21` (`CALL`) at
+script PC `0x0C`, with call id `0x20`. No script opcode is dispatched in the
+steady walk or wall windows. This proves that the observed VM edge is part of
+the initial transition, not the player collision test.
+
+At both the free-walk and wall checkpoints, the directional branch instead
+calls `func_0803D4D8` on object slot `0x0203A6EC`. The function forwards an
+accepted direction event to `func_0803C7C8` using the object's two virtual
+configuration getters. `func_0803D4D8` is now recovered byte-for-byte in C++.
+
+### Confirmed player position and collision owner
+
+The retained screenshots and EWRAM snapshots correlate halfword
+`0x0203904E` with the on-screen player X position: it is `143` at the idle
+checkpoint, `150` after 20 Right-held frames, and `225` at the right wall.
+The neighboring halfword at `0x02039052` remains the player Y position `112`.
+An instruction-level write trace identifies `0x0802D0DA`, inside
+`func_0802CDCC`, as the instruction that commits the accepted X coordinate.
+
+During seven freely moving frames, `func_0802CDCC` writes X once per frame.
+At the wall, it performs the same two rectangle predicates through
+`func_080AC070`, does not write X, and calls `func_0802536C` with direction
+`3` and residual displacement `1`. This identifies `func_0802CDCC` as the
+player movement/collision owner and `func_0802536C` as its blocked-movement
+resolver. It does not yet identify the front-tile interaction or door owner:
+that requires an A-press trace at a reproducible real door, rather than
+renaming either routine from movement evidence alone.
+
+The corresponding trace artifacts are retained as
+`/tmp/fomt-player-recomp/player-collision-trace-walk-001.json` and
+`/tmp/fomt-player-recomp/player-collision-trace-wall-001.json`.
 
 As a first source recovery on this confirmed path, `func_0805039C` now matches
 byte-for-byte in C++. It normalizes the transition object's state to `1` for

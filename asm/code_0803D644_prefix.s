@@ -2571,6 +2571,8 @@ func_0803D440: @ 0x0803D440
 	.byte 0xFF, 0xF7, 0xDE, 0xFD, 0x01, 0xBC, 0x00, 0x47, 0x00, 0xB5, 0x12, 0x06, 0x12, 0x0E, 0x08, 0x30
 	.byte 0xFF, 0xF7, 0x3C, 0xFC, 0x01, 0xBC, 0x00, 0x47
 
+	.section .text.tail0803D4D8, "ax", %progbits
+	.if 0
 	thumb_func_start func_0803D4D8
 func_0803D4D8: @ 0x0803D4D8
 	push {r4, r5, r6, r7, lr}
@@ -2612,6 +2614,9 @@ func_0803D4D8: @ 0x0803D4D8
 	pop {r1}
 	bx r1
 	.align 2, 0
+	.endif
+
+	.section .text.tail0803D52C, "ax", %progbits
 
 	thumb_func_start func_0803D52C
 func_0803D52C: @ 0x0803D52C

@@ -3,9 +3,10 @@
 
 The tool boots through the same recorded path as ``replay_player_slice.py``,
 clones the resulting emulator state, then steps an idle and a Right-held
-window instruction by instruction.  It records only visits to, and calls out
-of, the still-assembled ``sub_080D8178`` script-loop dispatcher.  The report
-is evidence for selecting the next movement-path decompilation target; it does
+window instruction by instruction. It records the still-assembled
+``sub_080D8178`` dispatcher together with the script, directional-input,
+movement, and bounded EWRAM-write boundaries reached from it. The report is
+evidence for selecting the next movement-path decompilation target; it does
 not assign gameplay semantics to an address by itself.
 """
 
@@ -35,6 +36,31 @@ CALL_VIA_REGISTER = {
     0x080D391C: 4,
 }
 INPUT_DISPATCH = 0x08050D3C
+SCRIPT_NEXT_INSTRUCTION = 0x0803F0E0
+TRANSITION_START = 0x0804F7A4
+TRANSITION_END = 0x08050342
+MOVEMENT_START = 0x0803C7C8
+MOVEMENT_END = 0x0803CD4C
+MOVEMENT_CONTROLLER = 0x0803D4D8
+PLAYER_UPDATE_START = 0x0802CDCC
+PLAYER_UPDATE_END = 0x0802D158
+WATCHED_HALFWORDS = (
+    0x0203904A,
+    0x0203904E,
+    0x02039052,
+    0x0203905E,
+    0x02039064,
+    0x02039066,
+    0x02039068,
+    0x0203906A,
+    0x02039104,
+    0x02039108,
+    0x02039150,
+    0x02039154,
+    0x02039156,
+    0x02039158,
+    0x0203915A,
+)
 
 
 def clone_core(rom: Path, state: object) -> mgba.core.Core:
@@ -44,6 +70,14 @@ def clone_core(rom: Path, state: object) -> mgba.core.Core:
     core.reset()
     core.load_raw_state(state)
     return core
+
+
+def advance_window(core: mgba.core.Core, frames: int, raw_keys: int) -> None:
+    """Advance quickly to a later differential checkpoint without tracing."""
+
+    core.set_keys(raw=raw_keys)
+    for _ in range(frames):
+        core.run_frame()
 
 
 def executing_pc(core: mgba.core.Core) -> int:
@@ -60,16 +94,49 @@ def trace_window(core: mgba.core.Core, frames: int, raw_keys: int) -> dict:
     outbound: collections.Counter[tuple[int, int]] = collections.Counter()
     dynamic_calls: collections.Counter[tuple[int, int]] = collections.Counter()
     input_dispatches: collections.Counter[tuple[int, int, int, int, int, int, int]] = collections.Counter()
+    script_dispatches: collections.Counter[tuple[int, int, int, int, int]] = collections.Counter()
+    transition_calls: collections.Counter[tuple[int, int, int, int, int, int]] = collections.Counter()
+    movement_calls: collections.Counter[tuple[int, int, int, int, int, int]] = collections.Counter()
+    movement_entries: collections.Counter[tuple[int, int, int, int, int]] = collections.Counter()
+    controller_entries: collections.Counter[tuple[int, int, int, int, int]] = collections.Counter()
+    player_calls: collections.Counter[tuple[int, int, int, int, int, int]] = collections.Counter()
+    player_entries: collections.Counter[tuple[int, int, int, int, int]] = collections.Counter()
+    watched_writes: collections.Counter[tuple[int, int, int, int]] = collections.Counter()
+    watched_values = {
+        address: int(core.memory.u16[address]) for address in WATCHED_HALFWORDS
+    }
     instruction_count = 0
 
     while core.frame_counter < end_frame:
         source = executing_pc(core)
         source_in_slice = SLICE_START <= source < SLICE_END
         registers = tuple(int(core.cpu.gprs[index]) & 0xFFFFFFFF for index in range(5))
+        stack_argument = int(core.memory.u32[int(core.cpu.gprs[13])]) & 0xFFFFFFFF
         if source_in_slice:
             visits[source] += 1
+        if source == MOVEMENT_CONTROLLER:
+            controller_entries[(*registers[:4], stack_argument)] += 1
+        if source == MOVEMENT_START:
+            movement_entries[(*registers[:4], stack_argument)] += 1
+        if source == PLAYER_UPDATE_START:
+            player_entries[(*registers[:4], stack_argument)] += 1
+        if source == SCRIPT_NEXT_INSTRUCTION:
+            engine = registers[0]
+            code = int(core.memory.u32[engine + 4]) & 0xFFFFFFFF
+            script_pc = int(core.memory.u32[engine + 8]) & 0xFFFFFFFF
+            encoded_opcode = int(core.memory.u8[code + script_pc])
+            operand = sum(
+                int(core.memory.u8[code + script_pc + 1 + index]) << (8 * index)
+                for index in range(4)
+            )
+            script_dispatches[(engine, code, script_pc, encoded_opcode, operand)] += 1
         core.step()
         instruction_count += 1
+        for address, before in watched_values.items():
+            after = int(core.memory.u16[address])
+            if after != before:
+                watched_writes[(source, address, before, after)] += 1
+                watched_values[address] = after
         target = executing_pc(core)
         if core.cpu.cpsr.t:
             # Immediately after a taken Thumb branch mGBA exposes a two-byte
@@ -89,6 +156,18 @@ def trace_window(core: mgba.core.Core, frames: int, raw_keys: int) -> dict:
                 held = int(core.memory.u16[input_state])
                 pressed = int(core.memory.u16[input_state + 4])
                 input_dispatches[(source, slot, obj, word0, input_state, held, pressed)] += 1
+        if TRANSITION_START <= source < TRANSITION_END and not (
+            TRANSITION_START <= target < TRANSITION_END
+        ):
+            transition_calls[(source, target, *registers[:4])] += 1
+        if MOVEMENT_START <= source < MOVEMENT_END and not (
+            MOVEMENT_START <= target < MOVEMENT_END
+        ):
+            movement_calls[(source, target, *registers[:4])] += 1
+        if PLAYER_UPDATE_START <= source < PLAYER_UPDATE_END and not (
+            PLAYER_UPDATE_START <= target < PLAYER_UPDATE_END
+        ):
+            player_calls[(source, target, *registers[:4])] += 1
 
     core.set_keys(raw=0)
     return {
@@ -118,6 +197,77 @@ def trace_window(core: mgba.core.Core, frames: int, raw_keys: int) -> dict:
             for (source, slot, obj, word0, input_state, held, pressed), count
             in sorted(input_dispatches.items())
         ],
+        "script_dispatches": [
+            {
+                "engine": f"0x{engine:08X}",
+                "code": f"0x{code:08X}",
+                "script_pc": f"0x{script_pc:08X}",
+                "encoded_opcode": f"0x{encoded_opcode:02X}",
+                "opcode": f"0x{encoded_opcode & 0x7F:02X}",
+                "operand": f"0x{operand:08X}",
+                "count": count,
+            }
+            for (engine, code, script_pc, encoded_opcode, operand), count
+            in sorted(script_dispatches.items())
+        ],
+        "transition_calls": [
+            {
+                "source": f"0x{source:08X}",
+                "target": f"0x{target:08X}",
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for (source, target, *arguments), count in sorted(transition_calls.items())
+        ],
+        "movement_calls": [
+            {
+                "source": f"0x{source:08X}",
+                "target": f"0x{target:08X}",
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for (source, target, *arguments), count in sorted(movement_calls.items())
+        ],
+        "controller_entries": [
+            {
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for arguments, count in sorted(controller_entries.items())
+        ],
+        "movement_entries": [
+            {
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for arguments, count in sorted(movement_entries.items())
+        ],
+        "watched_writes": [
+            {
+                "source": f"0x{source:08X}",
+                "address": f"0x{address:08X}",
+                "before": f"0x{before:04X}",
+                "after": f"0x{after:04X}",
+                "count": count,
+            }
+            for (source, address, before, after), count in sorted(watched_writes.items())
+        ],
+        "player_entries": [
+            {
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for arguments, count in sorted(player_entries.items())
+        ],
+        "player_calls": [
+            {
+                "source": f"0x{source:08X}",
+                "target": f"0x{target:08X}",
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for (source, target, *arguments), count in sorted(player_calls.items())
+        ],
     }
 
 
@@ -126,13 +276,19 @@ def main() -> int:
     parser.add_argument("rom", type=Path)
     parser.add_argument("--advance-dialogues", type=int, default=100)
     parser.add_argument("--frames", type=int, default=4)
+    parser.add_argument("--pre-frames", type=int, default=0)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
     baseline = boot_to_controllable_scene(args.rom, args.advance_dialogues)
     state = baseline.core.save_raw_state()
-    idle = trace_window(clone_core(args.rom, state), args.frames, 0)
-    right = trace_window(clone_core(args.rom, state), args.frames, 1 << KEY_RIGHT)
+    idle_core = clone_core(args.rom, state)
+    advance_window(idle_core, args.pre_frames, 0)
+    idle = trace_window(idle_core, args.frames, 0)
+    del idle_core
+    right_core = clone_core(args.rom, state)
+    advance_window(right_core, args.pre_frames, 1 << KEY_RIGHT)
+    right = trace_window(right_core, args.frames, 1 << KEY_RIGHT)
 
     idle_pcs = set(idle["visited_pcs"])
     right_pcs = set(right["visited_pcs"])
@@ -141,8 +297,9 @@ def main() -> int:
     idle_dynamic = {(edge["source"], edge["target"]) for edge in idle["dynamic_calls"]}
     right_dynamic = {(edge["source"], edge["target"]) for edge in right["dynamic_calls"]}
     report = {
-        "format": "fomt-player-slice-trace-v1",
+        "format": "fomt-player-slice-trace-v2",
         "checkpoint_frame": baseline.frame,
+        "pre_frames": args.pre_frames,
         "slice": {"start": f"0x{SLICE_START:08X}", "end": f"0x{SLICE_END:08X}"},
         "idle": idle,
         "right": right,
@@ -160,6 +317,7 @@ def main() -> int:
     args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(
         f"trace={args.out} checkpoint={baseline.frame} frames={args.frames} "
+        f"pre_frames={args.pre_frames} "
         f"right_only_pcs={len(report['right_only_pcs'])} "
         f"right_only_edges={len(report['right_only_outbound_edges'])} "
         f"right_only_dynamic={len(report['right_only_dynamic_calls'])}"
