@@ -53,3 +53,23 @@ save, then compare a no-direction window with a walk-toward-door window.  The
 first new guest return address that appears only during walking is a candidate
 for the upstream player-controller chain; it still needs static confirmation
 before receiving a semantic name.
+
+### Reusable clean-boot recipe
+
+`tools/replay_player_slice.py` records the established mGBA clean-boot path
+into `gba-input v1`, including the conditional cursor checks on both naming
+screens.  It has been replayed through `gba-recomp runc` to the first Thomas
+dialogue, producing the expected vanilla screen.  `--advance-dialogues N`
+extends that exact prefix without fabricating player state, which lets a trace
+start in a real controllable scene after the introduction.
+
+```sh
+python3 tools/replay_player_slice.py baserom.gba \
+  --advance-dialogues 100 --out /tmp/fomt-player.gbainput
+recomp runc baserom.gba --frames 57340 --input /tmp/fomt-player.gbainput
+```
+
+The recorder and the native trace worktree are intentionally separate from
+the matching source: generated replay files, debugger logs, and rendered
+frames live under `/tmp/fomt-player-recomp/`; this document preserves their
+meaning and the command that regenerates them.
