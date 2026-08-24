@@ -117,3 +117,11 @@ expected to include animation, clocks and script bookkeeping. It is a
 candidate generator, not an automatic player-structure detector: a range must
 be confirmed by a shorter differential window and a targeted write trace
 before it receives a field name.
+
+The first, 16 and 120-frame windows now provide one such bounded correlation:
+the transient input byte at `0x02005B78` changes from `0x10` to `0x02` after
+one frame and settles at `0x00`, while nine nearby ranges first change by
+frame 16 and remain identical through frame 120.  These ranges are preserved
+as anonymous movement-time candidates in the generated reports; they are not
+yet assigned to a player, collision, or map structure.  This separates an
+input edge from stable downstream state without fabricating an emulator state.
