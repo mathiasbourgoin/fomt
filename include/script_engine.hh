@@ -95,4 +95,17 @@ struct ScriptEngine : public AScriptEngine
     /* +358 */ i32 unk_358;
 };
 
+/*
+ * The context passed as r1 to sub_080D8178, the large ScriptEngine-family
+ * dispatch loop. Only the fields below have direct static and runtime
+ * evidence; the rest remains intentionally opaque.
+ */
+struct ScriptLoopContext
+{
+    STRUCT_PAD(0x00, 0x9C);
+    /* +09C */ u32 mode;
+    STRUCT_PAD(0xA0, 0xB4);
+    /* +0B4 */ void *mode_handler;
+};
+
 #endif // SCRIPT_ENGINE_HH

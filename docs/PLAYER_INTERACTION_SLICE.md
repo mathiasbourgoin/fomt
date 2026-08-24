@@ -28,6 +28,18 @@ are recovered, but the historical compiler requires a specific high-register
 allocation not yet reproduced by readable C. The typed layout is retained so
 future matching attempts do not have to rediscover it.
 
+### Movement-time dispatch context
+
+The Right-held trace also identifies the owner of the observed mode word.
+`sub_080D8178` stores `r1 + 0x9C` in its local slot at `sp + 0x558` before
+entering its dispatch loop. In the controllable replay that slot resolves to
+`0x02005B78`, so the observed word belongs to a `ScriptLoopContext` at
+`0x02005ADC`, not to the input state itself. The word moves from `0x10` to
+`0x0F` after four Right-held frames and later settles at `0x00`; it is a
+dispatch mode, not a position coordinate. Its owner and the handler pointer
+at `+0xB4` are represented in `include/script_engine.hh`, but neither is yet
+named as the player controller.
+
 ## Explicitly not yet connected
 
 The callers that turn an `InputState` into player movement, front-tile tests,
