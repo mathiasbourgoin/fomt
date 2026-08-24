@@ -4,7 +4,8 @@
 The normal matching build is untouched. This builder installs an eight-byte
 absolute hook over the blocked-movement resolver prologue and places the proof
 code in verified 0xFF ROM padding. The hook always executes the exact relocated
-vanilla prologue; address 0x0203FFF0 dynamically enables the optional policy.
+vanilla prologue; the shared checksummed SRAM record dynamically selects
+Original or Definitive mode without rebuilding.
 """
 
 from __future__ import annotations

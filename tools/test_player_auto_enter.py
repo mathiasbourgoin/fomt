@@ -2,9 +2,10 @@
 """Regression-test the dynamic auto-enter proof flag.
 
 Build the proof ROM once with ``build_auto_enter_poc.py``. This test toggles
-the EWRAM flag without rebuilding and proves five boundaries:
+the persistent SRAM setting without rebuilding and proves six boundaries:
 
-* the flag defaults to OFF;
+* an absent or invalid setting defaults to Original/OFF;
+* the record survives a save-file write/read cycle;
 * OFF leaves a blocked farmhouse entrance unchanged;
 * ON dispatches the native farmhouse entrance event exactly once;
 * ON does not change an ordinary blocked wall;
@@ -15,8 +16,17 @@ from __future__ import annotations
 
 import argparse
 import collections
+import tempfile
 from pathlib import Path
 
+from definitive_settings import (
+    SETTINGS_OFFSET,
+    SETTINGS_SIZE,
+    decode_record,
+    encode_record,
+    read_save,
+    update_save,
+)
 from replay_player_slice import KEY_A, KEY_DOWN, KEY_RIGHT, boot_to_controllable_scene
 from test_player_building_entrance import (
     FARMHOUSE_ENTRANCE_EVENT_ID,
@@ -27,7 +37,7 @@ from test_player_door_event import FARMHOUSE_EVENT_ID
 from trace_player_slice import advance_door_route, advance_window, clone_core, executing_pc
 
 
-AUTO_ENTER_FLAG = 0x0203FFF0
+SETTINGS_ADDRESS = 0x0E000000 + SETTINGS_OFFSET
 KEY_UP = 6
 BLOCKED_RESOLVER = 0x0802536C
 AUTO_ENTER_PROBE = 0x08760000
@@ -76,9 +86,41 @@ def player_snapshot(core: object) -> bytes:
     return bytes(int(core.memory.u8[PLAYER_OBJECT + offset]) for offset in range(0x100))
 
 
+def set_definitive_mode(core: object, enabled: bool) -> None:
+    record = encode_record(enabled)
+    for offset, value in enumerate(record):
+        core.memory.u8[SETTINGS_ADDRESS + offset] = value
+
+
+def settings_record(core: object) -> bytes:
+    return bytes(
+        int(core.memory.u8[SETTINGS_ADDRESS + offset])
+        for offset in range(SETTINGS_SIZE)
+    )
+
+
+def test_save_file_persistence() -> None:
+    with tempfile.TemporaryDirectory(prefix="fomt-definitive-settings-") as temporary:
+        save_path = Path(temporary) / "fomt.sav"
+        save_path.write_bytes(bytes([0xFF]) * 0x8000)
+        original = save_path.read_bytes()
+        require(read_save(original) == (False, False), "blank save did not default Original")
+        updated = update_save(original, True)
+        require(
+            updated[:SETTINGS_OFFSET] == original[:SETTINGS_OFFSET],
+            "setting update changed unrelated save bytes",
+        )
+        save_path.write_bytes(updated)
+        reloaded = save_path.read_bytes()
+        require(read_save(reloaded) == (True, True), "Definitive setting did not persist")
+        save_path.write_bytes(update_save(reloaded, False))
+        require(read_save(save_path.read_bytes()) == (True, False), "Original setting did not persist")
+
+
 def run_regressions(rom: Path, advance_dialogues: int) -> None:
+    test_save_file_persistence()
     baseline = boot_to_controllable_scene(rom, advance_dialogues)
-    require(int(baseline.core.memory.u8[AUTO_ENTER_FLAG]) == 0, "flag does not default OFF")
+    require(decode_record(settings_record(baseline.core)) == (False, False), "invalid setting did not default OFF")
     interior_state = baseline.core.save_raw_state()
 
     entrance_seed = clone_core(rom, interior_state)
@@ -94,7 +136,8 @@ def run_regressions(rom: Path, advance_dialogues: int) -> None:
     require(disabled_visits[NATIVE_EVENT_BRIDGE] == 0, "OFF dispatched an event")
 
     enabled = clone_core(rom, entrance_state)
-    enabled.memory.u8[AUTO_ENTER_FLAG] = 1
+    set_definitive_mode(enabled, True)
+    require(decode_record(settings_record(enabled)) == (True, True), "runtime setting was not written")
     enabled_before = pending_event(enabled)
     enabled_visits = trace_frames(enabled, 12, 1 << KEY_UP)
     enabled_after = pending_event(enabled)
@@ -105,13 +148,21 @@ def run_regressions(rom: Path, advance_dialogues: int) -> None:
     require(enabled_visits[ACTION_RELEASE_HANDLER] == 1, "ON action handler count is not one")
     require_single_native_dispatch(enabled_visits)
 
+    invalid = clone_core(rom, entrance_state)
+    set_definitive_mode(invalid, True)
+    invalid.memory.u8[SETTINGS_ADDRESS + 7] ^= 1
+    invalid_before = pending_event(invalid)
+    invalid_visits = trace_frames(invalid, 12, 1 << KEY_UP)
+    require(pending_event(invalid) == invalid_before, "bad checksum enabled Definitive mode")
+    require(invalid_visits[NATIVE_EVENT_BRIDGE] == 0, "bad checksum dispatched an event")
+
     wall_seed = clone_core(rom, interior_state)
     advance_window(wall_seed, 100, 1 << KEY_RIGHT)
     wall_state = wall_seed.save_raw_state()
     wall_control = clone_core(rom, wall_state)
     trace_frames(wall_control, 12, 1 << KEY_RIGHT)
     wall = clone_core(rom, wall_state)
-    wall.memory.u8[AUTO_ENTER_FLAG] = 1
+    set_definitive_mode(wall, True)
     wall_visits = trace_frames(wall, 12, 1 << KEY_RIGHT)
     require(
         pending_event(wall) == pending_event(wall_control),
@@ -125,7 +176,7 @@ def run_regressions(rom: Path, advance_dialogues: int) -> None:
     require(wall_visits[NATIVE_EVENT_BRIDGE] == 0, "wall dispatched an event")
 
     normal_action = clone_core(rom, entrance_state)
-    normal_action.memory.u8[AUTO_ENTER_FLAG] = 1
+    set_definitive_mode(normal_action, True)
     action_visits: collections.Counter[int] = collections.Counter()
     add_visits(action_visits, trace_frames(normal_action, 1, 1 << KEY_A))
     add_visits(action_visits, trace_frames(normal_action, 8, 0))
@@ -139,7 +190,7 @@ def run_regressions(rom: Path, advance_dialogues: int) -> None:
     automatic_exit = clone_core(rom, interior_state)
     advance_door_route(automatic_exit)
     advance_window(automatic_exit, 52, 1 << KEY_DOWN)
-    automatic_exit.memory.u8[AUTO_ENTER_FLAG] = 1
+    set_definitive_mode(automatic_exit, True)
     exit_visits = trace_frames(automatic_exit, 12, 1 << KEY_DOWN)
     require(
         pending_event(automatic_exit)[1] == FARMHOUSE_EVENT_ID,
@@ -149,7 +200,7 @@ def run_regressions(rom: Path, advance_dialogues: int) -> None:
     require_single_native_dispatch(exit_visits)
 
     print(
-        "OK auto-enter runtime flag: OFF vanilla; ON farmhouse event=0xAA once; "
+        "OK persistent Definitive Mode: Original vanilla; Definitive farmhouse event=0xAA once; "
         "wall unchanged; A entry and automatic exit not duplicated"
     )
 

@@ -2,10 +2,9 @@
     .cpu arm7tdmi
     .thumb
 
-    @ Runtime-only proof flag. The BIOS clears EWRAM at reset, so OFF is the
-    @ default. This scratch address is deliberately limited to the prototype;
-    @ production integration must allocate owned state.
-    .equ AUTO_ENTER_FLAG, 0x0203FFF0
+    @ Shared persistent setting record at the end of the verified unused SRAM
+    @ sector. Invalid or absent records always mean Original mode (OFF).
+    .equ DEFINITIVE_SETTINGS, 0x0E007FF8
 
     .equ BLOCKED_RESOLVER_RESUME, 0x08025375
     .equ GET_ACTOR_LOCATION, 0x0801FE95
@@ -24,8 +23,7 @@ auto_enter_poc:
     adds r6, r2, #0
     bl blocked_resolver_trampoline
 
-    ldr r0, =AUTO_ENTER_FLAG
-    ldrb r0, [r0]
+    bl definitive_mode_enabled
     cmp r0, #0
     beq .Lreturn
 
@@ -82,3 +80,81 @@ blocked_resolver_trampoline:
     .thumb_func
 call_via_r3:
     bx r3
+
+    .global definitive_mode_enabled
+    .type definitive_mode_enabled, %function
+    .thumb_func
+definitive_mode_enabled:
+    ldr r1, =DEFINITIVE_SETTINGS
+    ldrb r0, [r1, #0]
+    cmp r0, #'D'
+    bne .Lmode_off
+    ldrb r0, [r1, #1]
+    cmp r0, #'F'
+    bne .Lmode_off
+    ldrb r0, [r1, #2]
+    cmp r0, #'M'
+    bne .Lmode_off
+    ldrb r0, [r1, #3]
+    cmp r0, #'D'
+    bne .Lmode_off
+    ldrb r0, [r1, #4]
+    cmp r0, #1
+    bne .Lmode_off
+
+    movs r3, #0
+    movs r0, #0
+.Lchecksum_loop:
+    ldrb r2, [r1, r0]
+    adds r3, r3, r2
+    adds r0, #1
+    cmp r0, #6
+    bne .Lchecksum_loop
+    ldrb r0, [r1, #7]
+    lsls r0, r0, #8
+    ldrb r2, [r1, #6]
+    orrs r0, r2
+    cmp r3, r0
+    bne .Lmode_off
+
+    ldrb r0, [r1, #5]
+    movs r1, #1
+    ands r0, r1
+    bx lr
+
+.Lmode_off:
+    movs r0, #0
+    bx lr
+
+    .global definitive_mode_store
+    .type definitive_mode_store, %function
+    .thumb_func
+definitive_mode_store:
+    movs r2, #1
+    ands r0, r2
+    adds r3, r0, #0
+    ldr r1, =DEFINITIVE_SETTINGS
+
+    @ Invalidate first, then publish the leading magic byte last.
+    movs r2, #0
+    strb r2, [r1, #0]
+    movs r2, #'F'
+    strb r2, [r1, #1]
+    movs r2, #'M'
+    strb r2, [r1, #2]
+    movs r2, #'D'
+    strb r2, [r1, #3]
+    movs r2, #1
+    strb r2, [r1, #4]
+    strb r3, [r1, #5]
+
+    movs r2, #0x8E
+    lsls r2, r2, #1
+    adds r2, r2, r3
+    strb r2, [r1, #6]
+    lsrs r2, r2, #8
+    strb r2, [r1, #7]
+    movs r2, #'D'
+    strb r2, [r1, #0]
+    adds r0, r3, #0
+    bx lr
