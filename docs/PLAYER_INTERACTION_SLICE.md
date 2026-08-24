@@ -33,3 +33,23 @@ Use a real walk-to-door scenario to trace consumers of the pressed/held state
 until the first function that simultaneously observes player position/facing
 and a front-tile or interactable result. Only then should the door/exit branch
 be named and reconstructed.
+
+## Runtime tracing status
+
+`gba-recomp` now builds the clean ROM into a native, line-debuggable shared
+object (`/tmp/fomt-player-recomp/out/baserom.so`).  A first deterministic
+right-input replay was deliberately kept as a harness check: the input-read
+breakpoint resolves and records guest return addresses, but the replay has not
+yet entered a playable field state, so it observes only the input layer's own
+initialization path.  It is therefore **not** evidence for a player caller.
+
+The recomp version in use emits translated labels with the suffix `_t` rather
+than the historical `_a`; trace scripts must resolve the emitted label before
+arming a source-line breakpoint.  This is documented here so later movement
+work does not silently treat an unbound breakpoint as an empty trace.
+
+The next runtime experiment must use a deterministic field-state input or
+save, then compare a no-direction window with a walk-toward-door window.  The
+first new guest return address that appears only during walking is a candidate
+for the upstream player-controller chain; it still needs static confirmation
+before receiving a semantic name.
