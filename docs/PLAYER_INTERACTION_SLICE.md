@@ -211,13 +211,41 @@ At the wall, it performs the same two rectangle predicates through
 `func_080AC070`, does not write X, and calls `func_0802536C` with direction
 `3` and residual displacement `1`. This identifies `func_0802CDCC` as the
 player movement/collision owner and `func_0802536C` as its blocked-movement
-resolver. It does not yet identify the front-tile interaction or door owner:
-that requires an A-press trace at a reproducible real door, rather than
-renaming either routine from movement evidence alone.
+resolver.
 
 The corresponding trace artifacts are retained as
 `/tmp/fomt-player-recomp/player-collision-trace-walk-001.json` and
 `/tmp/fomt-player-recomp/player-collision-trace-wall-001.json`.
+
+### Confirmed doorway event boundary
+
+The trace tool's `--scenario door` mode follows a verified route from the
+same clean checkpoint: Down for 60 frames, Left for 30, Right for 8, then a
+Down differential. The route crosses the farmhouse doorway and reaches the
+outside Thomas scene; screenshots at 40 and 60 final-Down frames bound the
+transition onset. The instruction trace spanning final-Down frames 52..64 is:
+
+```sh
+python3 tools/trace_player_slice.py baserom.gba \
+  --advance-dialogues 100 --scenario door --pre-frames 52 --frames 12 \
+  --out /tmp/fomt-player-recomp/player-door-trace-003.json
+```
+
+Ordinary free movement and the doorway both execute the actor update
+`func_08024CD0`. Both use its virtual rectangle builder at call site
+`0x08024D48` and its map/tile query at `0x08024EFE`. Only the doorway trace
+also executes call site `0x08024E8E`, resolving to `func_0801D9A8` exactly
+once. That bridge preserves the event payload and type in `r1`/`r2` and calls
+`func_08012B24`; for this doorway `r2` is zero, selecting the two-entry event
+queue. Immediately afterward, `AScriptEngine` starts code at `0x082DEDAC`.
+
+This identifies `func_08024CD0` as the front/step-tile interaction owner and
+`func_0801D9A8` -> `func_08012B24` as the doorway-event enqueue boundary. The
+door database lookup and destination decoding remain unnamed inside the actor
+update until their individual return values are traced. The retained control
+artifact for ordinary movement is
+`/tmp/fomt-player-recomp/player-actor-trace-walk-001.json`; the doorway
+artifact is `/tmp/fomt-player-recomp/player-door-trace-003.json`.
 
 As a first source recovery on this confirmed path, `func_0805039C` now matches
 byte-for-byte in C++. It normalizes the transition object's state to `1` for

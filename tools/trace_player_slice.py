@@ -21,7 +21,7 @@ import mgba.core
 import mgba.log
 from mgba.image import Image
 
-from replay_player_slice import KEY_RIGHT, boot_to_controllable_scene
+from replay_player_slice import KEY_DOWN, KEY_LEFT, KEY_RIGHT, boot_to_controllable_scene
 
 
 mgba.log.silence()
@@ -44,6 +44,8 @@ MOVEMENT_END = 0x0803CD4C
 MOVEMENT_CONTROLLER = 0x0803D4D8
 PLAYER_UPDATE_START = 0x0802CDCC
 PLAYER_UPDATE_END = 0x0802D158
+ACTOR_UPDATE_START = 0x08024CD0
+ACTOR_UPDATE_END = 0x08025018
 WATCHED_HALFWORDS = (
     0x0203904A,
     0x0203904E,
@@ -80,6 +82,13 @@ def advance_window(core: mgba.core.Core, frames: int, raw_keys: int) -> None:
         core.run_frame()
 
 
+def advance_door_route(core: mgba.core.Core) -> None:
+    """Reach the verified farmhouse doorway from the replay checkpoint."""
+
+    for key, frames in ((KEY_DOWN, 60), (KEY_LEFT, 30), (KEY_RIGHT, 8)):
+        advance_window(core, frames, 1 << key)
+
+
 def executing_pc(core: mgba.core.Core) -> int:
     """Return the address being executed, compensating for the ARM pipeline."""
 
@@ -101,6 +110,7 @@ def trace_window(core: mgba.core.Core, frames: int, raw_keys: int) -> dict:
     controller_entries: collections.Counter[tuple[int, int, int, int, int]] = collections.Counter()
     player_calls: collections.Counter[tuple[int, int, int, int, int, int]] = collections.Counter()
     player_entries: collections.Counter[tuple[int, int, int, int, int]] = collections.Counter()
+    actor_calls: collections.Counter[tuple[int, int, int, int, int, int]] = collections.Counter()
     watched_writes: collections.Counter[tuple[int, int, int, int]] = collections.Counter()
     watched_values = {
         address: int(core.memory.u16[address]) for address in WATCHED_HALFWORDS
@@ -168,6 +178,10 @@ def trace_window(core: mgba.core.Core, frames: int, raw_keys: int) -> dict:
             PLAYER_UPDATE_START <= target < PLAYER_UPDATE_END
         ):
             player_calls[(source, target, *registers[:4])] += 1
+        if ACTOR_UPDATE_START <= source < ACTOR_UPDATE_END and not (
+            ACTOR_UPDATE_START <= target < ACTOR_UPDATE_END
+        ):
+            actor_calls[(source, target, *registers[:4])] += 1
 
     core.set_keys(raw=0)
     return {
@@ -268,6 +282,15 @@ def trace_window(core: mgba.core.Core, frames: int, raw_keys: int) -> dict:
             }
             for (source, target, *arguments), count in sorted(player_calls.items())
         ],
+        "actor_calls": [
+            {
+                "source": f"0x{source:08X}",
+                "target": f"0x{target:08X}",
+                "arguments": [f"0x{argument:08X}" for argument in arguments],
+                "count": count,
+            }
+            for (source, target, *arguments), count in sorted(actor_calls.items())
+        ],
     }
 
 
@@ -277,18 +300,24 @@ def main() -> int:
     parser.add_argument("--advance-dialogues", type=int, default=100)
     parser.add_argument("--frames", type=int, default=4)
     parser.add_argument("--pre-frames", type=int, default=0)
+    parser.add_argument("--scenario", choices=("right", "door"), default="right")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
     baseline = boot_to_controllable_scene(args.rom, args.advance_dialogues)
     state = baseline.core.save_raw_state()
+    active_key = KEY_RIGHT if args.scenario == "right" else KEY_DOWN
     idle_core = clone_core(args.rom, state)
+    if args.scenario == "door":
+        advance_door_route(idle_core)
     advance_window(idle_core, args.pre_frames, 0)
     idle = trace_window(idle_core, args.frames, 0)
     del idle_core
     right_core = clone_core(args.rom, state)
-    advance_window(right_core, args.pre_frames, 1 << KEY_RIGHT)
-    right = trace_window(right_core, args.frames, 1 << KEY_RIGHT)
+    if args.scenario == "door":
+        advance_door_route(right_core)
+    advance_window(right_core, args.pre_frames, 1 << active_key)
+    right = trace_window(right_core, args.frames, 1 << active_key)
 
     idle_pcs = set(idle["visited_pcs"])
     right_pcs = set(right["visited_pcs"])
@@ -299,6 +328,8 @@ def main() -> int:
     report = {
         "format": "fomt-player-slice-trace-v2",
         "checkpoint_frame": baseline.frame,
+        "scenario": args.scenario,
+        "active_key": "Right" if active_key == KEY_RIGHT else "Down",
         "pre_frames": args.pre_frames,
         "slice": {"start": f"0x{SLICE_START:08X}", "end": f"0x{SLICE_END:08X}"},
         "idle": idle,
@@ -317,7 +348,7 @@ def main() -> int:
     args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(
         f"trace={args.out} checkpoint={baseline.frame} frames={args.frames} "
-        f"pre_frames={args.pre_frames} "
+        f"scenario={args.scenario} pre_frames={args.pre_frames} "
         f"right_only_pcs={len(report['right_only_pcs'])} "
         f"right_only_edges={len(report['right_only_outbound_edges'])} "
         f"right_only_dynamic={len(report['right_only_dynamic_calls'])}"
