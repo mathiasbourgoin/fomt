@@ -16,9 +16,17 @@ It deliberately does not claim that the door path is understood yet.
 `+02` remains unknown and is not assigned a semantic name.
 
 The adjacent `080091A4..080092EC` code is a generic repeat/filter layer: it
-stores timing values and four per-direction counters. It is still input
+stores timing values and ten per-key counters. It is still input
 infrastructure, not player movement; it must be followed through its callers
 rather than renamed as movement code.
+
+Its complete `0x22`-byte layout is now represented as `InputRepeatState`:
+the sampled state, a repeated-key mask, initial delay, repeat interval, and
+ten signed counters ordered from key bit `0x0200` down to `0x0001`.
+`func_08009268` and `func_080092C8` remain assembly for now: their semantics
+are recovered, but the historical compiler requires a specific high-register
+allocation not yet reproduced by readable C. The typed layout is retained so
+future matching attempts do not have to rediscover it.
 
 ## Explicitly not yet connected
 
