@@ -26,6 +26,8 @@ KEY_RELEASED = 0x03FF
 OAM0_ATTR0 = 0x07000000
 OAM0_ATTR1 = 0x07000002
 END_CURSOR = (136, 184)
+EWRAM_BASE = 0x02000000
+EWRAM_SIZE = 0x40000
 
 
 class Replay:
@@ -115,8 +117,9 @@ class Replay:
 def snapshot_ewram(core: mgba.core.Core) -> bytes:
     """Return the complete EWRAM image without assuming game structures."""
 
-    start = 0x02000000
-    return bytes(core.memory.u8[start + offset] for offset in range(0x40000))
+    return bytes(
+        core.memory.u8[EWRAM_BASE + offset] for offset in range(EWRAM_SIZE)
+    )
 
 
 def changed_ranges(before: bytes, after: bytes) -> list[tuple[int, int]]:
@@ -177,13 +180,13 @@ def write_movement_diff(
     if snapshot_dir is not None:
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         paths = {
-            "baseline": snapshot_dir / "baseline-ewram.bin",
-            "idle": snapshot_dir / f"idle-{movement_frames:03d}-ewram.bin",
-            "right": snapshot_dir / f"right-{movement_frames:03d}-ewram.bin",
+            "baseline_ewram": snapshot_dir / "baseline-ewram.bin",
+            "idle_ewram": snapshot_dir / f"idle-{movement_frames:03d}-ewram.bin",
+            "right_ewram": snapshot_dir / f"right-{movement_frames:03d}-ewram.bin",
         }
-        paths["baseline"].write_bytes(before_idle)
-        paths["idle"].write_bytes(after_idle)
-        paths["right"].write_bytes(after_moved)
+        paths["baseline_ewram"].write_bytes(before_idle)
+        paths["idle_ewram"].write_bytes(after_idle)
+        paths["right_ewram"].write_bytes(after_moved)
         snapshots = {name: str(path) for name, path in paths.items()}
     payload = {
         "base": "0x02000000",
