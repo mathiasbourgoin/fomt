@@ -279,6 +279,24 @@ The compact traces that establish this split are retained as
 behavior is implemented by this investigation; it only fixes the ownership
 boundary and data flow.
 
+The native game already dispatches this farmhouse event while the player holds
+only Down; no action-button press is present in the replay. The same movement
+against the ordinary right-hand wall leaves the pending-event queue unchanged.
+The deterministic regression can be rerun with:
+
+```sh
+python3 tools/test_player_door_event.py baserom.gba
+```
+
+It clones both cases from one clean boot, verifies event `0x166` and argument
+zero in the native queue at state offset `0x378`, and verifies that the wall
+does not enqueue an event. Therefore a second call added at the established
+descriptor branch would duplicate vanilla behavior rather than implement a
+Definitive-mode improvement. This repository also has no Original/Definitive
+mode selector yet. Any later mode-gated proof must first define a behavioral
+delta outside the already automatic step-on-door case, then reuse this native
+enqueue boundary instead of adding destination logic.
+
 Three functions on this confirmed path now match byte-for-byte in C++:
 
 - `func_08024BFC` builds the actor query rectangle. Its centered form is
