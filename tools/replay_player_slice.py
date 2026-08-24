@@ -9,6 +9,7 @@ dialogue probe instead of guessing fixed delays for name-entry screens.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import mgba.core
@@ -20,6 +21,7 @@ mgba.log.silence()
 
 KEY_A = 0
 KEY_DOWN = 7
+KEY_RIGHT = 4
 KEY_RELEASED = 0x03FF
 OAM0_ATTR0 = 0x07000000
 OAM0_ATTR1 = 0x07000002
@@ -52,6 +54,15 @@ class Replay:
             self.core.run_frame()
             self.frame += 1
         self.frames(gap)
+
+    def hold(self, key: int, frames: int) -> None:
+        """Hold one GBA key for an exact number of frames."""
+
+        self.keys(1 << key)
+        for _ in range(frames):
+            self.core.run_frame()
+            self.frame += 1
+        self.keys(0)
 
     def cursor(self) -> tuple[int, int]:
         return (
@@ -101,6 +112,87 @@ class Replay:
         path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
+def snapshot_ewram(core: mgba.core.Core) -> bytes:
+    """Return the complete EWRAM image without assuming game structures."""
+
+    start = 0x02000000
+    return bytes(core.memory.u8[start + offset] for offset in range(0x40000))
+
+
+def changed_ranges(before: bytes, after: bytes) -> list[tuple[int, int]]:
+    """Coalesce changed byte positions into compact EWRAM-relative ranges."""
+
+    ranges: list[tuple[int, int]] = []
+    start: int | None = None
+    for offset, (left, right) in enumerate(zip(before, after)):
+        if left != right:
+            if start is None:
+                start = offset
+        elif start is not None:
+            ranges.append((start, offset - start))
+            start = None
+    if start is not None:
+        ranges.append((start, len(before) - start))
+    return ranges
+
+
+def boot_to_controllable_scene(rom: Path, advance_dialogues: int) -> Replay:
+    core = mgba.core.load_path(str(rom))
+    screen = Image(*core.desired_video_dimensions())
+    core.set_video_buffer(screen)
+    core.reset()
+    replay = Replay(core)
+    replay.boot_to_first_dialogue()
+    replay.advance_dialogues(advance_dialogues)
+    return replay
+
+
+def write_movement_diff(
+    rom: Path, output: Path, advance_dialogues: int, movement_frames: int
+) -> None:
+    """Compare an idle and Right-held field window from identical clean boots.
+
+    This is a candidate generator only.  The resulting differences include
+    unrelated clocks and animation state, so callers must validate a candidate
+    with a targeted trace before assigning it a semantic field name.
+    """
+
+    idle = boot_to_controllable_scene(rom, advance_dialogues)
+    moved = boot_to_controllable_scene(rom, advance_dialogues)
+    before_idle = snapshot_ewram(idle.core)
+    before_moved = snapshot_ewram(moved.core)
+    if before_idle != before_moved:
+        raise RuntimeError("clean replay diverged before the movement window")
+
+    idle.frames(movement_frames)
+    moved.hold(KEY_RIGHT, movement_frames)
+    after_idle = snapshot_ewram(idle.core)
+    after_moved = snapshot_ewram(moved.core)
+    ranges = changed_ranges(after_idle, after_moved)
+    payload = {
+        "base": "0x02000000",
+        "movement": "Right",
+        "frames": movement_frames,
+        "different_bytes": sum(length for _, length in ranges),
+        "range_count": len(ranges),
+        "ranges": [
+            {
+                "address": f"0x{0x02000000 + start:08X}",
+                "length": length,
+                "idle": after_idle[start : start + min(length, 16)].hex(),
+                "right": after_moved[start : start + min(length, 16)].hex(),
+            }
+            for start, length in ranges
+        ],
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(
+        f"movement_diff={output} ranges={len(ranges)} "
+        f"different_bytes={payload['different_bytes']}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", type=Path)
@@ -110,6 +202,17 @@ def main() -> int:
         type=int,
         default=0,
         help="settled A taps after the first Thomas page",
+    )
+    parser.add_argument(
+        "--movement-diff",
+        type=Path,
+        help="write an idle-versus-Right EWRAM candidate report",
+    )
+    parser.add_argument(
+        "--movement-frames",
+        type=int,
+        default=120,
+        help="Right-held frames for --movement-diff (default: 120)",
     )
     args = parser.parse_args()
 
@@ -122,6 +225,10 @@ def main() -> int:
     replay.advance_dialogues(args.advance_dialogues)
     replay.write(args.out)
     print(f"frames={replay.frame} events={len(replay.events)} out={args.out}")
+    if args.movement_diff:
+        write_movement_diff(
+            args.rom, args.movement_diff, args.advance_dialogues, args.movement_frames
+        )
     return 0
 
 

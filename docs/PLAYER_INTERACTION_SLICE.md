@@ -99,3 +99,21 @@ host instrumentation, logs and frames are retained in
 `/tmp/fomt-player-recomp/` and are deliberately not part of the matching ROM
 tree.  The next step is to trace the `sub_080D8178` cases that consume the
 repeat result and separate field movement from script/menu cases.
+
+### Differential EWRAM candidate generator
+
+`tools/replay_player_slice.py` can now run the same clean boot twice and
+compare a short idle window against a Right-held window. It writes a compact
+JSON report of changed EWRAM ranges without hard-coding any game structure:
+
+```sh
+python3 tools/replay_player_slice.py baserom.gba \
+  --advance-dialogues 100 --out /tmp/fomt-player.gbainput \
+  --movement-diff /tmp/right-ewram.json --movement-frames 120
+```
+
+The first 120-frame experiment yielded 300 ranges / 873 bytes. This is
+expected to include animation, clocks and script bookkeeping. It is a
+candidate generator, not an automatic player-structure detector: a range must
+be confirmed by a shorter differential window and a targeted write trace
+before it receives a field name.
