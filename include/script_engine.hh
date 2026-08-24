@@ -102,10 +102,15 @@ struct ScriptEngine : public AScriptEngine
  */
 struct ScriptLoopContext
 {
-    STRUCT_PAD(0x00, 0x9C);
+    STRUCT_PAD(0x00, 0x88);
+    /* +088 */ void *outer_owner;
+    /* +08C */ void *outer_argument;
+    STRUCT_PAD(0x90, 0x9C);
     /* +09C */ u32 mode;
     STRUCT_PAD(0xA0, 0xB4);
     /* +0B4 */ void *mode_handler;
+    STRUCT_PAD(0xB8, 0xF4);
+    /* +0F4 */ void *interface_vtable;
 };
 
 #endif // SCRIPT_ENGINE_HH

@@ -40,6 +40,11 @@ dispatch mode, not a position coordinate. Its owner and the handler pointer
 at `+0xB4` are represented in `include/script_engine.hh`, but neither is yet
 named as the player controller.
 
+The constructor at `func_08011ED8` allocates this context as `0xF8` bytes,
+stores its outer owner and argument at `+0x88/+0x8C`, and stamps a separate
+interface vtable at `+0xF4`. This confirms that the loop context is a composed
+scene object rather than a base `ScriptEngine` instance.
+
 ## Explicitly not yet connected
 
 The callers that turn an `InputState` into player movement, front-tile tests,
