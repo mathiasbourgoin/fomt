@@ -241,11 +241,43 @@ queue. Immediately afterward, `AScriptEngine` starts code at `0x082DEDAC`.
 
 This identifies `func_08024CD0` as the front/step-tile interaction owner and
 `func_0801D9A8` -> `func_08012B24` as the doorway-event enqueue boundary. The
-door database lookup and destination decoding remain unnamed inside the actor
-update until their individual return values are traced. The retained control
-artifact for ordinary movement is
+retained control artifact for ordinary movement is
 `/tmp/fomt-player-recomp/player-actor-trace-walk-001.json`; the doorway
 artifact is `/tmp/fomt-player-recomp/player-door-trace-003.json`.
+
+### Transition descriptor and destination
+
+The doorway descriptor and its destination are now separated by runtime
+evidence. `func_08024CD0` converts each candidate coordinate to tile units by
+dividing by eight, uses the collision-view metadata byte to select a four-byte
+terrain descriptor, and tests descriptor bits 2 through 16 with mask
+`0x0001FFFC`. When those bits are nonzero, the queue payload is:
+
+```text
+payload[0] = (descriptor & 0x0001FFFF) >> 2
+payload[1] = 0
+queue id   = 0
+```
+
+For the traced farmhouse doorway the selected descriptor is `0x598`, so the
+event id is `0x166`. The event loader selects script code at `0x082DEDAC`.
+This means `func_08024CD0` derives an event id from terrain data; it does not
+contain the destination map or coordinates.
+
+The destination is encoded later in that event script. At script offset
+`0x77D`, the bytecode pushes map `2`, X `228`, and Y `120`, then executes
+`CALL 0x16`. The corresponding `ScriptEngine::OnCall` case forwards those
+three values to `func_080122E0`. That function packs them into the existing
+six-byte `Location` representation and calls the transition object's virtual
+method at vtable offset `0xB4`. The transition subsequently applies the same
+values through `AActorEntity::SetLocation`: the runtime write trace records
+map `2`, X `228`, and Y `120` on frame 52.
+
+The compact traces that establish this split are retained as
+`/tmp/fomt-player-recomp/door-descriptor-destination-001.json` and
+`/tmp/fomt-player-recomp/door-destination-call-001.json`. No automatic-door
+behavior is implemented by this investigation; it only fixes the ownership
+boundary and data flow.
 
 Three functions on this confirmed path now match byte-for-byte in C++:
 
@@ -261,9 +293,10 @@ Three functions on this confirmed path now match byte-for-byte in C++:
   `0x38C` and the single-entry queue at `0x4D0` respectively.
 
 This removes ambiguity around rectangle construction, map-view ownership,
-and event storage. The remaining unknown inside `func_08024CD0` is narrower:
-the code that derives the payload and destination before the already-known
-enqueue call.
+event storage, and destination ownership. The remaining source-recovery work
+is to name the terrain descriptor table and port the descriptor walk and
+transition packer byte-for-byte; the destination itself is script data, not a
+hidden lookup inside `func_08024CD0`.
 
 As a first source recovery on this confirmed path, `func_0805039C` now matches
 byte-for-byte in C++. It normalizes the transition object's state to `1` for
