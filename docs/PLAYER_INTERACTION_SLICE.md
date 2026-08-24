@@ -82,3 +82,20 @@ The regenerated clean replay reaches a controllable interior scene at frame
 recomp-rendered frame confirms the displacement.  This gives the slice a
 repeatable **real movement window** for future breakpoints.  It does not yet
 identify the player controller, collision routine, or door transition path.
+
+### Confirmed movement-time input consumer
+
+Host-only instrumentation of the generated recompilation output, bounded to
+the RIGHT-held interval, confirms that the live `InputState` is at
+`0x03007898`.  Its `held` field becomes `0x0010`; `pressed` is `0x0010` on
+the first frame and then zero.  The repeat/filter entry `08009268` is called
+from `0x080D8FE8` (return address `0x080D8FEF`), a branch inside
+`sub_080D8178`, which is part of the already recovered `ScriptEngine` family.
+
+This is a useful boundary, but not a claim that `ScriptEngine` is the player
+controller: it establishes the real, movement-time consumer of the shared
+input state and rules out the earlier UI-constructor callers.  The temporary
+host instrumentation, logs and frames are retained in
+`/tmp/fomt-player-recomp/` and are deliberately not part of the matching ROM
+tree.  The next step is to trace the `sub_080D8178` cases that consume the
+repeat result and separate field movement from script/menu cases.
