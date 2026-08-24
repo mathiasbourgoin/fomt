@@ -1825,6 +1825,9 @@ func_080A4650: @ 0x080A4650
 	bx r1
 	.align 2, 0
 
+.section .text.tail080A4698, "ax", %progbits
+
+	.if 0
 	thumb_func_start GetMapData
 GetMapData: @ 0x080A4698
 	adds r1, r0, #0
@@ -1836,6 +1839,9 @@ GetMapData: @ 0x080A4698
 	bx lr
 	.align 2, 0
 .L080A46A8: .4byte gUnk_08105EDC
+	.endif
+
+.section .text.tail080A46AC, "ax", %progbits
 
 	thumb_func_start func_080A46AC
 func_080A46AC: @ 0x080A46AC
