@@ -325,12 +325,32 @@ This separates the two door policies without duplicating destination logic:
 - entering the farmhouse uses the upper descriptor event in the front tile and
   fires only after an A press/release.
 
-The project still has no Original/Definitive mode selector. A future
-auto-interact proof should therefore remain unimplemented until that policy
-exists. Once it does, the smallest safe experiment is to detect the same upper
-descriptor event while Definitive-mode movement is blocked by the door, then
-invoke the existing enqueue path once. It must not teleport, synthesize a
-destination, or run alongside the normal A-release dispatch.
+The project still has no Original/Definitive mode selector. The bounded proof
+therefore exposes only a runtime byte at `0x0203FFF0`, cleared to OFF by the
+normal reset path, and does not add UI or persistent settings. The proof ROM is
+built separately so `make compare` remains the byte-perfect base build:
+
+```sh
+python3 tools/build_auto_enter_poc.py fomt.gba /tmp/fomt-auto-enter-poc.gba
+python3 tools/test_player_auto_enter.py /tmp/fomt-auto-enter-poc.gba
+```
+
+The proof hooks the already confirmed blocked-movement resolver, executes its
+relocated original prologue and body first, and only applies policy when the
+runtime byte is nonzero. It reuses the vanilla actor-location, front-box and
+front-kind query. Terrain kind `100` is passed to the unchanged A-release
+handler, which performs the upper-descriptor lookup and invokes
+`func_0801D9A8` only when an event exists. No destination or teleport logic is
+duplicated.
+
+The deterministic test toggles the byte without rebuilding. OFF leaves the
+farmhouse entrance unchanged. ON plus an Up movement attempt produces event
+`0xAA` and visits `func_0801D9A8` and `func_08012B24` exactly once. A paired
+ordinary-wall run has identical queue and player-object state with OFF and ON.
+Normal A-button entry and the automatic step-on exit also retain exactly one
+native dispatch and never enter the proof hook. Address `0x0203FFF0` is scratch
+state for this runtime experiment, not a production allocation; a future mode
+owner must replace it before integration.
 
 Three functions on this confirmed path now match byte-for-byte in C++:
 
