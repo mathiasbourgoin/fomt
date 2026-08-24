@@ -156,3 +156,35 @@ frame 16 and remain identical through frame 120.  These ranges are preserved
 as anonymous movement-time candidates in the generated reports; they are not
 yet assigned to a player, collision, or map structure.  This separates an
 input edge from stable downstream state without fabricating an emulator state.
+
+### Instruction-level dispatcher differential
+
+`tools/trace_player_slice.py` clones the deterministic frame-57340 state and
+steps an idle window and a Right-held window instruction by instruction. It
+records visits to `sub_080D8178`, direct calls out of that function, indirect
+register-call targets, and the arguments passed to `func_08050D3C`:
+
+```sh
+python3 tools/trace_player_slice.py baserom.gba \
+  --advance-dialogues 100 --frames 4 \
+  --out /tmp/fomt-player-recomp/player-slice-trace-004.json
+```
+
+The four-frame differential proves that the first Right-held frame selects
+the `080D921C` dispatch arm, while the steady path uses `080D9288`. Both arms
+pass the same object (`0x0203AC74` through slot `0x0203A6EC`) and the live
+`InputState` (`0x03007898`) to `func_08050D3C`; the held/pressed masks are
+captured in the report. A later Right-only indirect call resolves to
+`AScriptEngine::method_0803EFD8` at `0803EFD8`. These are reproducible control-
+flow facts, not yet proof that either object owns player collision or door
+logic.
+
+The generated JSON remains under `/tmp/fomt-player-recomp/` as a trace
+artifact. The matching tree keeps the recorder and this explanation, so the
+experiment can be regenerated instead of committing emulator state.
+
+As a first source recovery on this confirmed path, `func_0805039C` now matches
+byte-for-byte in C++. It normalizes the transition object's state to `1` for
+states `0..2`; on state `0` it also resets the `+0xD0` subobject and rewires
+the `+0x20` owned child from the `+0x130/+0x148` sources. The field names remain
+address-based until a constructor or caller proves stronger semantics.

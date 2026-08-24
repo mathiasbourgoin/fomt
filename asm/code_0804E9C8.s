@@ -3168,6 +3168,7 @@ sub_08050342: @ 0x08050342
 	.align 2, 0
 .L08050398: .4byte vtable_unk_080E78F0
 
+	.if 0
 	thumb_func_start func_0805039C
 func_0805039C: @ 0x0805039C
 	push {r4, r5, r6, lr}
@@ -3206,6 +3207,7 @@ func_0805039C: @ 0x0805039C
 	pop {r4, r5, r6}
 	pop {r0}
 	bx r0
+	.endif
 
 	.if 0
 	thumb_func_start func_080503E4
