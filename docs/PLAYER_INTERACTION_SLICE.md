@@ -297,6 +297,41 @@ mode selector yet. Any later mode-gated proof must first define a behavioral
 delta outside the already automatic step-on-door case, then reuse this native
 enqueue boundary instead of adding destination logic.
 
+### Confirmed A-button building entrance boundary
+
+The exterior farmhouse entrance is a distinct vanilla path. A deterministic
+clean-boot route now finishes the first-day introduction, returns the player to
+map `2` at `(228, 116)`, and faces Up toward the farmhouse door. Cloning that
+state gives a direct no-input/A-release comparison:
+
+```sh
+python3 tools/test_player_building_entrance.py baserom.gba
+```
+
+The idle clone leaves queue 0 unchanged. The A clone enters player state `1`
+on the press and dispatches the interaction on release. The release executes
+`func_0802E0FC`, which builds a facing-dependent front rectangle with
+`func_0802AB98`, queries the map collision view, reads the front-tile terrain
+descriptor, and extracts the interaction event from its upper bits. At the
+farmhouse entrance the resulting event is `0xAA`, with argument zero. The
+handler enqueues it through the same native `func_0801D9A8` bridge used by the
+automatic exit path. The retained instruction trace is
+`/tmp/fomt-player-recomp/action-farmhouse-entrance-001.json`.
+
+This separates the two door policies without duplicating destination logic:
+
+- leaving the farmhouse uses the lower descriptor event and fires while
+  walking across the step-on tile;
+- entering the farmhouse uses the upper descriptor event in the front tile and
+  fires only after an A press/release.
+
+The project still has no Original/Definitive mode selector. A future
+auto-interact proof should therefore remain unimplemented until that policy
+exists. Once it does, the smallest safe experiment is to detect the same upper
+descriptor event while Definitive-mode movement is blocked by the door, then
+invoke the existing enqueue path once. It must not teleport, synthesize a
+destination, or run alongside the normal A-release dispatch.
+
 Three functions on this confirmed path now match byte-for-byte in C++:
 
 - `func_08024BFC` builds the actor query rectangle. Its centered form is
