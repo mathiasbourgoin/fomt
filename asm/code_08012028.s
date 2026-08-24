@@ -1525,6 +1525,7 @@ func_08012B04: @ 0x08012B04
     .align 2, 0
 .L08012B20: .4byte gUnk_0300040C
 
+    .if 0
     thumb_func_start func_08012B24
 func_08012B24: @ 0x08012B24
     push {r4, lr}
@@ -1601,6 +1602,7 @@ func_08012B24: @ 0x08012B24
     bx r0
     .align 2, 0
 .L08012BA8: .4byte 0x000004D4
+    .endif
 
     .if 0
     thumb_func_start func_08012BAC
