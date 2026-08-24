@@ -2385,6 +2385,7 @@ func_08024BE8: @ 0x08024BE8
 
 	.section .text.tail08024BFC, "ax", %progbits
 
+	.if 0
 	thumb_func_start func_08024BFC
 func_08024BFC: @ 0x08024BFC
     push {r4, r5, lr}
@@ -2431,6 +2432,7 @@ func_08024BFC: @ 0x08024BFC
     pop {r2}
     bx r2
     .align 2, 0
+	.endif
 
     .if 0
     thumb_func_start func_08024C54
