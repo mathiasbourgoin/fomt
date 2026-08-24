@@ -247,6 +247,24 @@ artifact for ordinary movement is
 `/tmp/fomt-player-recomp/player-actor-trace-walk-001.json`; the doorway
 artifact is `/tmp/fomt-player-recomp/player-door-trace-003.json`.
 
+Three functions on this confirmed path now match byte-for-byte in C++:
+
+- `func_08024BFC` builds the actor query rectangle. Its centered form is
+  `Box(x, y - 2, 14, 14)`; otherwise it delegates to `func_0803240C`.
+- `func_0801A054` returns the collision view `{tiles, metadata, width,
+  height}` for a map. It handles the active map directly, resolves inactive
+  map variants from season and building upgrade levels, and has a dedicated
+  128 by 88 view for external map id 2.
+- `func_08012B24` appends the eight-byte interaction payload to one of three
+  bounded queues in the global game state. Doorway calls use queue id 0, the
+  two-entry queue at offset `0x378`; ids 1 and 2 select the 40-entry queue at
+  `0x38C` and the single-entry queue at `0x4D0` respectively.
+
+This removes ambiguity around rectangle construction, map-view ownership,
+and event storage. The remaining unknown inside `func_08024CD0` is narrower:
+the code that derives the payload and destination before the already-known
+enqueue call.
+
 As a first source recovery on this confirmed path, `func_0805039C` now matches
 byte-for-byte in C++. It normalizes the transition object's state to `1` for
 states `0..2`; on state `0` it also resets the `+0xD0` subobject and rewires
