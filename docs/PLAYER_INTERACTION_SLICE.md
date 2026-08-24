@@ -73,3 +73,12 @@ The recorder and the native trace worktree are intentionally separate from
 the matching source: generated replay files, debugger logs, and rendered
 frames live under `/tmp/fomt-player-recomp/`; this document preserves their
 meaning and the command that regenerates them.
+
+### Confirmed controllable-state checkpoint
+
+The regenerated clean replay reaches a controllable interior scene at frame
+`57340`.  Holding the active-low RIGHT mask from frame `57500` through
+`58100` moves the on-screen player from the table toward the right wall; a
+recomp-rendered frame confirms the displacement.  This gives the slice a
+repeatable **real movement window** for future breakpoints.  It does not yet
+identify the player controller, collision routine, or door transition path.
