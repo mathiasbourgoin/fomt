@@ -148,7 +148,12 @@ def boot_to_controllable_scene(rom: Path, advance_dialogues: int) -> Replay:
 
 
 def write_movement_diff(
-    rom: Path, output: Path, advance_dialogues: int, movement_frames: int
+    idle: Replay,
+    rom: Path,
+    output: Path,
+    advance_dialogues: int,
+    movement_frames: int,
+    snapshot_dir: Path | None,
 ) -> None:
     """Compare an idle and Right-held field window from identical clean boots.
 
@@ -157,7 +162,6 @@ def write_movement_diff(
     with a targeted trace before assigning it a semantic field name.
     """
 
-    idle = boot_to_controllable_scene(rom, advance_dialogues)
     moved = boot_to_controllable_scene(rom, advance_dialogues)
     before_idle = snapshot_ewram(idle.core)
     before_moved = snapshot_ewram(moved.core)
@@ -169,6 +173,18 @@ def write_movement_diff(
     after_idle = snapshot_ewram(idle.core)
     after_moved = snapshot_ewram(moved.core)
     ranges = changed_ranges(after_idle, after_moved)
+    snapshots: dict[str, str] | None = None
+    if snapshot_dir is not None:
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        paths = {
+            "baseline": snapshot_dir / "baseline-ewram.bin",
+            "idle": snapshot_dir / f"idle-{movement_frames:03d}-ewram.bin",
+            "right": snapshot_dir / f"right-{movement_frames:03d}-ewram.bin",
+        }
+        paths["baseline"].write_bytes(before_idle)
+        paths["idle"].write_bytes(after_idle)
+        paths["right"].write_bytes(after_moved)
+        snapshots = {name: str(path) for name, path in paths.items()}
     payload = {
         "base": "0x02000000",
         "movement": "Right",
@@ -185,6 +201,8 @@ def write_movement_diff(
             for start, length in ranges
         ],
     }
+    if snapshots is not None:
+        payload["snapshots"] = snapshots
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(
@@ -214,6 +232,11 @@ def main() -> int:
         default=120,
         help="Right-held frames for --movement-diff (default: 120)",
     )
+    parser.add_argument(
+        "--movement-snapshots",
+        type=Path,
+        help="write baseline, idle, and Right-held EWRAM snapshots",
+    )
     args = parser.parse_args()
 
     core = mgba.core.load_path(str(args.rom))
@@ -227,7 +250,12 @@ def main() -> int:
     print(f"frames={replay.frame} events={len(replay.events)} out={args.out}")
     if args.movement_diff:
         write_movement_diff(
-            args.rom, args.movement_diff, args.advance_dialogues, args.movement_frames
+            replay,
+            args.rom,
+            args.movement_diff,
+            args.advance_dialogues,
+            args.movement_frames,
+            args.movement_snapshots,
         )
     return 0
 

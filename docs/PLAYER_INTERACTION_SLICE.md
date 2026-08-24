@@ -117,7 +117,8 @@ JSON report of changed EWRAM ranges without hard-coding any game structure:
 ```sh
 python3 tools/replay_player_slice.py baserom.gba \
   --advance-dialogues 100 --out /tmp/fomt-player.gbainput \
-  --movement-diff /tmp/right-ewram.json --movement-frames 120
+  --movement-diff /tmp/right-ewram.json --movement-frames 120 \
+  --movement-snapshots /tmp/fomt-player-snapshots
 ```
 
 The first 120-frame experiment yielded 300 ranges / 873 bytes. This is
@@ -125,6 +126,11 @@ expected to include animation, clocks and script bookkeeping. It is a
 candidate generator, not an automatic player-structure detector: a range must
 be confirmed by a shorter differential window and a targeted write trace
 before it receives a field name.
+
+When `--movement-snapshots` is supplied, the baseline, idle, and Right-held
+EWRAM images are written alongside the JSON report. They are trace artifacts,
+not repository assets; retaining them makes later structure and write-trace
+work reproducible from the same clean gameplay checkpoint.
 
 The first, 16 and 120-frame windows now provide one such bounded correlation:
 the transient input byte at `0x02005B78` changes from `0x10` to `0x02` after
